@@ -1,0 +1,59 @@
+import axios from 'axios';
+
+// Set base URL for API requests
+// Development: Assuming webpack dev server proxies API requests to backend
+// Production: API runs on same origin as frontend when built
+axios.defaults.baseURL = process.env.NODE_ENV === 'production' ? '' : '';
+
+// Add detailed request logging
+axios.interceptors.request.use(
+  config => {
+    console.log(`🔄 [Request] ${config.method.toUpperCase()} ${config.url}`, 
+      config.data ? { data: config.data } : '');
+    
+    // Get token from localStorage
+    const token = localStorage.getItem('token');
+    
+    // If token exists, add it to authorization header
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    
+    return config;
+  },
+  error => {
+    console.error('❌ [Request Error]', error);
+    return Promise.reject(error);
+  }
+);
+
+// Add detailed response logging
+axios.interceptors.response.use(
+  response => {
+    console.log(`✅ [Response] ${response.config.method.toUpperCase()} ${response.config.url}`, 
+      { status: response.status, data: response.data });
+    return response;
+  },
+  error => {
+    console.error(`❌ [Response Error] ${error.config?.method?.toUpperCase() || 'UNKNOWN'} ${error.config?.url || 'UNKNOWN'}`, { 
+      status: error.response?.status, 
+      data: error.response?.data,
+      message: error.message
+    });
+    
+    // Handle authentication errors
+    if (error.response && error.response.status === 401) {
+      // Clear token and redirect to login if there's an auth error
+      localStorage.removeItem('token');
+      
+      // Only redirect if not already on login page
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
+    
+    return Promise.reject(error);
+  }
+);
+
+export default axios; 
