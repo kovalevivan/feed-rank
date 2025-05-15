@@ -27,6 +27,9 @@ const MappingSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
+}, { 
+  collection: 'mappings', 
+  dbName: 'feedrank'  // Use the feedrank database
 });
 
 // Compound index to ensure unique mapping

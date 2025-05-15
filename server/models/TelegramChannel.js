@@ -35,6 +35,9 @@ const TelegramChannelSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
+}, { 
+  collection: 'telegramchannels', 
+  dbName: 'feedrank'  // Use the feedrank database
 });
 
 // Update the updatedAt field before save

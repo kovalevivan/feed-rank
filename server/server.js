@@ -20,52 +20,16 @@ app.use((req, res, next) => {
   const start = Date.now();
   const originalSend = res.send;
   
-  // Store original URL and request body
-  const requestData = {
-    method: req.method,
-    url: req.originalUrl,
-    body: req.body,
-    query: req.query,
-    params: req.params,
-    timestamp: new Date().toISOString()
-  };
-  
+  // Log request
   console.log(`📥 REQUEST: ${req.method} ${req.originalUrl}`, 
     req.body && Object.keys(req.body).length ? `\nBody: ${JSON.stringify(req.body, null, 2)}` : '');
   
   // Override res.send to intercept the response
   res.send = function (body) {
     const responseTime = Date.now() - start;
-    const responseData = {
-      statusCode: res.statusCode,
-      body: body ? JSON.parse(body) : {},
-      responseTime: `${responseTime}ms`
-    };
     
+    // Log response
     console.log(`📤 RESPONSE: ${req.method} ${req.originalUrl} - Status: ${res.statusCode} - Time: ${responseTime}ms`);
-    
-    // Store request and response in log file
-    try {
-      const logPath = path.resolve(__dirname, '../.tmp-logs/requests.json');
-      let logs = {};
-      
-      if (fs.existsSync(logPath)) {
-        const fileContent = fs.readFileSync(logPath, 'utf8');
-        if (fileContent) {
-          logs = JSON.parse(fileContent);
-        }
-      }
-      
-      const requestId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      logs[requestId] = {
-        request: requestData,
-        response: responseData
-      };
-      
-      fs.writeFileSync(logPath, JSON.stringify(logs, null, 2));
-    } catch (err) {
-      console.error('Error writing to request log:', err);
-    }
     
     originalSend.call(this, body);
   };
@@ -73,10 +37,48 @@ app.use((req, res, next) => {
   next();
 });
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/feedrank')
-  .then(() => console.log('MongoDB connected'))
-  .catch(err => console.error('MongoDB connection error:', err));
+// Connect to MongoDB with modified connection options
+const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/feedrank';
+console.log('Connecting to MongoDB with URI:', mongoURI.replace(/\/\/[^:]+:[^@]+@/, '//****:****@'));
+
+// Create a custom connection to MongoDB that avoids any replica set config
+const mongooseOptions = {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  serverSelectionTimeoutMS: 15000,
+  socketTimeoutMS: 45000,
+  connectTimeoutMS: 30000,
+  directConnection: true, // Force direct connection
+  replicaSet: undefined   // Explicitly disable replica set
+};
+
+// Make sure we're using the feedrank database
+let feedrankURI = mongoURI;
+if (!mongoURI.includes('/feedrank')) {
+  feedrankURI = mongoURI.replace(/\/[^?]+(\?.+)?$/, '/feedrank$1');
+  console.log('Ensuring connection to feedrank database');
+}
+
+mongoose.connect(feedrankURI, mongooseOptions)
+  .then(() => {
+    console.log('MongoDB connected successfully');
+    
+    // List available databases to confirm connection
+    mongoose.connection.db.admin().listDatabases()
+      .then(result => {
+        console.log('Available databases:', result.databases.map(db => db.name).join(', '));
+      })
+      .catch(err => {
+        console.error('Error listing databases:', err.message);
+      });
+  })
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+    console.error('Error details:', err.message);
+    if (err.name === 'MongooseServerSelectionError') {
+      console.error('Server selection error details:', err.reason);
+    }
+  });
 
 // API Routes
 app.use('/api/users', require('./controllers/users'));

@@ -1,20 +1,6 @@
 version: '3.8'
 
 services:
-  # MongoDB service
-  mongo:
-    image: mongo:latest
-    container_name: feedrank-mongo
-    restart: always
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo-data:/data/db
-    environment:
-      MONGO_INITDB_DATABASE: feedrank
-    networks:
-      - feedrank-network
-
   # Backend API service
   backend:
     build:
@@ -26,7 +12,7 @@ services:
       - "5001:5000"
     environment:
       - NODE_ENV=production
-      - MONGODB_URI=mongodb://mongo:27017/feedrank
+      - MONGODB_URI=${MONGODB_URI}
       - JWT_SECRET=${JWT_SECRET}
       - VK_APP_ID=${VK_APP_ID}
       - VK_APP_SECRET=${VK_APP_SECRET}
@@ -34,11 +20,6 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
     env_file:
       - ./.env
-    depends_on:
-      - mongo
-    volumes:
-      - ./server:/usr/src/app
-      - /usr/src/app/node_modules
     networks:
       - feedrank-network
 
@@ -55,9 +36,6 @@ services:
       - backend
     networks:
       - feedrank-network
-
-volumes:
-  mongo-data:
 
 networks:
   feedrank-network:
