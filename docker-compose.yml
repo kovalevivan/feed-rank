@@ -8,6 +8,8 @@ services:
       - "3000:80"
     depends_on:
       - backend
+    env_file: .env
+
   backend:
     build: ./server
     container_name: feedrank-backend
@@ -15,12 +17,7 @@ services:
       - "5001:5000"
     environment:
       - NODE_ENV=production
-      - MONGODB_URI=mongodb://mongo:27017/feedrank
-      - JWT_SECRET=${JWT_SECRET}
-      - VK_APP_ID=${VK_APP_ID}
-      - VK_APP_SECRET=${VK_APP_SECRET}
-      - VK_ACCESS_TOKEN=${VK_ACCESS_TOKEN}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+    env_file: .env
     depends_on:
       - mongo
   
@@ -32,6 +29,7 @@ services:
     volumes:
       - mongodb_data:/data/db
     restart: unless-stopped
+    env_file: .env
 
 volumes:
   mongodb_data:
