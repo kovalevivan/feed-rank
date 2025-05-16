@@ -19,8 +19,6 @@ import {
 } from '@mui/material';
 import {
   Visibility as VisibilityIcon,
-  CheckCircle as CheckCircleIcon,
-  Cancel as CancelIcon,
   SendToMobile as SendToMobileIcon,
   ThumbUp as ThumbUpIcon
 } from '@mui/icons-material';
@@ -51,28 +49,14 @@ const Dashboard = () => {
       value: counts.pending,
       icon: <VisibilityIcon fontSize="large" color="primary" />,
       color: 'primary.light',
-      link: '/posts?status=pending'
-    },
-    {
-      title: 'Approved Posts',
-      value: counts.approved,
-      icon: <CheckCircleIcon fontSize="large" color="success" />,
-      color: 'success.light',
-      link: '/posts?status=approved'
-    },
-    {
-      title: 'Rejected Posts',
-      value: counts.rejected,
-      icon: <CancelIcon fontSize="large" color="error" />,
-      color: 'error.light',
-      link: '/posts?status=rejected'
+      link: '/sources'
     },
     {
       title: 'Forwarded Posts',
       value: counts.forwarded,
       icon: <SendToMobileIcon fontSize="large" color="info" />,
       color: 'info.light',
-      link: '/posts?status=forwarded'
+      link: '/sources'
     }
   ];
   
@@ -98,7 +82,7 @@ const Dashboard = () => {
       {/* Stats Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         {statCards.map((card, index) => (
-          <Grid item xs={12} sm={6} md={3} key={index}>
+          <Grid item xs={12} sm={6} md={6} key={index}>
             <Card>
               <CardContent>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -117,7 +101,7 @@ const Dashboard = () => {
                     size="small"
                     variant="outlined"
                   >
-                    View All
+                    View Sources
                   </Button>
                 </Box>
               </CardContent>
@@ -169,11 +153,11 @@ const Dashboard = () => {
                     />
                     <Button
                       component={RouterLink}
-                      to={`/posts?source=${post.vkSource._id}`}
+                      to={`/sources/${post.vkSource._id}`}
                       variant="outlined"
                       size="small"
                     >
-                      View
+                      View Source
                     </Button>
                   </ListItem>
                 ))}
@@ -187,10 +171,10 @@ const Dashboard = () => {
             <Box sx={{ mt: 2, textAlign: 'center' }}>
               <Button
                 component={RouterLink}
-                to="/posts?isViral=true"
+                to="/sources"
                 variant="contained"
               >
-                View All Viral Posts
+                View All Sources
               </Button>
             </Box>
           </Paper>

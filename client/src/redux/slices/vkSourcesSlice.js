@@ -25,7 +25,10 @@ const initialState = {
   vkSource: null,
   loading: false,
   error: null,
-  success: false
+  success: false,
+  thresholdStats: null,
+  calculatingThreshold: false,
+  thresholdStatsLoading: false
 };
 
 // Get all VK sources
@@ -162,6 +165,51 @@ export const calculateThreshold = createAsyncThunk(
   }
 );
 
+// Calculate threshold with advanced parameters
+export const calculateThresholdAdvanced = createAsyncThunk(
+  'vkSources/calculateThresholdAdvanced',
+  async ({ id, params }, { getState, rejectWithValue }) => {
+    try {
+      const { auth } = getState();
+      
+      const config = {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-auth-token': auth.token
+        }
+      };
+      
+      const response = await axios.post(`/api/vk-sources/${id}/calculate-threshold`, params, config);
+      
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(handleApiError(error));
+    }
+  }
+);
+
+// Get threshold statistics
+export const getThresholdStats = createAsyncThunk(
+  'vkSources/getThresholdStats',
+  async (id, { getState, rejectWithValue }) => {
+    try {
+      const { auth } = getState();
+      
+      const config = {
+        headers: {
+          'x-auth-token': auth.token
+        }
+      };
+      
+      const response = await axios.get(`/api/vk-sources/${id}/threshold-stats`, config);
+      
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(handleApiError(error));
+    }
+  }
+);
+
 // Process posts for a source now
 export const processSourceNow = createAsyncThunk(
   'vkSources/processNow',
@@ -284,10 +332,12 @@ const vkSourcesSlice = createSlice({
     // Calculate threshold cases
     builder.addCase(calculateThreshold.pending, (state) => {
       state.loading = true;
+      state.calculatingThreshold = true;
       state.error = null;
     });
     builder.addCase(calculateThreshold.fulfilled, (state, action) => {
       state.loading = false;
+      state.calculatingThreshold = false;
       state.vkSource = action.payload;
       
       // Update source in sources array
@@ -300,6 +350,48 @@ const vkSourcesSlice = createSlice({
     });
     builder.addCase(calculateThreshold.rejected, (state, action) => {
       state.loading = false;
+      state.calculatingThreshold = false;
+      state.error = action.payload;
+    });
+    
+    // Calculate threshold advanced cases
+    builder.addCase(calculateThresholdAdvanced.pending, (state) => {
+      state.calculatingThreshold = true;
+      state.error = null;
+    });
+    builder.addCase(calculateThresholdAdvanced.fulfilled, (state, action) => {
+      state.calculatingThreshold = false;
+      state.thresholdStats = action.payload;
+      
+      // Update source in sources array if it has an _id property
+      if (action.payload._id) {
+        const index = state.vkSources.findIndex((source) => source._id === action.payload._id);
+        if (index !== -1) {
+          state.vkSources[index] = action.payload;
+        }
+        
+        // Update current source if it's the same
+        if (state.vkSource && state.vkSource._id === action.payload._id) {
+          state.vkSource = action.payload;
+        }
+      }
+    });
+    builder.addCase(calculateThresholdAdvanced.rejected, (state, action) => {
+      state.calculatingThreshold = false;
+      state.error = action.payload;
+    });
+    
+    // Get threshold stats cases
+    builder.addCase(getThresholdStats.pending, (state) => {
+      state.thresholdStatsLoading = true;
+      state.error = null;
+    });
+    builder.addCase(getThresholdStats.fulfilled, (state, action) => {
+      state.thresholdStatsLoading = false;
+      state.thresholdStats = action.payload;
+    });
+    builder.addCase(getThresholdStats.rejected, (state, action) => {
+      state.thresholdStatsLoading = false;
       state.error = action.payload;
     });
     

@@ -1,5 +1,23 @@
 const mongoose = require('mongoose');
 
+// Define a nested schema for detailed statistics
+const DetailedStatsSchema = new mongoose.Schema({
+  count: { type: Number, default: 0 },
+  mean: { type: Number, default: 0 },
+  median: { type: Number, default: 0 },
+  min: { type: Number, default: 0 },
+  max: { type: Number, default: 0 },
+  standardDeviation: { type: Number, default: 0 },
+  percentiles: {
+    p25: { type: Number, default: 0 },
+    p50: { type: Number, default: 0 },
+    p75: { type: Number, default: 0 },
+    p90: { type: Number, default: 0 },
+    p95: { type: Number, default: 0 },
+    p99: { type: Number, default: 0 }
+  }
+}, { _id: false });
+
 const VkSourceSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -20,6 +38,11 @@ const VkSourceSchema = new mongoose.Schema({
     type: String,
     enum: ['auto', 'manual'],
     default: 'auto'
+  },
+  thresholdMethod: {
+    type: String,
+    enum: ['average', 'statistical'],
+    default: 'statistical'
   },
   manualThreshold: {
     type: Number,
@@ -44,7 +67,9 @@ const VkSourceSchema = new mongoose.Schema({
   lastPostsData: {
     averageViews: { type: Number, default: 0 },
     postsAnalyzed: { type: Number, default: 0 },
-    lastAnalysisDate: { type: Date, default: null }
+    lastAnalysisDate: { type: Date, default: null },
+    thresholdMethod: { type: String, default: 'statistical' },
+    detailedStats: { type: DetailedStatsSchema, default: () => ({}) }
   },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,

@@ -432,11 +432,23 @@ const forwardPost = async (post, channel) => {
   if (!bot) throw new Error('Telegram bot not initialized');
   
   try {
+    // Get VK source name
+    const vkSource = await VkSource.findById(post.vkSource);
+    const sourceName = vkSource ? vkSource.name : 'Unknown Source';
+    
     // Prepare post message
-    let message = `*${post.text ? post.text.substring(0, 200) + (post.text.length > 200 ? '...' : '') : 'New post'}*\n\n`;
+    let message = `*From VK group: ${sourceName}*\n\n`;
+    message += `*${post.text ? post.text.substring(0, 200) + (post.text.length > 200 ? '...' : '') : 'New post'}*\n\n`;
     message += `👁 Views: *${post.viewCount.toLocaleString()}*\n`;
     message += `👍 Likes: ${post.likeCount.toLocaleString()}\n`;
     message += `🔄 Reposts: ${post.repostCount.toLocaleString()}\n\n`;
+    
+    // Add photo link if available instead of sending the photo separately
+    const photoAttachment = post.attachments?.find(att => att.type === 'photo');
+    if (photoAttachment && photoAttachment.url) {
+      message += `[View photo](${photoAttachment.url})\n`;
+    }
+    
     message += `[View original post](${post.originalPostUrl})`;
     
     // Send message with markdown
@@ -448,12 +460,6 @@ const forwardPost = async (post, channel) => {
         disable_web_page_preview: false // Enable preview for the original post link
       }
     );
-    
-    // If post has photo attachments, send the first photo
-    const photoAttachment = post.attachments?.find(att => att.type === 'photo');
-    if (photoAttachment && photoAttachment.url) {
-      await bot.sendPhoto(channel.chatId, photoAttachment.url);
-    }
     
     // Update post in database
     post.status = 'forwarded';

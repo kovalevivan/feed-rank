@@ -157,6 +157,101 @@ const resolveGroupId = async (groupName) => {
 };
 
 /**
+ * Calculates detailed statistics for post views
+ * @param {Array} posts - Array of VK posts
+ * @returns {Object} - Detailed statistics for the posts
+ */
+const calculateDetailedStats = (posts) => {
+  if (!posts || posts.length === 0) {
+    return {
+      count: 0,
+      mean: 0,
+      median: 0,
+      min: 0,
+      max: 0,
+      standardDeviation: 0,
+      percentiles: {
+        p25: 0,
+        p50: 0,
+        p75: 0,
+        p90: 0,
+        p95: 0,
+        p99: 0
+      }
+    };
+  }
+  
+  // Extract view counts from posts
+  const viewCounts = posts.map(post => post.views?.count || 0);
+  
+  // Sort for percentile calculations
+  const sortedCounts = [...viewCounts].sort((a, b) => a - b);
+  
+  // Calculate mean (average)
+  const mean = viewCounts.reduce((sum, count) => sum + count, 0) / viewCounts.length;
+  
+  // Calculate median (50th percentile)
+  const median = calculatePercentile(sortedCounts, 50);
+  
+  // Min and max
+  const min = sortedCounts[0];
+  const max = sortedCounts[sortedCounts.length - 1];
+  
+  // Calculate standard deviation
+  const squaredDifferences = viewCounts.map(count => {
+    const diff = count - mean;
+    return diff * diff;
+  });
+  
+  const variance = squaredDifferences.reduce((sum, squared) => sum + squared, 0) / viewCounts.length;
+  const standardDeviation = Math.sqrt(variance);
+  
+  // Calculate percentiles
+  const p25 = calculatePercentile(sortedCounts, 25);
+  const p75 = calculatePercentile(sortedCounts, 75);
+  const p90 = calculatePercentile(sortedCounts, 90);
+  const p95 = calculatePercentile(sortedCounts, 95);
+  const p99 = calculatePercentile(sortedCounts, 99);
+  
+  return {
+    count: posts.length,
+    mean: Math.round(mean),
+    median: Math.round(median),
+    min,
+    max,
+    standardDeviation: Math.round(standardDeviation),
+    percentiles: {
+      p25: Math.round(p25),
+      p50: Math.round(median),
+      p75: Math.round(p75),
+      p90: Math.round(p90),
+      p95: Math.round(p95),
+      p99: Math.round(p99)
+    }
+  };
+};
+
+/**
+ * Calculates a percentile value from a sorted array
+ * @param {Array} sortedArray - Sorted array of values
+ * @param {number} percentile - Percentile to calculate (0-100)
+ * @returns {number} - The percentile value
+ */
+const calculatePercentile = (sortedArray, percentile) => {
+  if (sortedArray.length === 0) return 0;
+  if (sortedArray.length === 1) return sortedArray[0];
+  
+  const index = (percentile / 100) * (sortedArray.length - 1);
+  const lower = Math.floor(index);
+  const upper = Math.ceil(index);
+  
+  if (lower === upper) return sortedArray[lower];
+  
+  const weight = index - lower;
+  return sortedArray[lower] * (1 - weight) + sortedArray[upper] * weight;
+};
+
+/**
  * Calculates the average view count from posts
  * @param {Array} posts - Array of VK posts
  * @returns {number} - Average view count
@@ -172,11 +267,35 @@ const calculateAverageViews = (posts) => {
 };
 
 /**
+ * Calculates the threshold using mean + 1.5 standard deviation of view counts
+ * This provides a more statistically sound way to identify viral posts
+ * @param {Array} posts - Array of VK posts
+ * @returns {number} - Calculated threshold
+ */
+const calculateStatisticalThreshold = (posts) => {
+  if (!posts || posts.length === 0) return 0;
+  
+  // Get detailed statistics
+  const stats = calculateDetailedStats(posts);
+  
+  // Calculate threshold as mean + 1.5 standard deviations
+  // This will identify approximately the top ~7% as viral (if normally distributed)
+  const threshold = Math.round(stats.mean + (1.5 * stats.standardDeviation));
+  
+  console.log(`Statistical threshold calculation: Mean = ${stats.mean}, SD = ${stats.standardDeviation}, Threshold = ${threshold}`);
+  console.log(`Additional stats: Median = ${stats.median}, Min = ${stats.min}, Max = ${stats.max}`);
+  console.log(`Percentiles: 75th = ${stats.percentiles.p75}, 90th = ${stats.percentiles.p90}, 95th = ${stats.percentiles.p95}, 99th = ${stats.percentiles.p99}`);
+  
+  return threshold;
+};
+
+/**
  * Updates the calculated threshold for a VK source
  * @param {string} sourceId - VK source ID in our database
+ * @param {string} thresholdMethod - Method to use for threshold calculation ('average' or 'statistical')
  * @returns {Promise<Object>} - Updated VK source
  */
-const updateSourceThreshold = async (sourceId) => {
+const updateSourceThreshold = async (sourceId, thresholdMethod = 'statistical') => {
   try {
     validateVkCredentials();
     
@@ -184,13 +303,25 @@ const updateSourceThreshold = async (sourceId) => {
     if (!source) throw new Error(`VK source with ID ${sourceId} not found`);
     
     const posts = await fetchPosts(source.groupId, 200);
-    const averageViews = calculateAverageViews(posts);
     
-    source.calculatedThreshold = averageViews;
+    let calculatedThreshold;
+    let detailedStats = calculateDetailedStats(posts);
+    
+    if (thresholdMethod === 'statistical') {
+      calculatedThreshold = calculateStatisticalThreshold(posts);
+    } else {
+      calculatedThreshold = calculateAverageViews(posts);
+    }
+    
+    // Store the threshold and additional data
+    source.calculatedThreshold = calculatedThreshold;
+    source.thresholdMethod = thresholdMethod;
     source.lastPostsData = {
-      averageViews,
+      averageViews: detailedStats.mean,
       postsAnalyzed: posts.length,
-      lastAnalysisDate: new Date()
+      lastAnalysisDate: new Date(),
+      thresholdMethod: thresholdMethod,
+      detailedStats: detailedStats // Store the detailed statistics
     };
     
     await source.save();
@@ -219,8 +350,9 @@ const processSourcePosts = async (sourceId) => {
       : source.calculatedThreshold;
     
     if (threshold <= 0 && source.thresholdType === 'auto') {
-      // Calculate threshold if not set
-      await updateSourceThreshold(sourceId);
+      // Calculate threshold if not set, using statistical method by default
+      const thresholdMethod = source.thresholdMethod || 'statistical';
+      await updateSourceThreshold(sourceId, thresholdMethod);
     }
     
     // Fetch recent posts
@@ -312,6 +444,8 @@ module.exports = {
   fetchPosts,
   resolveGroupId,
   calculateAverageViews,
+  calculateStatisticalThreshold,
+  calculateDetailedStats,
   updateSourceThreshold,
   processSourcePosts
 }; 

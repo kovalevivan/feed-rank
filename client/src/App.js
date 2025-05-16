@@ -19,7 +19,6 @@ import ChannelsList from './components/destinations/ChannelsList';
 import ChannelForm from './components/destinations/ChannelForm';
 import MappingsList from './components/mappings/MappingsList';
 import MappingForm from './components/mappings/MappingForm';
-import PostsList from './components/posts/PostsList';
 import Settings from './components/settings/Settings';
 
 // Create a Material UI theme
@@ -88,9 +87,6 @@ function App() {
               <Route path="mappings" element={<PrivateRoute><MappingsList /></PrivateRoute>} />
               <Route path="mappings/new" element={<PrivateRoute><MappingForm /></PrivateRoute>} />
               <Route path="mappings/:id" element={<PrivateRoute><MappingForm /></PrivateRoute>} />
-              
-              {/* Posts Routes */}
-              <Route path="posts" element={<PrivateRoute><PostsList /></PrivateRoute>} />
               
               {/* Settings Route */}
               <Route path="settings" element={<PrivateRoute><Settings /></PrivateRoute>} />

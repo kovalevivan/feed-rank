@@ -25,7 +25,6 @@ import {
   Source as SourceIcon,
   Send as SendIcon,
   Link as LinkIcon,
-  Article as ArticleIcon,
   Settings as SettingsIcon,
   AccountCircle
 } from '@mui/icons-material';
@@ -96,7 +95,6 @@ const Layout = () => {
     { text: 'VK Sources', icon: <SourceIcon />, path: '/sources' },
     { text: 'Telegram Channels', icon: <SendIcon />, path: '/channels' },
     { text: 'Mappings', icon: <LinkIcon />, path: '/mappings' },
-    { text: 'Posts', icon: <ArticleIcon />, path: '/posts' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
   ];
   
