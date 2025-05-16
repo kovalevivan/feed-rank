@@ -5,7 +5,7 @@ services:
     build: ./client
     container_name: feedrank-frontend
     ports:
-      - "3000:80"
+      - "80:80"
     depends_on:
       - backend
     env_file: .env
