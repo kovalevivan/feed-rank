@@ -1,42 +1,37 @@
-version: '3.8'
+version: '3.9'
 
 services:
-  # Backend API service
+  frontend:
+    build: ./client
+    container_name: feedrank-frontend
+    ports:
+      - "3000:8000"
+    depends_on:
+      - backend
   backend:
-    build:
-      context: ./server
-      dockerfile: Dockerfile
+    build: ./server
     container_name: feedrank-backend
-    restart: always
     ports:
       - "5001:5000"
     environment:
       - NODE_ENV=production
-      - MONGODB_URI=${MONGODB_URI}
+      - MONGODB_URI=mongodb://mongo:27017/feedrank
       - JWT_SECRET=${JWT_SECRET}
       - VK_APP_ID=${VK_APP_ID}
       - VK_APP_SECRET=${VK_APP_SECRET}
       - VK_ACCESS_TOKEN=${VK_ACCESS_TOKEN}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-    env_file:
-      - ./.env
-    networks:
-      - feedrank-network
-
-  # Frontend service
-  frontend:
-    build:
-      context: ./client
-      dockerfile: Dockerfile
-    container_name: feedrank-frontend
-    restart: always
-    ports:
-      - "3000:80"
     depends_on:
-      - backend
-    networks:
-      - feedrank-network
+      - mongo
+  
+  mongo:
+    image: mongo:5.0
+    container_name: feedrank-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
 
-networks:
-  feedrank-network:
-    driver: bridge 
+volumes:
+  mongodb_data:
