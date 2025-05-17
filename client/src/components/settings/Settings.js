@@ -15,10 +15,12 @@ import {
   Snackbar
 } from '@mui/material';
 import { Save as SaveIcon } from '@mui/icons-material';
+import { useTranslation } from '../../translations/TranslationContext';
 
 const Settings = () => {
   const [tabValue, setTabValue] = useState(0);
   const [success, setSuccess] = useState(false);
+  const translate = useTranslation();
   
   // Settings state (would normally be in Redux)
   const [settings, setSettings] = useState({
@@ -61,7 +63,7 @@ const Settings = () => {
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">Settings</Typography>
+        <Typography variant="h4">{translate('Settings')}</Typography>
       </Box>
       
       <Paper sx={{ mb: 4 }}>
@@ -72,9 +74,9 @@ const Settings = () => {
           textColor="primary"
           variant="fullWidth"
         >
-          <Tab label="System" />
-          <Tab label="VK API" />
-          <Tab label="Telegram" />
+          <Tab label={translate('System')} />
+          <Tab label={translate('VK API')} />
+          <Tab label={translate('Telegram')} />
         </Tabs>
       </Paper>
       
@@ -83,7 +85,7 @@ const Settings = () => {
         {tabValue === 0 && (
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
-              System Settings
+              {translate('System Settings')}
             </Typography>
             <Divider sx={{ mb: 3 }} />
             
@@ -97,10 +99,10 @@ const Settings = () => {
                       color="primary"
                     />
                   }
-                  label="Automatically forward viral posts without approval"
+                  label={translate('Automatically forward viral posts without approval')}
                 />
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  When enabled, viral posts will be automatically forwarded to mapped Telegram channels without manual approval.
+                  {translate('When enabled, viral posts will be automatically forwarded to mapped Telegram channels without manual approval.')}
                 </Typography>
               </Grid>
             </Grid>
@@ -111,7 +113,7 @@ const Settings = () => {
         {tabValue === 1 && (
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
-              VK API Settings
+              {translate('VK API Settings')}
             </Typography>
             <Divider sx={{ mb: 3 }} />
             
@@ -119,23 +121,23 @@ const Settings = () => {
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
-                  label="Posts per check"
+                  label={translate('Posts per check')}
                   type="number"
                   InputProps={{ inputProps: { min: 10, max: 100 } }}
                   value={settings.vk.postsPerCheck}
                   onChange={(e) => handleSettingChange('vk', 'postsPerCheck', e.target.value)}
-                  helperText="Number of posts to fetch from each VK source during check (10-100)"
+                  helperText={translate('Number of posts to fetch from each VK source during check (10-100)')}
                 />
               </Grid>
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
-                  label="Posts for average calculation"
+                  label={translate('Posts for average calculation')}
                   type="number"
                   InputProps={{ inputProps: { min: 50, max: 500 } }}
                   value={settings.vk.postsForAverage}
                   onChange={(e) => handleSettingChange('vk', 'postsForAverage', e.target.value)}
-                  helperText="Number of posts used to calculate average views (50-500)"
+                  helperText={translate('Number of posts used to calculate average views (50-500)')}
                 />
               </Grid>
             </Grid>
@@ -146,7 +148,7 @@ const Settings = () => {
         {tabValue === 2 && (
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
-              Telegram Settings
+              {translate('Telegram Settings')}
             </Typography>
             <Divider sx={{ mb: 3 }} />
             
@@ -154,10 +156,10 @@ const Settings = () => {
               <Grid item xs={12}>
                 <TextField
                   fullWidth
-                  label="Notification Chat ID"
+                  label={translate('Notification Chat ID')}
                   value={settings.telegram.notificationChatId}
                   onChange={(e) => handleSettingChange('telegram', 'notificationChatId', e.target.value)}
-                  helperText="Chat ID for system notifications (optional)"
+                  helperText={translate('Chat ID for system notifications (optional)')}
                 />
               </Grid>
             </Grid>
@@ -171,7 +173,7 @@ const Settings = () => {
             startIcon={<SaveIcon />}
             size="large"
           >
-            Save Settings
+            {translate('Save Settings')}
           </Button>
         </Box>
       </form>
@@ -183,7 +185,7 @@ const Settings = () => {
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
         <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: '100%' }}>
-          Settings saved successfully
+          {translate('Settings saved successfully')}
         </Alert>
       </Snackbar>
     </Box>

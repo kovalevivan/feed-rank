@@ -20,11 +20,13 @@ import {
   Save as SaveIcon,
   ArrowBack as ArrowBackIcon
 } from '@mui/icons-material';
+import { useTranslation } from '../../translations/TranslationContext';
 
 const MappingForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const isNewMapping = id === 'new' || !id;
+  const translate = useTranslation();
   
   // State for data sources
   const [vkSources, setVkSources] = useState([]);
@@ -72,7 +74,7 @@ const MappingForm = () => {
           setLoading(false);
         }
       } catch (err) {
-        setError(err.response?.data?.message || 'Failed to load data');
+        setError(err.response?.data?.message || translate('Failed to load data'));
         setSourcesLoading(false);
         setChannelsLoading(false);
         setLoading(false);
@@ -80,7 +82,7 @@ const MappingForm = () => {
     };
     
     fetchData();
-  }, [id, isNewMapping]);
+  }, [id, isNewMapping, translate]);
   
   // Handle form input changes
   const handleChange = (e) => {
@@ -106,7 +108,7 @@ const MappingForm = () => {
     try {
       // Validate form data
       if (!formData.vkSource || !formData.telegramChannel) {
-        setError('Please select both a VK source and a Telegram channel');
+        setError(translate('Please select both a VK source and a Telegram channel'));
         setLoading(false);
         return;
       }
@@ -116,11 +118,11 @@ const MappingForm = () => {
       if (isNewMapping) {
         // Create new mapping
         response = await axios.post('/api/mappings', formData);
-        setSuccess('Mapping created successfully!');
+        setSuccess(translate('Mapping created successfully!'));
       } else {
         // Update existing mapping
         response = await axios.put(`/api/mappings/${id}`, { active: formData.active });
-        setSuccess('Mapping updated successfully!');
+        setSuccess(translate('Mapping updated successfully!'));
       }
       
       // Redirect after short delay
@@ -128,7 +130,7 @@ const MappingForm = () => {
         navigate('/mappings');
       }, 1500);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to save mapping');
+      setError(err.response?.data?.message || translate('Failed to save mapping'));
       console.error('Error saving mapping:', err);
     } finally {
       setLoading(false);
@@ -142,7 +144,7 @@ const MappingForm = () => {
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">
-          {isNewMapping ? 'Add Mapping' : 'Edit Mapping'}
+          {isNewMapping ? translate('Add Mapping') : translate('Edit Mapping')}
         </Typography>
         <Button
           variant="outlined"
@@ -150,7 +152,7 @@ const MappingForm = () => {
           onClick={() => navigate('/mappings')}
           disabled={loading}
         >
-          Back to Mappings
+          {translate('Back to Mappings')}
         </Button>
       </Box>
       
@@ -165,29 +167,29 @@ const MappingForm = () => {
         ) : (
           <Box component="form" onSubmit={handleSubmit}>
             <Typography variant="h6" gutterBottom>
-              Mapping Details
+              {translate('Mapping Details')}
             </Typography>
             
             <FormControl fullWidth margin="normal" required disabled={isFormDisabled || !isNewMapping}>
-              <InputLabel id="vk-source-label">VK Source</InputLabel>
+              <InputLabel id="vk-source-label">{translate('VK Source')}</InputLabel>
               <Select
                 labelId="vk-source-label"
                 id="vkSource"
                 name="vkSource"
                 value={formData.vkSource}
                 onChange={handleChange}
-                label="VK Source"
+                label={translate('VK Source')}
               >
                 <MenuItem value="" disabled>
-                  <em>Select a VK source</em>
+                  <em>{translate('Select a VK source')}</em>
                 </MenuItem>
                 {sourcesLoading ? (
                   <MenuItem disabled>
-                    <CircularProgress size={20} sx={{ mr: 1 }} /> Loading sources...
+                    <CircularProgress size={20} sx={{ mr: 1 }} /> {translate('Loading sources...')}
                   </MenuItem>
                 ) : vkSources.length === 0 ? (
                   <MenuItem disabled>
-                    No VK sources available
+                    {translate('No VK sources available')}
                   </MenuItem>
                 ) : (
                   vkSources.map((source) => (
@@ -200,25 +202,25 @@ const MappingForm = () => {
             </FormControl>
             
             <FormControl fullWidth margin="normal" required disabled={isFormDisabled || !isNewMapping}>
-              <InputLabel id="telegram-channel-label">Telegram Channel</InputLabel>
+              <InputLabel id="telegram-channel-label">{translate('Telegram Channel')}</InputLabel>
               <Select
                 labelId="telegram-channel-label"
                 id="telegramChannel"
                 name="telegramChannel"
                 value={formData.telegramChannel}
                 onChange={handleChange}
-                label="Telegram Channel"
+                label={translate('Telegram Channel')}
               >
                 <MenuItem value="" disabled>
-                  <em>Select a Telegram channel</em>
+                  <em>{translate('Select a Telegram channel')}</em>
                 </MenuItem>
                 {channelsLoading ? (
                   <MenuItem disabled>
-                    <CircularProgress size={20} sx={{ mr: 1 }} /> Loading channels...
+                    <CircularProgress size={20} sx={{ mr: 1 }} /> {translate('Loading channels...')}
                   </MenuItem>
                 ) : telegramChannels.length === 0 ? (
                   <MenuItem disabled>
-                    No Telegram channels available
+                    {translate('No Telegram channels available')}
                   </MenuItem>
                 ) : (
                   telegramChannels.map((channel) => (
@@ -243,10 +245,10 @@ const MappingForm = () => {
                     disabled={isFormDisabled}
                   />
                 }
-                label="Active"
+                label={translate('Active')}
               />
               <Typography variant="body2" color="textSecondary">
-                When active, posts will be forwarded according to this mapping. Inactive mappings will be ignored.
+                {translate('When active, posts will be forwarded according to this mapping. Inactive mappings will be ignored.')}
               </Typography>
             </Box>
             
@@ -258,7 +260,7 @@ const MappingForm = () => {
                 sx={{ mr: 2 }}
                 disabled={loading}
               >
-                Cancel
+                {translate('Cancel')}
               </Button>
               <Button
                 type="submit"
@@ -267,18 +269,18 @@ const MappingForm = () => {
                 disabled={isFormDisabled || (!isNewMapping && formData.active === undefined) || 
                           (isNewMapping && (!formData.vkSource || !formData.telegramChannel))}
               >
-                {loading ? 'Saving...' : 'Save Mapping'}
+                {loading ? translate('Saving...') : translate('Save Mapping')}
               </Button>
             </Box>
             
             {(vkSources.length === 0 || telegramChannels.length === 0) && (
               <Alert severity="info" sx={{ mt: 3 }}>
                 {vkSources.length === 0 && telegramChannels.length === 0 ? (
-                  'You need to add at least one VK source and one Telegram channel before creating a mapping.'
+                  translate('You need to add at least one VK source and one Telegram channel before creating a mapping.')
                 ) : vkSources.length === 0 ? (
-                  'You need to add at least one VK source before creating a mapping.'
+                  translate('You need to add at least one VK source before creating a mapping.')
                 ) : (
-                  'You need to add at least one Telegram channel before creating a mapping.'
+                  translate('You need to add at least one Telegram channel before creating a mapping.')
                 )}
               </Alert>
             )}

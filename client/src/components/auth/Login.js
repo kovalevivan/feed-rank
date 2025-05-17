@@ -13,6 +13,7 @@ import {
   Alert,
   CircularProgress
 } from '@mui/material';
+import { useTranslation } from '../../translations/TranslationContext';
 
 const Login = () => {
   const [formData, setFormData] = useState({
@@ -24,6 +25,7 @@ const Login = () => {
   
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const translate = useTranslation();
   
   const { isAuthenticated, loading, error } = useSelector((state) => state.auth);
   
@@ -77,7 +79,7 @@ const Login = () => {
             FeedRank
           </Typography>
           <Typography component="h2" variant="h5" gutterBottom>
-            Sign In
+            {translate('Sign in')}
           </Typography>
           
           {error && <Alert severity="error" sx={{ mb: 2, width: '100%' }}>{error}</Alert>}
@@ -88,7 +90,7 @@ const Login = () => {
               required
               fullWidth
               id="email"
-              label="Email Address"
+              label={translate('Email Address')}
               name="email"
               autoComplete="email"
               autoFocus
@@ -100,7 +102,7 @@ const Login = () => {
               required
               fullWidth
               name="password"
-              label="Password"
+              label={translate('Password')}
               type="password"
               id="password"
               autoComplete="current-password"
@@ -114,11 +116,11 @@ const Login = () => {
               sx={{ mt: 3, mb: 2, py: 1.5 }}
               disabled={loading}
             >
-              {loading ? <CircularProgress size={24} color="inherit" /> : 'Sign In'}
+              {loading ? <CircularProgress size={24} color="inherit" /> : translate('Sign in')}
             </Button>
             <Box sx={{ textAlign: 'center' }}>
               <Link component={RouterLink} to="/register" variant="body2">
-                {"Don't have an account? Sign Up"}
+                {translate("Don't have an account?")} {translate('Sign up')}
               </Link>
             </Box>
           </Box>

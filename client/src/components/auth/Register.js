@@ -13,6 +13,7 @@ import {
   Alert,
   CircularProgress
 } from '@mui/material';
+import { useTranslation } from '../../translations/TranslationContext';
 
 const Register = () => {
   const [formData, setFormData] = useState({
@@ -28,6 +29,7 @@ const Register = () => {
   
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const translate = useTranslation();
   
   const { isAuthenticated, loading, error } = useSelector((state) => state.auth);
   
@@ -59,7 +61,7 @@ const Register = () => {
     
     // Check if passwords match
     if (password !== password2) {
-      setPasswordError('Passwords do not match');
+      setPasswordError(translate('Passwords do not match'));
       return;
     }
     
@@ -93,7 +95,7 @@ const Register = () => {
             FeedRank
           </Typography>
           <Typography component="h2" variant="h5" gutterBottom>
-            Create Account
+            {translate('Create Account')}
           </Typography>
           
           {error && <Alert severity="error" sx={{ mb: 2, width: '100%' }}>{error}</Alert>}
@@ -104,7 +106,7 @@ const Register = () => {
               required
               fullWidth
               id="name"
-              label="Name"
+              label={translate('Name')}
               name="name"
               autoComplete="name"
               autoFocus
@@ -116,7 +118,7 @@ const Register = () => {
               required
               fullWidth
               id="email"
-              label="Email Address"
+              label={translate('Email Address')}
               name="email"
               autoComplete="email"
               value={email}
@@ -127,7 +129,7 @@ const Register = () => {
               required
               fullWidth
               name="password"
-              label="Password"
+              label={translate('Password')}
               type="password"
               id="password"
               autoComplete="new-password"
@@ -140,7 +142,7 @@ const Register = () => {
               required
               fullWidth
               name="password2"
-              label="Confirm Password"
+              label={translate('Confirm Password')}
               type="password"
               id="password2"
               autoComplete="new-password"
@@ -156,11 +158,11 @@ const Register = () => {
               sx={{ mt: 3, mb: 2, py: 1.5 }}
               disabled={loading}
             >
-              {loading ? <CircularProgress size={24} color="inherit" /> : 'Register'}
+              {loading ? <CircularProgress size={24} color="inherit" /> : translate('Register')}
             </Button>
             <Box sx={{ textAlign: 'center' }}>
               <Link component={RouterLink} to="/login" variant="body2">
-                {"Already have an account? Sign In"}
+                {translate('Already have an account?')} {translate('Sign in')}
               </Link>
             </Box>
           </Box>

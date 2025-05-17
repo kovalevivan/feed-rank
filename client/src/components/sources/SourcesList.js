@@ -41,10 +41,12 @@ import {
   clearVkSourceSuccess
 } from '../../redux/slices/vkSourcesSlice';
 import ApiErrorAlert from '../common/ApiErrorAlert';
+import { useTranslation } from '../../translations/TranslationContext';
 
 const SourcesList = () => {
   const dispatch = useDispatch();
   const { vkSources, loading, error, success } = useSelector((state) => state.vkSources);
+  const translate = useTranslation();
   
   // Local state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -114,7 +116,7 @@ const SourcesList = () => {
   
   // Format date
   const formatDate = (dateString) => {
-    if (!dateString) return 'Never';
+    if (!dateString) return translate('Never');
     return new Date(dateString).toLocaleString();
   };
   
@@ -126,14 +128,14 @@ const SourcesList = () => {
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">VK Sources</Typography>
+        <Typography variant="h4">{translate('VK Sources')}</Typography>
         <Button
           component={RouterLink}
           to="/sources/new"
           variant="contained"
           startIcon={<AddIcon />}
         >
-          Add Source
+          {translate('Add Source')}
         </Button>
       </Box>
       
@@ -141,14 +143,14 @@ const SourcesList = () => {
       
       {success && (
         <Alert severity="success" sx={{ mb: 2 }}>
-          Operation completed successfully!
+          {translate('Operation completed successfully!')}
         </Alert>
       )}
       
       <Paper sx={{ p: 2, mb: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <TextField
-            label="Search Sources"
+            label={translate('Search Sources')}
             variant="outlined"
             size="small"
             value={searchTerm}
@@ -161,7 +163,7 @@ const SourcesList = () => {
             onClick={handleRefresh}
             disabled={loading}
           >
-            Refresh
+            {translate('Refresh')}
           </Button>
         </Box>
         
@@ -169,12 +171,12 @@ const SourcesList = () => {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Threshold</TableCell>
-                <TableCell>Check Frequency</TableCell>
-                <TableCell>Last Checked</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell align="right">Actions</TableCell>
+                <TableCell>{translate('Source Name')}</TableCell>
+                <TableCell>{translate('Threshold')}</TableCell>
+                <TableCell>{translate('Check Frequency')}</TableCell>
+                <TableCell>{translate('Last Check')}</TableCell>
+                <TableCell>{translate('Status')}</TableCell>
+                <TableCell align="right">{translate('Actions')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -187,7 +189,7 @@ const SourcesList = () => {
               ) : filteredSources.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} align="center">
-                    No VK sources found
+                    {translate('No VK sources found')}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -202,7 +204,7 @@ const SourcesList = () => {
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <Chip
-                          label={source.thresholdType === 'auto' ? 'Auto' : 'Manual'}
+                          label={source.thresholdType === 'auto' ? translate('Auto') : translate('Manual')}
                           color={source.thresholdType === 'auto' ? 'primary' : 'secondary'}
                           size="small"
                           sx={{ mr: 1 }}
@@ -210,27 +212,27 @@ const SourcesList = () => {
                         {source.thresholdType === 'auto'
                           ? source.calculatedThreshold
                           : source.manualThreshold}{' '}
-                        views
+                        {translate('views')}
                       </Box>
                     </TableCell>
                     <TableCell>
                       {source.checkFrequency === 60
-                        ? 'Hourly'
+                        ? translate('Hourly')
                         : source.checkFrequency < 60
-                        ? `Every ${source.checkFrequency} minutes`
-                        : `Every ${source.checkFrequency / 60} hours`}
+                        ? `${translate('Every')} ${source.checkFrequency} ${translate('minutes')}`
+                        : `${translate('Every')} ${source.checkFrequency / 60} ${translate('hours')}`}
                     </TableCell>
                     <TableCell>{formatDate(source.lastChecked)}</TableCell>
                     <TableCell>
                       <Chip
-                        label={source.active ? 'Active' : 'Inactive'}
+                        label={source.active ? translate('Active') : translate('Inactive')}
                         color={source.active ? 'success' : 'default'}
                         size="small"
                       />
                     </TableCell>
                     <TableCell align="right">
                       <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                        <Tooltip title="Calculate Threshold">
+                        <Tooltip title={translate('Calculate Threshold')}>
                           <IconButton
                             onClick={() => handleCalculateThreshold(source._id)}
                             disabled={loading}
@@ -239,7 +241,7 @@ const SourcesList = () => {
                             <CalculateIcon />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="Process Now">
+                        <Tooltip title={translate('Process now')}>
                           <IconButton
                             onClick={() => handleProcessNow(source._id)}
                             disabled={loading}
@@ -248,7 +250,7 @@ const SourcesList = () => {
                             <SyncIcon />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="Edit">
+                        <Tooltip title={translate('Edit')}>
                           <IconButton
                             component={RouterLink}
                             to={`/sources/${source._id}`}
@@ -257,7 +259,7 @@ const SourcesList = () => {
                             <EditIcon />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="Delete">
+                        <Tooltip title={translate('Delete')}>
                           <IconButton
                             onClick={() => openDeleteDialog(source)}
                             color="error"
@@ -278,19 +280,18 @@ const SourcesList = () => {
       
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onClose={closeDeleteDialog}>
-        <DialogTitle>Delete VK Source</DialogTitle>
+        <DialogTitle>{translate('Delete VK Source')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to delete the VK source "{selectedSource?.name}"? This action
-            cannot be undone and will remove all associated data.
+            {translate('Are you sure you want to delete the VK source')} "{selectedSource?.name}"? {translate('This action cannot be undone and will remove all associated data.')}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button onClick={closeDeleteDialog} color="primary">
-            Cancel
+            {translate('Cancel')}
           </Button>
           <Button onClick={confirmDelete} color="error" disabled={loading}>
-            {loading ? <CircularProgress size={24} /> : 'Delete'}
+            {loading ? <CircularProgress size={24} /> : translate('Delete')}
           </Button>
         </DialogActions>
       </Dialog>

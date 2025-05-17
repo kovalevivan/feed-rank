@@ -32,10 +32,12 @@ import {
   Send as SendIcon
 } from '@mui/icons-material';
 import { setTelegramChannels, setLoading, setError } from '../../redux/slices/telegramChannelsSlice';
+import { useTranslation } from '../../translations/TranslationContext';
 
 const ChannelsList = () => {
   const dispatch = useDispatch();
   const { telegramChannels, loading, error } = useSelector(state => state.telegramChannels);
+  const translate = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [channelToDelete, setChannelToDelete] = useState(null);
@@ -50,12 +52,12 @@ const ChannelsList = () => {
         dispatch(setTelegramChannels(response.data));
       } catch (err) {
         console.error('Error fetching Telegram channels:', err);
-        dispatch(setError(err.response?.data?.message || 'Failed to fetch Telegram channels'));
+        dispatch(setError(err.response?.data?.message || translate('Failed to fetch Telegram channels')));
       }
     };
 
     fetchChannels();
-  }, [dispatch]);
+  }, [dispatch, translate]);
 
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
@@ -81,7 +83,7 @@ const ChannelsList = () => {
       setChannelToDelete(null);
     } catch (err) {
       console.error('Error deleting channel:', err);
-      dispatch(setError(err.response?.data?.message || 'Failed to delete channel'));
+      dispatch(setError(err.response?.data?.message || translate('Failed to delete channel')));
     }
   };
 
@@ -110,7 +112,7 @@ const ChannelsList = () => {
       console.error('Error sending test message:', err);
       setTestMessageStatus({
         ...testMessageStatus,
-        [channelId]: { error: err.response?.data?.message || 'Failed to send test message' }
+        [channelId]: { error: err.response?.data?.message || translate('Failed to send test message') }
       });
     }
   };
@@ -125,14 +127,14 @@ const ChannelsList = () => {
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">Telegram Channels</Typography>
+        <Typography variant="h4">{translate('Telegram Channels')}</Typography>
         <Button
           component={RouterLink}
           to="/channels/new"
           variant="contained"
           startIcon={<AddIcon />}
         >
-          Add Channel
+          {translate('Add Channel')}
         </Button>
       </Box>
       
@@ -143,7 +145,7 @@ const ChannelsList = () => {
       <Paper sx={{ p: 2, mb: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <TextField
-            label="Search Channels"
+            label={translate('Search Channels')}
             variant="outlined"
             size="small"
             sx={{ width: 300 }}
@@ -156,12 +158,12 @@ const ChannelsList = () => {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Chat ID</TableCell>
-                <TableCell>Username</TableCell>
-                <TableCell>Posts Forwarded</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell align="right">Actions</TableCell>
+                <TableCell>{translate('Channel Name')}</TableCell>
+                <TableCell>{translate('Channel ID')}</TableCell>
+                <TableCell>{translate('Username')}</TableCell>
+                <TableCell>{translate('Posts Received')}</TableCell>
+                <TableCell>{translate('Status')}</TableCell>
+                <TableCell align="right">{translate('Actions')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -176,8 +178,8 @@ const ChannelsList = () => {
                   <TableCell colSpan={6} align="center">
                     <Typography variant="body1">
                       {telegramChannels.length === 0 
-                        ? "No Telegram channels configured yet. Add your first channel to get started."
-                        : "No channels match your search."}
+                        ? translate("No Telegram channels configured yet. Add your first channel to get started.")
+                        : translate("No channels match your search.")}
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -191,12 +193,12 @@ const ChannelsList = () => {
                     <TableCell>
                       <Chip 
                         color={channel.active ? "success" : "default"}
-                        label={channel.active ? "Active" : "Inactive"}
+                        label={channel.active ? translate("Active") : translate("Inactive")}
                         size="small"
                       />
                     </TableCell>
                     <TableCell align="right">
-                      <Tooltip title="Send test message">
+                      <Tooltip title={translate('Send test message')}>
                         <IconButton 
                           onClick={() => handleSendTestMessage(channel._id)}
                           disabled={testMessageStatus[channel._id]?.loading}
@@ -208,12 +210,12 @@ const ChannelsList = () => {
                           )}
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Edit">
+                      <Tooltip title={translate('Edit')}>
                         <IconButton component={RouterLink} to={`/channels/${channel._id}`}>
                           <EditIcon />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Delete">
+                      <Tooltip title={translate('Delete')}>
                         <IconButton onClick={() => handleDeleteClick(channel)}>
                           <DeleteIcon />
                         </IconButton>
@@ -232,16 +234,16 @@ const ChannelsList = () => {
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
       >
-        <DialogTitle>Delete Channel</DialogTitle>
+        <DialogTitle>{translate('Delete Channel')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to delete the channel "{channelToDelete?.name}"? This action cannot be undone.
+            {translate('Are you sure you want to delete the channel')} "{channelToDelete?.name}"? {translate('This action cannot be undone.')}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+          <Button onClick={() => setDeleteDialogOpen(false)}>{translate('Cancel')}</Button>
           <Button onClick={handleDeleteConfirm} color="error" variant="contained">
-            Delete
+            {translate('Delete')}
           </Button>
         </DialogActions>
       </Dialog>

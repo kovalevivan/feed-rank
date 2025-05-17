@@ -23,10 +23,12 @@ import {
   ThumbUp as ThumbUpIcon
 } from '@mui/icons-material';
 import { fetchDashboardData } from '../../redux/slices/postsSlice';
+import { useTranslation } from '../../translations/TranslationContext';
 
 const Dashboard = () => {
   const dispatch = useDispatch();
   const { dashboardData, loading } = useSelector((state) => state.posts);
+  const translate = useTranslation();
   
   useEffect(() => {
     dispatch(fetchDashboardData());
@@ -76,7 +78,7 @@ const Dashboard = () => {
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
-        Dashboard
+        {translate('Dashboard')}
       </Typography>
       
       {/* Stats Cards */}
@@ -87,7 +89,7 @@ const Dashboard = () => {
               <CardContent>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                   <Typography variant="h6" color="text.secondary">
-                    {card.title}
+                    {translate(card.title)}
                   </Typography>
                   {card.icon}
                 </Box>
@@ -101,7 +103,7 @@ const Dashboard = () => {
                     size="small"
                     variant="outlined"
                   >
-                    View Sources
+                    {translate('View Sources')}
                   </Button>
                 </Box>
               </CardContent>
@@ -116,7 +118,7 @@ const Dashboard = () => {
         <Grid item xs={12} md={8}>
           <Paper sx={{ p: 3, height: '100%' }}>
             <Typography variant="h6" gutterBottom>
-              Recent Viral Posts
+              {translate('Recent Viral Posts')}
             </Typography>
             <Divider sx={{ mb: 2 }} />
             
@@ -157,14 +159,14 @@ const Dashboard = () => {
                       variant="outlined"
                       size="small"
                     >
-                      View Source
+                      {translate('View Source')}
                     </Button>
                   </ListItem>
                 ))}
               </List>
             ) : (
               <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
-                No viral posts found
+                {translate('No viral posts found')}
               </Typography>
             )}
             
@@ -174,7 +176,7 @@ const Dashboard = () => {
                 to="/sources"
                 variant="contained"
               >
-                View All Sources
+                {translate('View All Sources')}
               </Button>
             </Box>
           </Paper>
@@ -184,7 +186,7 @@ const Dashboard = () => {
         <Grid item xs={12} md={4}>
           <Paper sx={{ p: 3, height: '100%' }}>
             <Typography variant="h6" gutterBottom>
-              Top VK Sources
+              {translate('Top VK Sources')}
             </Typography>
             <Divider sx={{ mb: 2 }} />
             
@@ -198,8 +200,8 @@ const Dashboard = () => {
                       </Avatar>
                     </ListItemAvatar>
                     <ListItemText
-                      primary={item.source?.name || 'Unknown Source'}
-                      secondary={`${item.count} viral posts`}
+                      primary={item.source?.name || translate('Unknown Source')}
+                      secondary={`${item.count} ${translate('viral posts')}`}
                     />
                     <Button
                       component={RouterLink}
@@ -207,14 +209,14 @@ const Dashboard = () => {
                       variant="outlined"
                       size="small"
                     >
-                      Details
+                      {translate('Details')}
                     </Button>
                   </ListItem>
                 ))}
               </List>
             ) : (
               <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
-                No top sources data available
+                {translate('No top sources data available')}
               </Typography>
             )}
             
@@ -224,7 +226,7 @@ const Dashboard = () => {
                 to="/sources"
                 variant="contained"
               >
-                Manage Sources
+                {translate('Manage Sources')}
               </Button>
             </Box>
           </Paper>

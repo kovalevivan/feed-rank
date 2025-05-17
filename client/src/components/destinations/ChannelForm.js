@@ -21,11 +21,13 @@ import {
   ArrowBack as ArrowBackIcon
 } from '@mui/icons-material';
 import { setError, clearError, setTelegramChannel } from '../../redux/slices/telegramChannelsSlice';
+import { useTranslation } from '../../translations/TranslationContext';
 
 const ChannelForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const translate = useTranslation();
   const { telegramChannel, loading, error } = useSelector(state => state.telegramChannels);
   
   // Determine if it's a new channel form
@@ -73,7 +75,7 @@ const ChannelForm = () => {
         });
       } catch (err) {
         console.error('Error fetching Telegram channel:', err);
-        setFormError(err.response?.data?.message || 'Failed to fetch channel details');
+        setFormError(err.response?.data?.message || translate('Failed to fetch channel details'));
       }
     };
     
@@ -81,7 +83,7 @@ const ChannelForm = () => {
     
     // Clear error state when component unmounts
     return () => dispatch(clearError());
-  }, [id, dispatch, isNewChannel]);
+  }, [id, dispatch, isNewChannel, translate]);
   
   // Handle form input changes
   const handleChange = (e) => {
@@ -115,20 +117,20 @@ const ChannelForm = () => {
       if (isNewChannel) {
         // Validate required fields for new channel based on input method
         if (inputMethod === 0 && !formData.chatId) {
-          setFormError('Chat ID is required');
+          setFormError(translate('Chat ID is required'));
           setSubmitting(false);
           return;
         }
         
         if (inputMethod === 1 && !formData.username) {
-          setFormError('Username is required');
+          setFormError(translate('Username is required'));
           setSubmitting(false);
           return;
         }
       } else {
         // Validation for editing - name is always required
         if (!formData.name) {
-          setFormError('Channel name is required');
+          setFormError(translate('Channel name is required'));
           setSubmitting(false);
           return;
         }
@@ -152,8 +154,8 @@ const ChannelForm = () => {
         
         // Create new channel
         console.log("Creating new channel with data:", channelData);
-        const response = await axios.post('/api/telegram-channels', channelData);
-        setFormSuccess('Channel added successfully!');
+        await axios.post('/api/telegram-channels', channelData);
+        setFormSuccess(translate('Channel added successfully!'));
       } else {
         // For existing channels, include the username if edited
         if (formData.username) {
@@ -164,8 +166,8 @@ const ChannelForm = () => {
         
         // Update existing channel
         console.log("Updating existing channel with ID:", id);
-        const response = await axios.put(`/api/telegram-channels/${id}`, channelData);
-        setFormSuccess('Channel updated successfully!');
+        await axios.put(`/api/telegram-channels/${id}`, channelData);
+        setFormSuccess(translate('Channel updated successfully!'));
       }
       
       // Success - redirect after short delay to allow user to see success message
@@ -176,10 +178,10 @@ const ChannelForm = () => {
     } catch (err) {
       console.error('Error saving Telegram channel:', err);
       if (err.response && err.response.data) {
-        setFormError(err.response.data.message || 'Failed to save channel');
+        setFormError(err.response.data.message || translate('Failed to save channel'));
         console.error('Server response:', err.response.data);
       } else {
-        setFormError('Failed to connect to server');
+        setFormError(translate('Failed to connect to server'));
       }
     } finally {
       setSubmitting(false);
@@ -190,14 +192,14 @@ const ChannelForm = () => {
   const PageHeader = () => (
     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
       <Typography variant="h4">
-        {isNewChannel ? 'Add Telegram Channel' : 'Edit Telegram Channel'}
+        {isNewChannel ? translate('Add Channel') : translate('Edit Channel')}
       </Typography>
       <Button
         variant="outlined"
         startIcon={<ArrowBackIcon />}
         onClick={() => navigate('/channels')}
       >
-        Back to Channels
+        {translate('Back to Channels')}
       </Button>
     </Box>
   );
@@ -221,7 +223,7 @@ const ChannelForm = () => {
         sx={{ mr: 2 }}
         disabled={submitting || loading}
       >
-        Cancel
+        {translate('Cancel')}
       </Button>
       <Button
         type="submit"
@@ -229,7 +231,7 @@ const ChannelForm = () => {
         startIcon={submitting || loading ? <CircularProgress size={20} /> : <SaveIcon />}
         disabled={submitting || loading}
       >
-        {submitting || loading ? 'Saving...' : 'Save Channel'}
+        {submitting || loading ? translate('Saving...') : translate('Save Channel')}
       </Button>
     </Box>
   );
@@ -247,10 +249,10 @@ const ChannelForm = () => {
             disabled={submitting || loading}
           />
         }
-        label="Active"
+        label={translate('Active')}
       />
       <Typography variant="body2" color="textSecondary">
-        When active, posts will be forwarded to this channel. Inactive channels will not receive posts.
+        {translate('When active, posts will be forwarded to this channel. Inactive channels will not receive posts.')}
       </Typography>
     </Box>
   );
@@ -259,49 +261,49 @@ const ChannelForm = () => {
   const NewChannelForm = () => (
     <Box component="form" onSubmit={handleSubmit}>
       <Typography variant="h6" gutterBottom>
-        Channel Details
+        {translate('Channel Details')}
       </Typography>
       
       <TextField
         fullWidth
-        label="Channel Name"
+        label={translate('Channel Name')}
         name="name"
         value={formData.name}
         onChange={handleChange}
         margin="normal"
         required
-        helperText="A name to identify this channel in FeedRank"
+        helperText={translate('A name to identify this channel in FeedRank')}
         disabled={submitting || loading}
       />
       
       <Box sx={{ mt: 2, mb: 2 }}>
         <Tabs value={inputMethod} onChange={handleTabChange} sx={{ mb: 2 }}>
-          <Tab label="Add by Channel ID" />
-          <Tab label="Add by Username" />
+          <Tab label={translate('Add by Channel ID')} />
+          <Tab label={translate('Add by Username')} />
         </Tabs>
         
         {inputMethod === 0 ? (
           <TextField
             fullWidth
-            label="Chat ID"
+            label={translate('Channel ID')}
             name="chatId"
             value={formData.chatId}
             onChange={handleChange}
             margin="normal"
             required
-            helperText="The Telegram chat ID for this channel (e.g., -1001234567890)"
+            helperText={translate('The Telegram chat ID for this channel (e.g., -1001234567890)')}
             disabled={submitting || loading}
           />
         ) : (
           <TextField
             fullWidth
-            label="Username"
+            label={translate('Username')}
             name="username"
             value={formData.username}
             onChange={handleChange}
             margin="normal"
             required
-            helperText="Channel username (e.g., 'telegram' or '@telegram')"
+            helperText={translate('Channel username (e.g., \'telegram\' or \'@telegram\')')}
             disabled={submitting || loading}
             InputProps={{
               startAdornment: formData.username && !formData.username.startsWith('@') ? '@' : null
@@ -319,7 +321,7 @@ const ChannelForm = () => {
       <Box sx={{ mt: 3 }}>
         <Alert severity="info">
           <Typography variant="body2">
-            <strong>Important:</strong> The bot must be an administrator of the channel with permission to post messages.
+            <strong>{translate('Important')}:</strong> {translate('The bot must be an administrator of the channel with permission to post messages.')}
           </Typography>
         </Alert>
       </Box>
@@ -330,39 +332,39 @@ const ChannelForm = () => {
   const EditChannelForm = () => (
     <Box component="form" onSubmit={handleSubmit}>
       <Typography variant="h6" gutterBottom>
-        Channel Details
+        {translate('Channel Details')}
       </Typography>
       
       <TextField
         fullWidth
-        label="Channel Name"
+        label={translate('Channel Name')}
         name="name"
         value={formData.name}
         onChange={handleChange}
         margin="normal"
         required
-        helperText="A name to identify this channel in FeedRank"
+        helperText={translate('A name to identify this channel in FeedRank')}
         disabled={submitting || loading}
       />
       
       <TextField
         fullWidth
-        label="Chat ID"
+        label={translate('Channel ID')}
         name="chatId"
         value={formData.chatId}
         margin="normal"
         disabled={true}
-        helperText="Chat ID cannot be changed once the channel is added"
+        helperText={translate('Chat ID cannot be changed once the channel is added')}
       />
       
       <TextField
         fullWidth
-        label="Username"
+        label={translate('Username')}
         name="username"
         value={formData.username}
         onChange={handleChange}
         margin="normal"
-        helperText="Channel username without @ (e.g., 'telegram')"
+        helperText={translate('Channel username without @ (e.g., \'telegram\')')}
         disabled={submitting || loading}
         InputProps={{
           startAdornment: formData.username && !formData.username.startsWith('@') ? '@' : null

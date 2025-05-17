@@ -51,6 +51,7 @@ import {
   getThresholdStats
 } from '../../redux/slices/vkSourcesSlice';
 import ApiErrorAlert from '../common/ApiErrorAlert';
+import { useTranslation } from '../../translations/TranslationContext';
 
 // Format number with thousands separators
 const formatNumber = (num) => {
@@ -59,6 +60,8 @@ const formatNumber = (num) => {
 
 // Component to display detailed threshold statistics
 const ThresholdStats = ({ stats, loading }) => {
+  const translate = useTranslation();
+  
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
@@ -70,7 +73,7 @@ const ThresholdStats = ({ stats, loading }) => {
   if (!stats || !stats.detailedStats) {
     return (
       <Alert severity="info">
-        No threshold statistics available. Calculate threshold to see detailed stats.
+        {translate('No threshold statistics available. Calculate threshold to see detailed stats.')}
       </Alert>
     );
   }
@@ -83,34 +86,34 @@ const ThresholdStats = ({ stats, loading }) => {
         <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
             <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-              Basic Statistics
+              {translate('Basic Statistics')}
             </Typography>
             <TableContainer>
               <Table size="small">
                 <TableBody>
                   <TableRow>
-                    <TableCell><strong>Posts Analyzed</strong></TableCell>
+                    <TableCell><strong>{translate('Posts Analyzed')}</strong></TableCell>
                     <TableCell align="right">{stats.postsAnalyzed}</TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell><strong>Mean (Average)</strong></TableCell>
-                    <TableCell align="right">{formatNumber(detailedStats.mean)} views</TableCell>
+                    <TableCell><strong>{translate('Mean (Average)')}</strong></TableCell>
+                    <TableCell align="right">{formatNumber(detailedStats.mean)} {translate('views')}</TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell><strong>Median</strong></TableCell>
-                    <TableCell align="right">{formatNumber(detailedStats.median)} views</TableCell>
+                    <TableCell><strong>{translate('Median')}</strong></TableCell>
+                    <TableCell align="right">{formatNumber(detailedStats.median)} {translate('views')}</TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell><strong>Standard Deviation</strong></TableCell>
-                    <TableCell align="right">{formatNumber(detailedStats.standardDeviation)} views</TableCell>
+                    <TableCell><strong>{translate('Standard Deviation')}</strong></TableCell>
+                    <TableCell align="right">{formatNumber(detailedStats.standardDeviation)} {translate('views')}</TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell><strong>Minimum</strong></TableCell>
-                    <TableCell align="right">{formatNumber(detailedStats.min)} views</TableCell>
+                    <TableCell><strong>{translate('Minimum')}</strong></TableCell>
+                    <TableCell align="right">{formatNumber(detailedStats.min)} {translate('views')}</TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell><strong>Maximum</strong></TableCell>
-                    <TableCell align="right">{formatNumber(detailedStats.max)} views</TableCell>
+                    <TableCell><strong>{translate('Maximum')}</strong></TableCell>
+                    <TableCell align="right">{formatNumber(detailedStats.max)} {translate('views')}</TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
@@ -119,34 +122,34 @@ const ThresholdStats = ({ stats, loading }) => {
           
           <Grid item xs={12} md={6}>
             <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-              Percentiles
+              {translate('Percentiles')}
             </Typography>
             <TableContainer>
               <Table size="small">
                 <TableBody>
                   <TableRow>
-                    <TableCell><strong>25th Percentile</strong></TableCell>
-                    <TableCell align="right">{formatNumber(detailedStats.percentiles.p25)} views</TableCell>
+                    <TableCell><strong>{translate('25th Percentile')}</strong></TableCell>
+                    <TableCell align="right">{formatNumber(detailedStats.percentiles.p25)} {translate('views')}</TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell><strong>50th Percentile (Median)</strong></TableCell>
-                    <TableCell align="right">{formatNumber(detailedStats.percentiles.p50)} views</TableCell>
+                    <TableCell><strong>{translate('50th Percentile (Median)')}</strong></TableCell>
+                    <TableCell align="right">{formatNumber(detailedStats.percentiles.p50)} {translate('views')}</TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell><strong>75th Percentile</strong></TableCell>
-                    <TableCell align="right">{formatNumber(detailedStats.percentiles.p75)} views</TableCell>
+                    <TableCell><strong>{translate('75th Percentile')}</strong></TableCell>
+                    <TableCell align="right">{formatNumber(detailedStats.percentiles.p75)} {translate('views')}</TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell><strong>90th Percentile</strong></TableCell>
-                    <TableCell align="right">{formatNumber(detailedStats.percentiles.p90)} views</TableCell>
+                    <TableCell><strong>{translate('90th Percentile')}</strong></TableCell>
+                    <TableCell align="right">{formatNumber(detailedStats.percentiles.p90)} {translate('views')}</TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell><strong>95th Percentile</strong></TableCell>
-                    <TableCell align="right">{formatNumber(detailedStats.percentiles.p95)} views</TableCell>
+                    <TableCell><strong>{translate('95th Percentile')}</strong></TableCell>
+                    <TableCell align="right">{formatNumber(detailedStats.percentiles.p95)} {translate('views')}</TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell><strong>99th Percentile</strong></TableCell>
-                    <TableCell align="right">{formatNumber(detailedStats.percentiles.p99)} views</TableCell>
+                    <TableCell><strong>{translate('99th Percentile')}</strong></TableCell>
+                    <TableCell align="right">{formatNumber(detailedStats.percentiles.p99)} {translate('views')}</TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
@@ -156,9 +159,9 @@ const ThresholdStats = ({ stats, loading }) => {
           <Grid item xs={12}>
             <Alert severity="info" sx={{ mt: 2 }}>
               <Typography variant="body2">
-                <strong>Current calculated threshold:</strong> {formatNumber(stats.calculatedThreshold)} views
+                <strong>{translate('Current calculated threshold')}:</strong> {formatNumber(stats.calculatedThreshold)} {translate('views')}
                 {stats.thresholdMethod === 'statistical' && stats.multiplier && (
-                  <span> (using {stats.multiplier} × standard deviation)</span>
+                  <span> ({translate('using')} {stats.multiplier} × {translate('Standard Deviation')})</span>
                 )}
               </Typography>
             </Alert>
@@ -171,6 +174,7 @@ const ThresholdStats = ({ stats, loading }) => {
 
 // Advanced threshold calculator component
 const AdvancedThresholdCalculator = ({ sourceId, loading, currentMethod, onCalculate, onMethodChange }) => {
+  const translate = useTranslation();
   const [calculationParams, setCalculationParams] = useState({
     thresholdMethod: currentMethod || 'statistical',
     postsCount: 100,
@@ -222,31 +226,31 @@ const AdvancedThresholdCalculator = ({ sourceId, loading, currentMethod, onCalcu
     <Card variant="outlined">
       <CardContent>
         <Typography variant="h6" gutterBottom>
-          Advanced Threshold Calculation
+          {translate('Advanced Threshold Calculation')}
         </Typography>
         
         <Grid container spacing={2}>
           <Grid item xs={12}>
             <FormControl component="fieldset" sx={{ mb: 2 }}>
-              <FormLabel component="legend">Threshold Method</FormLabel>
+              <FormLabel component="legend">{translate('Threshold Method')}</FormLabel>
               <RadioGroup
                 row
                 name="thresholdMethod"
                 value={calculationParams.thresholdMethod}
                 onChange={handleChange}
               >
-                <Tooltip title="Uses the simple average of views as threshold">
+                <Tooltip title={translate('Uses the simple average of views as threshold')}>
                   <FormControlLabel 
                     value="average" 
                     control={<Radio />} 
-                    label="Average (Mean)" 
+                    label={translate('Average (Mean)')}
                   />
                 </Tooltip>
-                <Tooltip title="Uses Mean + 1.5 × Standard Deviation as threshold, better for identifying outlier posts">
+                <Tooltip title={translate('Uses Mean + 1.5 × Standard Deviation as threshold, better for identifying outlier posts')}>
                   <FormControlLabel 
                     value="statistical" 
                     control={<Radio />} 
-                    label="Statistical (Mean + SD)" 
+                    label={translate('Statistical (Mean + SD)')}
                   />
                 </Tooltip>
               </RadioGroup>
@@ -256,7 +260,7 @@ const AdvancedThresholdCalculator = ({ sourceId, loading, currentMethod, onCalcu
           <Grid item xs={12} sm={6}>
             <TextField
               fullWidth
-              label="Number of Posts to Analyze"
+              label={translate('Number of Posts to Analyze')}
               name="postsCount"
               type="number"
               value={calculationParams.postsCount}
@@ -264,14 +268,14 @@ const AdvancedThresholdCalculator = ({ sourceId, loading, currentMethod, onCalcu
               InputProps={{
                 inputProps: { min: 50, max: 1000 }
               }}
-              helperText="Min: 50, Max: 1000"
+              helperText={translate('Min: 50, Max: 1000')}
             />
           </Grid>
           
           {calculationParams.thresholdMethod === 'statistical' && (
             <Grid item xs={12} sm={6}>
               <Typography id="multiplier-slider" gutterBottom>
-                Standard Deviation Multiplier: {calculationParams.multiplier}
+                {translate('Standard Deviation Multiplier')}: {calculationParams.multiplier}
               </Typography>
               <Slider
                 value={calculationParams.multiplier}
@@ -290,7 +294,7 @@ const AdvancedThresholdCalculator = ({ sourceId, loading, currentMethod, onCalcu
                 max={3.0}
               />
               <Typography variant="body2" color="textSecondary">
-                Higher values make the threshold more strict (fewer posts will be considered viral)
+                {translate('Higher values make the threshold more strict (fewer posts will be considered viral)')}
               </Typography>
             </Grid>
           )}
@@ -304,7 +308,7 @@ const AdvancedThresholdCalculator = ({ sourceId, loading, currentMethod, onCalcu
                 disabled={loading}
                 startIcon={loading ? <CircularProgress size={20} /> : <ShowChartIcon />}
               >
-                Calculate Threshold
+                {translate('Calculate Threshold')}
               </Button>
             </Box>
           </Grid>
@@ -318,6 +322,7 @@ const SourceForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const translate = useTranslation();
   
   const { 
     vkSource, 
@@ -437,14 +442,14 @@ const SourceForm = () => {
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">
-          {isEditMode ? 'Edit VK Source' : 'Add VK Source'}
+          {isEditMode ? translate('Edit VK Source') : translate('Add VK Source')}
         </Typography>
         <Button
           variant="outlined"
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate('/sources')}
         >
-          Back to Sources
+          {translate('Back to Sources')}
         </Button>
       </Box>
       
@@ -453,28 +458,28 @@ const SourceForm = () => {
       <Paper sx={{ p: 3 }}>
         <Box component="form" onSubmit={handleSubmit}>
           <Typography variant="h6" gutterBottom>
-            Source Details
+            {translate('Source Details')}
           </Typography>
           
           <TextField
             fullWidth
-            label="VK Public Group Name"
+            label={translate('VK Public Group Name')}
             name="name"
             value={formData.name}
             onChange={handleChange}
             margin="normal"
             required
-            helperText="Enter the exact name of the VK public group (e.g., 'techcrunch')"
+            helperText={translate('Enter the exact name of the VK public group (e.g., \'techcrunch\')')}
           />
           
           <Divider sx={{ my: 3 }} />
           
           <Typography variant="h6" gutterBottom>
-            Viral Threshold Settings
+            {translate('Viral Threshold Settings')}
           </Typography>
           
           <FormControl component="fieldset" sx={{ mb: 2 }}>
-            <FormLabel component="legend">Threshold Type</FormLabel>
+            <FormLabel component="legend">{translate('Threshold Type')}</FormLabel>
             <RadioGroup
               name="thresholdType"
               value={formData.thresholdType}
@@ -484,12 +489,12 @@ const SourceForm = () => {
               <FormControlLabel 
                 value="auto" 
                 control={<Radio />} 
-                label="Auto (calculated from data)" 
+                label={translate('Auto (calculated from data)')}
               />
               <FormControlLabel 
                 value="manual" 
                 control={<Radio />} 
-                label="Manual (set specific threshold)" 
+                label={translate('Manual (set specific threshold)')}
               />
             </RadioGroup>
           </FormControl>
@@ -497,7 +502,7 @@ const SourceForm = () => {
           {formData.thresholdType === 'manual' && (
             <TextField
               fullWidth
-              label="Viral Threshold"
+              label={translate('Viral Threshold')}
               name="manualThreshold"
               type="number"
               value={formData.manualThreshold}
@@ -505,27 +510,27 @@ const SourceForm = () => {
               margin="normal"
               required
               InputProps={{
-                endAdornment: <InputAdornment position="end">views</InputAdornment>,
+                endAdornment: <InputAdornment position="end">{translate('views')}</InputAdornment>,
                 inputProps: { min: 1 }
               }}
-              helperText="Posts with more views than this threshold will be considered viral"
+              helperText={translate('Posts with more views than this threshold will be considered viral')}
             />
           )}
           
           {isEditMode && formData.thresholdType === 'auto' && (
             <Box mt={2}>
               <Chip 
-                label={`Current Threshold: ${formatNumber(vkSource?.calculatedThreshold || 0)} views`}
+                label={`${translate('Current Threshold')}: ${formatNumber(vkSource?.calculatedThreshold || 0)} ${translate('views')}`}
                 color="primary"
                 variant="outlined"
               />
               {vkSource?.lastPostsData?.lastAnalysisDate && (
                 <Typography variant="caption" display="block" mt={1}>
-                  Last calculated: {new Date(vkSource.lastPostsData.lastAnalysisDate).toLocaleString()}
+                  {translate('Last calculated')}: {new Date(vkSource.lastPostsData.lastAnalysisDate).toLocaleString()}
                 </Typography>
               )}
               <Typography variant="caption" display="block" color="textSecondary">
-                Method: {formData.thresholdMethod === 'statistical' ? 'Statistical (Mean + SD)' : 'Average (Mean)'}
+                {translate('Method')}: {formData.thresholdMethod === 'statistical' ? translate('Statistical (Mean + SD)') : translate('Average (Mean)')}
               </Typography>
             </Box>
           )}
@@ -533,12 +538,12 @@ const SourceForm = () => {
           <Divider sx={{ my: 3 }} />
           
           <Typography variant="h6" gutterBottom>
-            Check Frequency
+            {translate('Check Frequency')}
           </Typography>
           
           <TextField
             fullWidth
-            label="Check Frequency"
+            label={translate('Check Frequency')}
             name="checkFrequency"
             type="number"
             value={formData.checkFrequency}
@@ -546,10 +551,10 @@ const SourceForm = () => {
             margin="normal"
             required
             InputProps={{
-              endAdornment: <InputAdornment position="end">minutes</InputAdornment>,
+              endAdornment: <InputAdornment position="end">{translate('minutes')}</InputAdornment>,
               inputProps: { min: 5 }
             }}
-            helperText="How often to check for new posts (minimum 5 minutes, default 60 minutes)"
+            helperText={translate('How often to check for new posts (minimum 5 minutes, default 60 minutes)')}
           />
           
           <Divider sx={{ my: 3 }} />
@@ -564,11 +569,10 @@ const SourceForm = () => {
                   color="primary"
                 />
               }
-              label="Active"
+              label={translate('Active')}
             />
             <Typography variant="body2" color="textSecondary">
-              When active, this source will be checked according to the frequency setting. 
-              Inactive sources will not be checked automatically.
+              {translate('When active, this source will be checked according to the frequency setting. Inactive sources will not be checked automatically.')}
             </Typography>
           </Box>
           
@@ -579,7 +583,7 @@ const SourceForm = () => {
               onClick={() => navigate('/sources')}
               sx={{ mr: 2 }}
             >
-              Cancel
+              {translate('Cancel')}
             </Button>
             <Button
               type="submit"
@@ -587,7 +591,7 @@ const SourceForm = () => {
               startIcon={<SaveIcon />}
               disabled={loading}
             >
-              {loading ? <CircularProgress size={24} /> : 'Save Source'}
+              {loading ? <CircularProgress size={24} /> : translate('Save Source')}
             </Button>
           </Box>
         </Box>
@@ -604,14 +608,14 @@ const SourceForm = () => {
             >
               <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center' }}>
                 <ShowChartIcon sx={{ mr: 1 }} />
-                Threshold Statistics & Advanced Calculation
+                {translate('Threshold Statistics & Advanced Calculation')}
               </Typography>
             </AccordionSummary>
             <AccordionDetails>
               <Grid container spacing={3}>
                 <Grid item xs={12}>
                   <Typography variant="subtitle1" gutterBottom>
-                    Current Threshold Statistics
+                    {translate('Current Threshold Statistics')}
                   </Typography>
                   <ThresholdStats 
                     stats={thresholdStats} 
@@ -621,7 +625,7 @@ const SourceForm = () => {
                 
                 <Grid item xs={12} mt={2}>
                   <Typography variant="subtitle1" gutterBottom>
-                    Advanced Calculation Options
+                    {translate('Advanced Calculation Options')}
                   </Typography>
                   <AdvancedThresholdCalculator 
                     sourceId={id} 

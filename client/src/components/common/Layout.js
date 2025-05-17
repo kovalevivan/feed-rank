@@ -30,6 +30,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { logout } from '../../redux/slices/authSlice';
+import { useTranslation } from '../../translations/TranslationContext';
 
 // Drawer width
 const drawerWidth = 240;
@@ -86,6 +87,7 @@ const Layout = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
+  const translate = useTranslation();
   
   const { user } = useSelector((state) => state.auth);
   
@@ -170,10 +172,10 @@ const Layout = () => {
               onClose={handleClose}
             >
               <MenuItem disabled>
-                {user?.name ? `Signed in as ${user.name}` : 'Profile'}
+                {user?.name ? `${translate('Signed in as')} ${user.name}` : translate('Profile')}
               </MenuItem>
               <Divider />
-              <MenuItem onClick={handleLogout}>Logout</MenuItem>
+              <MenuItem onClick={handleLogout}>{translate('Logout')}</MenuItem>
             </Menu>
           </div>
         </Toolbar>
@@ -217,7 +219,7 @@ const Layout = () => {
                 selected={location.pathname === item.path}
               >
                 <ListItemIcon>{item.icon}</ListItemIcon>
-                <ListItemText primary={item.text} />
+                <ListItemText primary={translate(item.text)} />
               </ListItemButton>
             </ListItem>
           ))}

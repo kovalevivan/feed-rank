@@ -30,12 +30,14 @@ import {
   Delete as DeleteIcon,
   Link as LinkIcon
 } from '@mui/icons-material';
+import { useTranslation } from '../../translations/TranslationContext';
 
 const MappingsList = () => {
   // State for mappings data
   const [mappings, setMappings] = useState([]);
   const [filteredMappings, setFilteredMappings] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const translate = useTranslation();
   
   // State for UI
   const [loading, setLoading] = useState(true);
@@ -57,13 +59,13 @@ const MappingsList = () => {
         setFilteredMappings(response.data);
         setLoading(false);
       } catch (err) {
-        setError(err.response?.data?.message || 'Failed to fetch mappings');
+        setError(err.response?.data?.message || translate('Failed to fetch mappings'));
         setLoading(false);
       }
     };
     
     fetchMappings();
-  }, []);
+  }, [translate]);
   
   // Filter mappings when search term changes
   useEffect(() => {
@@ -111,14 +113,14 @@ const MappingsList = () => {
         prevMappings.filter(m => m._id !== mappingToDelete._id)
       );
       
-      setSuccess('Mapping deleted successfully');
+      setSuccess(translate('Mapping deleted successfully'));
       
       // Clear success message after 3 seconds
       setTimeout(() => {
         setSuccess('');
       }, 3000);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to delete mapping');
+      setError(err.response?.data?.message || translate('Failed to delete mapping'));
       
       // Clear error message after 3 seconds
       setTimeout(() => {
@@ -151,14 +153,14 @@ const MappingsList = () => {
         )
       );
       
-      setSuccess(`Mapping ${updatedMapping.active ? 'activated' : 'deactivated'} successfully`);
+      setSuccess(translate(`Mapping ${updatedMapping.active ? 'activated' : 'deactivated'} successfully`));
       
       // Clear success message after 3 seconds
       setTimeout(() => {
         setSuccess('');
       }, 3000);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update mapping');
+      setError(err.response?.data?.message || translate('Failed to update mapping'));
       
       // Clear error message after 3 seconds
       setTimeout(() => {
@@ -170,14 +172,14 @@ const MappingsList = () => {
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">Mappings</Typography>
+        <Typography variant="h4">{translate('Mappings')}</Typography>
         <Button
           component={RouterLink}
           to="/mappings/new"
           variant="contained"
           startIcon={<AddIcon />}
         >
-          Add Mapping
+          {translate('Add Mapping')}
         </Button>
       </Box>
       
@@ -187,7 +189,7 @@ const MappingsList = () => {
       <Paper sx={{ p: 2, mb: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <TextField
-            label="Search Mappings"
+            label={translate('Search Mappings')}
             variant="outlined"
             size="small"
             sx={{ width: 300 }}
@@ -201,10 +203,10 @@ const MappingsList = () => {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>VK Source</TableCell>
-                <TableCell>Telegram Channel</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell align="right">Actions</TableCell>
+                <TableCell>{translate('VK Source')}</TableCell>
+                <TableCell>{translate('Telegram Channel')}</TableCell>
+                <TableCell>{translate('Status')}</TableCell>
+                <TableCell align="right">{translate('Actions')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -219,8 +221,8 @@ const MappingsList = () => {
                   <TableCell colSpan={4} align="center">
                     <Typography variant="body1">
                       {mappings.length === 0
-                        ? "No mappings configured yet. Create a mapping to connect VK sources to Telegram channels."
-                        : "No mappings match your search."}
+                        ? translate("No mappings configured yet. Create a mapping to connect VK sources to Telegram channels.")
+                        : translate("No mappings match your search.")}
                     </Typography>
                   </TableCell>
                 </TableRow>
@@ -242,7 +244,7 @@ const MappingsList = () => {
                       </Tooltip>
                     </TableCell>
                     <TableCell>
-                      <Tooltip title={mapping.active ? "Active - posts will be forwarded" : "Inactive - posts will not be forwarded"}>
+                      <Tooltip title={mapping.active ? translate("Active - posts will be forwarded") : translate("Inactive - posts will not be forwarded")}>
                         <Switch
                           checked={mapping.active}
                           onChange={() => handleToggleActive(mapping)}
@@ -252,7 +254,7 @@ const MappingsList = () => {
                       </Tooltip>
                     </TableCell>
                     <TableCell align="right">
-                      <Tooltip title="Delete Mapping">
+                      <Tooltip title={translate("Delete Mapping")}>
                         <IconButton 
                           onClick={() => handleDeleteClick(mapping)}
                           color="error"
@@ -271,28 +273,28 @@ const MappingsList = () => {
       
       <Paper sx={{ p: 3 }}>
         <Typography variant="h6" gutterBottom>
-          What are Mappings?
+          {translate('What are Mappings?')}
         </Typography>
         <Typography variant="body1" paragraph>
-          Mappings define which VK public group posts are forwarded to which Telegram channels.
+          {translate('Mappings define which VK public group posts are forwarded to which Telegram channels.')}
         </Typography>
         <Typography variant="body1" paragraph>
-          You can create multiple mappings to:
+          {translate('You can create multiple mappings to:')}
         </Typography>
         <ul>
           <li>
             <Typography variant="body1">
-              Forward posts from one VK group to multiple Telegram channels
+              {translate('Forward posts from one VK group to multiple Telegram channels')}
             </Typography>
           </li>
           <li>
             <Typography variant="body1">
-              Forward posts from multiple VK groups to one Telegram channel
+              {translate('Forward posts from multiple VK groups to one Telegram channel')}
             </Typography>
           </li>
         </ul>
         <Typography variant="body1">
-          Mappings only affect posts that are identified as viral based on your threshold settings.
+          {translate('Mappings only affect posts that are identified as viral based on your threshold settings.')}
         </Typography>
       </Paper>
       
@@ -301,17 +303,17 @@ const MappingsList = () => {
         open={deleteDialogOpen}
         onClose={handleDeleteCancel}
       >
-        <DialogTitle>Delete Mapping</DialogTitle>
+        <DialogTitle>{translate('Delete Mapping')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to delete the mapping between 
-            "{mappingToDelete?.vkSource.name}" and "{mappingToDelete?.telegramChannel.name}"?
-            This action cannot be undone.
+            {translate('Are you sure you want to delete the mapping between')} 
+            "{mappingToDelete?.vkSource.name}" {translate('and')} "{mappingToDelete?.telegramChannel.name}"?
+            {translate('This action cannot be undone.')}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleDeleteCancel} disabled={deleteLoading}>
-            Cancel
+            {translate('Cancel')}
           </Button>
           <Button 
             onClick={handleDeleteConfirm} 
@@ -320,7 +322,7 @@ const MappingsList = () => {
             disabled={deleteLoading}
             startIcon={deleteLoading ? <CircularProgress size={20} /> : null}
           >
-            {deleteLoading ? 'Deleting...' : 'Delete'}
+            {deleteLoading ? translate('Deleting...') : translate('Delete')}
           </Button>
         </DialogActions>
       </Dialog>
