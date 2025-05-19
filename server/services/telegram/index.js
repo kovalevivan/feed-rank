@@ -442,30 +442,143 @@ const forwardPost = async (post, channel) => {
     const vkSource = await VkSource.findById(post.vkSource);
     const sourceName = vkSource ? vkSource.name : 'Unknown Source';
     
-    // Prepare post message
-    let message = `*From VK group: ${sourceName}*\n\n`;
-    message += `*${post.text ? post.text.substring(0, 200) + (post.text.length > 200 ? '...' : '') : 'New post'}*\n\n`;
-    message += `👁 Views: *${post.viewCount.toLocaleString()}*\n`;
-    message += `👍 Likes: ${post.likeCount.toLocaleString()}\n`;
-    message += `🔄 Reposts: ${post.repostCount.toLocaleString()}\n\n`;
+    // Escape special HTML characters to prevent formatting issues
+    const escapeHtml = (text) => {
+      if (!text) return '';
+      return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    };
     
-    // Add photo link if available instead of sending the photo separately
-    const photoAttachment = post.attachments?.find(att => att.type === 'photo');
-    if (photoAttachment && photoAttachment.url) {
-      message += `[View photo](${photoAttachment.url})\n`;
-    }
+    // Prepare post caption with HTML formatting
+    let caption = `<b>From VK group: ${escapeHtml(sourceName)}</b>\n\n`;
+    caption += `${escapeHtml(post.text)}\n\n`;
+    caption += `👁 Views: <b>${post.viewCount.toLocaleString()}</b>\n`;
+    caption += `👍 Likes: ${post.likeCount.toLocaleString()}\n`;
+    caption += `🔄 Reposts: ${post.repostCount.toLocaleString()}\n\n`;
+    caption += `<a href="${post.originalPostUrl}">View original post</a>`;
     
-    message += `[View original post](${post.originalPostUrl})`;
+    let sentMessage;
     
-    // Send message with markdown
-    const sentMessage = await bot.sendMessage(
-      channel.chatId, 
-      message, 
-      { 
-        parse_mode: 'Markdown',
-        disable_web_page_preview: false // Enable preview for the original post link
+    // Get all photo and video attachments
+    const photoAttachments = post.attachments?.filter(att => att.type === 'photo' && att.url) || [];
+    const videoAttachment = post.attachments?.find(att => att.type === 'video' && att.url);
+    
+    // If we have multiple photos, send them as a media group
+    if (photoAttachments.length > 1) {
+      try {
+        // Prepare media group input
+        const mediaGroup = photoAttachments.map((attachment, index) => ({
+          type: 'photo',
+          media: attachment.url,
+          // Add caption only to the first media item
+          ...(index === 0 ? { caption, parse_mode: 'HTML' } : {})
+        }));
+        
+        // Send media group
+        const sentMessages = await bot.sendMediaGroup(channel.chatId, mediaGroup);
+        sentMessage = sentMessages[0]; // Use the first message for reference
+      } catch (mediaGroupError) {
+        console.error(`Error sending media group for post ${post._id}:`, mediaGroupError);
+        // Fallback to sending just the first photo
+        try {
+          sentMessage = await bot.sendPhoto(
+            channel.chatId,
+            photoAttachments[0].url,
+            {
+              caption: caption,
+              parse_mode: 'HTML'
+            }
+          );
+        } catch (photoError) {
+          // If that fails too, fall back to text message with links
+          console.error(`Error sending single photo for post ${post._id}:`, photoError);
+          const photoLinks = photoAttachments.map((photo, idx) => 
+            `<a href="${photo.url}">Photo ${idx + 1}</a>`).join('\n');
+          sentMessage = await bot.sendMessage(
+            channel.chatId,
+            `${caption}\n\n${photoLinks}`,
+            {
+              parse_mode: 'HTML',
+              disable_web_page_preview: false
+            }
+          );
+        }
       }
-    );
+    }
+    // If we have a single photo attachment, send it as a photo with caption
+    else if (photoAttachments.length === 1) {
+      try {
+        sentMessage = await bot.sendPhoto(
+          channel.chatId,
+          photoAttachments[0].url,
+          {
+            caption: caption,
+            parse_mode: 'HTML'
+          }
+        );
+      } catch (mediaError) {
+        console.error(`Error sending photo for post ${post._id}:`, mediaError);
+        // Fallback to regular message if media sending fails
+        sentMessage = await bot.sendMessage(
+          channel.chatId, 
+          `${caption}\n\n<a href="${photoAttachments[0].url}">View photo</a>`, 
+          { 
+            parse_mode: 'HTML',
+            disable_web_page_preview: false
+          }
+        );
+      }
+    }
+    // If we have a video attachment, send a video or link to it
+    else if (videoAttachment) {
+      try {
+        // For videos, we'll use sendVideo if it's a direct video URL
+        if (videoAttachment.url.match(/\.(mp4|mov|avi|mkv)$/i)) {
+          sentMessage = await bot.sendVideo(
+            channel.chatId,
+            videoAttachment.url,
+            {
+              caption: caption,
+              parse_mode: 'HTML'
+            }
+          );
+        } else {
+          // If it's not a direct video file, send a message with the video preview 
+          sentMessage = await bot.sendMessage(
+            channel.chatId, 
+            caption, 
+            { 
+              parse_mode: 'HTML',
+              disable_web_page_preview: false
+            }
+          );
+        }
+      } catch (mediaError) {
+        console.error(`Error handling video for post ${post._id}:`, mediaError);
+        // Fallback to regular message
+        sentMessage = await bot.sendMessage(
+          channel.chatId, 
+          `${caption}\n\n<a href="${videoAttachment.url}">View video</a>`, 
+          { 
+            parse_mode: 'HTML',
+            disable_web_page_preview: false
+          }
+        );
+      }
+    }
+    // Default case - no media or unsupported media type
+    else {
+      sentMessage = await bot.sendMessage(
+        channel.chatId, 
+        caption, 
+        { 
+          parse_mode: 'HTML',
+          disable_web_page_preview: false // Enable preview for the original post link
+        }
+      );
+    }
     
     // Update post in database
     post.status = 'forwarded';
@@ -479,6 +592,17 @@ const forwardPost = async (post, channel) => {
     // Increment forwarded count on channel
     channel.postsForwarded += 1;
     await channel.save();
+    
+    // Update lastChecked timestamp on the source to prevent duplicate processing
+    if (post.vkSource) {
+      await VkSource.updateOne(
+        { _id: post.vkSource },
+        { $set: { 
+          lastChecked: new Date(),
+          updatedAt: new Date()
+        }}
+      );
+    }
     
     return {
       success: true,
@@ -514,6 +638,9 @@ const processPendingPosts = async () => {
     let errorCount = 0;
     let skippedCount = 0;
     
+    // Track processed sources to update lastChecked just once per source
+    const processedSources = new Set();
+    
     // Process each post
     for (const post of validPosts) {
       // Find mappings for this post's source
@@ -534,15 +661,34 @@ const processPendingPosts = async () => {
       }
       
       // Forward to each mapped channel
+      let postForwarded = false;
       for (const mapping of validMappings) {
         try {
           await forwardPost(post, mapping.telegramChannel);
           forwardedCount++;
+          postForwarded = true;
         } catch (error) {
           console.error(`Error forwarding post ${post._id} to channel ${mapping.telegramChannel.chatId}:`, error);
           errorCount++;
         }
       }
+      
+      // Add the source ID to processed sources if at least one forward was successful
+      if (postForwarded) {
+        processedSources.add(post.vkSource._id.toString());
+      }
+    }
+    
+    // Update lastChecked for all processed sources that haven't been updated by forwardPost yet
+    // This ensures the timestamp is updated even if some other error occurs after forwarding
+    for (const sourceId of processedSources) {
+      await VkSource.updateOne(
+        { _id: sourceId },
+        { $set: { 
+          lastChecked: new Date(),
+          updatedAt: new Date()
+        }}
+      );
     }
     
     return {

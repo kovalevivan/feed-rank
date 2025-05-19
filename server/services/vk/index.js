@@ -341,7 +341,6 @@ const processSourcePosts = async (sourceId) => {
   try {
     validateVkCredentials();
     
-    // First verify if the source still exists
     const source = await VkSource.findById(sourceId);
     if (!source) throw new Error(`VK source with ID ${sourceId} not found`);
     
@@ -417,13 +416,9 @@ const processSourcePosts = async (sourceId) => {
         });
       }
       
+      // First check if post already exists
       try {
-        // First check if post already exists using both sourceId and postId
-        // This is a more robust way to identify uniqueness
-        const existingPost = await Post.findOne({ 
-          vkSource: sourceId, 
-          postId: postId 
-        });
+        const existingPost = await Post.findOne({ vkSource: sourceId, postId: postId });
         
         if (existingPost) {
           // Update existing post
@@ -443,78 +438,25 @@ const processSourcePosts = async (sourceId) => {
           
           if (isViral) viralCount++;
         } else {
-          // Check again for any duplicates using just the postId 
-          // This helps avoid duplicate posts from source renames
-          const possibleDuplicate = await Post.findOne({ postId: postId });
+          // Create new post
+          const newPost = new Post({
+            vkSource: sourceId,
+            ...postData
+          });
           
-          if (possibleDuplicate) {
-            // Update the existing post with new source reference
-            possibleDuplicate.vkSource = sourceId;
-            possibleDuplicate.text = postData.text;
-            possibleDuplicate.viewCount = postData.viewCount;
-            possibleDuplicate.likeCount = postData.likeCount;
-            possibleDuplicate.repostCount = postData.repostCount;
-            possibleDuplicate.isViral = postData.isViral;
-            possibleDuplicate.thresholdUsed = postData.thresholdUsed;
-            
-            if (postData.attachments && postData.attachments.length > 0) {
-              possibleDuplicate.attachments = postData.attachments;
-            }
-            
-            await possibleDuplicate.save();
-            updatedCount++;
-            
-            if (isViral) viralCount++;
-          } else {
-            // Create new post
-            const newPost = new Post({
-              vkSource: sourceId,
-              ...postData
-            });
-            
-            await newPost.save();
-            createdCount++;
-            
-            if (isViral) viralCount++;
-          }
+          await newPost.save();
+          createdCount++;
+          
+          if (isViral) viralCount++;
         }
       } catch (error) {
         console.error(`Error saving post ${postId} from source ${sourceId}:`, error);
+        errorCount++;
         
-        // Improved error handling for duplicate key errors
+        // If it's a duplicate key error, try to handle it specially
         if (error.name === 'MongoError' && error.code === 11000) {
           skippedCount++;
           console.warn(`Skipped duplicate post ${postId} from source ${sourceId}`);
-          
-          // Try to update the existing post instead if it was a duplicate error
-          try {
-            // Find the post by its natural key (postId) and update it
-            const result = await Post.findOneAndUpdate(
-              { postId: postId },
-              { 
-                $set: {
-                  vkSource: sourceId,
-                  text: postData.text,
-                  viewCount: postData.viewCount,
-                  likeCount: postData.likeCount,
-                  repostCount: postData.repostCount,
-                  isViral: postData.isViral,
-                  thresholdUsed: postData.thresholdUsed,
-                  attachments: postData.attachments || []
-                }
-              },
-              { new: true }
-            );
-            
-            if (result) {
-              console.log(`Recovered from duplicate error by updating post ${postId}`);
-              updatedCount++;
-              if (postData.isViral) viralCount++;
-            }
-          } catch (updateError) {
-            console.error(`Failed to recover from duplicate error for post ${postId}:`, updateError);
-            errorCount++;
-          }
         } else {
           errorCount++;
         }

@@ -71,28 +71,15 @@ router.get('/dashboard', async (req, res) => {
     // Get total posts count
     const totalCount = await Post.countDocuments({});
     
-    // Get recent viral posts - populate source but filter out null references after populating
-    let recentViralPosts = await Post.find({ isViral: true })
+    // Get recent viral posts
+    const recentViralPosts = await Post.find({ isViral: true })
       .populate('vkSource')
       .sort({ publishedAt: -1 })
-      .limit(10); // Fetch more and then filter
+      .limit(5);
     
-    // Filter out posts with missing/null vkSource
-    recentViralPosts = recentViralPosts.filter(post => post.vkSource);
-    
-    // Limit to 5 posts after filtering
-    recentViralPosts = recentViralPosts.slice(0, 5);
-    
-    // Get top VK sources by viral post count - use lookup to ensure we only count posts with valid sources
+    // Get top VK sources by viral post count
     const topSources = await Post.aggregate([
       { $match: { isViral: true } },
-      { $lookup: {
-          from: 'vksources',
-          localField: 'vkSource',
-          foreignField: '_id',
-          as: 'sourceData'
-      }},
-      { $match: { 'sourceData': { $ne: [] } }}, // Only include posts with valid sources
       { $group: { _id: '$vkSource', count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 5 }
@@ -100,9 +87,6 @@ router.get('/dashboard', async (req, res) => {
     
     // Populate sources
     await Post.populate(topSources, { path: '_id', model: 'VkSource' });
-    
-    // Filter out items with null _id (source) references
-    const filteredTopSources = topSources.filter(item => item._id);
     
     res.json({
       counts: {
@@ -114,7 +98,7 @@ router.get('/dashboard', async (req, res) => {
         total: totalCount
       },
       recentViralPosts,
-      topSources: filteredTopSources.map(item => ({
+      topSources: topSources.map(item => ({
         source: item._id,
         count: item.count
       }))
@@ -182,21 +166,12 @@ router.put(
           const mappings = await Mapping.find({
             vkSource: post.vkSource,
             active: true
-          }).populate('vkSource').populate('telegramChannel');
-          
-          // Filter out mappings with deleted sources or channels
-          const validMappings = mappings.filter(mapping => 
-            mapping.vkSource && mapping.telegramChannel
-          );
-          
-          if (validMappings.length === 0) {
-            console.warn(`No valid mappings found for post ${post._id} with source ${post.vkSource}`);
-          }
+          }).populate('telegramChannel');
           
           // Forward to each channel
           const forwardResults = [];
           
-          for (const mapping of validMappings) {
+          for (const mapping of mappings) {
             try {
               const result = await telegramService.forwardPost(post, mapping.telegramChannel);
               forwardResults.push({
@@ -271,57 +246,29 @@ router.put(
         const postsToForward = await Post.find({
           _id: { $in: ids },
           status: 'approved'
-        }).populate('vkSource');
-        
-        // Filter out posts with deleted sources
-        const validPostsToForward = postsToForward.filter(post => post.vkSource);
-        
-        if (validPostsToForward.length < postsToForward.length) {
-          console.warn(`${postsToForward.length - validPostsToForward.length} posts skipped due to deleted sources`);
-        }
+        });
         
         // Process each post asynchronously
-        const forwardPromises = validPostsToForward.map(async (post) => {
+        const forwardPromises = postsToForward.map(async (post) => {
           try {
             // Get mappings for this source
             const mappings = await Mapping.find({
-              vkSource: post.vkSource._id,
+              vkSource: post.vkSource,
               active: true
-            }).populate('vkSource').populate('telegramChannel');
-            
-            // Filter out mappings with deleted sources or channels
-            const validMappings = mappings.filter(mapping => 
-              mapping.vkSource && mapping.telegramChannel
-            );
-            
-            if (validMappings.length === 0) {
-              console.warn(`No valid mappings found for post ${post._id} with source ${post.vkSource._id}`);
-              return {
-                postId: post._id,
-                success: false,
-                error: 'No valid mappings found'
-              };
-            }
+            }).populate('telegramChannel');
             
             // Forward to each channel
-            let successCount = 0;
-            let errorCount = 0;
-            
-            for (const mapping of validMappings) {
+            for (const mapping of mappings) {
               try {
                 await telegramService.forwardPost(post, mapping.telegramChannel);
-                successCount++;
               } catch (error) {
                 console.error(`Error forwarding post ${post._id} to channel ${mapping.telegramChannel._id}:`, error);
-                errorCount++;
               }
             }
             
             return {
               postId: post._id,
-              success: successCount > 0,
-              successCount,
-              errorCount
+              success: true
             };
           } catch (error) {
             return {
