@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const VkSource = require('../models/VkSource');
+const Mapping = require('../models/Mapping');
 const vkService = require('../services/vk');
 const schedulerService = require('../services/scheduler');
 
@@ -246,6 +247,10 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ message: 'VK source not found' });
     }
     
+    // First, delete all mappings that reference this source
+    await Mapping.deleteMany({ vkSource: req.params.id });
+    
+    // Then delete the source
     await source.deleteOne();
     
     // Update scheduler (don't await)

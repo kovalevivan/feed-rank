@@ -28,7 +28,8 @@ import {
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Error as ErrorIcon
 } from '@mui/icons-material';
 import { useTranslation } from '../../translations/TranslationContext';
 
@@ -55,8 +56,29 @@ const MappingsList = () => {
       try {
         setLoading(true);
         const response = await axios.get('/api/mappings');
-        setMappings(response.data);
-        setFilteredMappings(response.data);
+        
+        // Filter out any mappings with missing sources or channels
+        const validMappings = response.data.filter(
+          mapping => mapping.vkSource && mapping.telegramChannel
+        );
+        
+        // If there are invalid mappings, clean them up on the server (don't wait)
+        const invalidMappings = response.data.filter(
+          mapping => !mapping.vkSource || !mapping.telegramChannel
+        );
+        
+        if (invalidMappings.length > 0) {
+          console.warn(`Found ${invalidMappings.length} invalid mappings with missing references`);
+          // Silently try to delete invalid mappings in the background
+          invalidMappings.forEach(mapping => {
+            axios.delete(`/api/mappings/${mapping._id}`).catch(err => {
+              console.error(`Failed to delete invalid mapping ${mapping._id}:`, err);
+            });
+          });
+        }
+        
+        setMappings(validMappings);
+        setFilteredMappings(validMappings);
         setLoading(false);
       } catch (err) {
         setError(err.response?.data?.message || translate('Failed to fetch mappings'));
@@ -76,8 +98,8 @@ const MappingsList = () => {
     
     const lowercaseSearch = searchTerm.toLowerCase();
     const filtered = mappings.filter(mapping => 
-      mapping.vkSource.name.toLowerCase().includes(lowercaseSearch) ||
-      mapping.telegramChannel.name.toLowerCase().includes(lowercaseSearch)
+      (mapping.vkSource?.name?.toLowerCase().includes(lowercaseSearch)) ||
+      (mapping.telegramChannel?.name?.toLowerCase().includes(lowercaseSearch))
     );
     
     setFilteredMappings(filtered);
@@ -230,18 +252,32 @@ const MappingsList = () => {
                 filteredMappings.map(mapping => (
                   <TableRow key={mapping._id}>
                     <TableCell>
-                      <Tooltip title={`ID: ${mapping.vkSource._id}`}>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          {mapping.vkSource.name}
+                      {mapping.vkSource ? (
+                        <Tooltip title={`ID: ${mapping.vkSource._id}`}>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            {mapping.vkSource.name}
+                          </Box>
+                        </Tooltip>
+                      ) : (
+                        <Box sx={{ display: 'flex', alignItems: 'center', color: 'error.main' }}>
+                          <ErrorIcon fontSize="small" sx={{ mr: 1 }} />
+                          <Typography variant="body2">{translate('Source not found')}</Typography>
                         </Box>
-                      </Tooltip>
+                      )}
                     </TableCell>
                     <TableCell>
-                      <Tooltip title={`ID: ${mapping.telegramChannel._id}`}>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          {mapping.telegramChannel.name}
+                      {mapping.telegramChannel ? (
+                        <Tooltip title={`ID: ${mapping.telegramChannel._id}`}>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            {mapping.telegramChannel.name}
+                          </Box>
+                        </Tooltip>
+                      ) : (
+                        <Box sx={{ display: 'flex', alignItems: 'center', color: 'error.main' }}>
+                          <ErrorIcon fontSize="small" sx={{ mr: 1 }} />
+                          <Typography variant="body2">{translate('Channel not found')}</Typography>
                         </Box>
-                      </Tooltip>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Tooltip title={mapping.active ? translate("Active - posts will be forwarded") : translate("Inactive - posts will not be forwarded")}>
@@ -307,7 +343,9 @@ const MappingsList = () => {
         <DialogContent>
           <DialogContentText>
             {translate('Are you sure you want to delete the mapping between')} 
-            "{mappingToDelete?.vkSource.name}" {translate('and')} "{mappingToDelete?.telegramChannel.name}"?
+            "{mappingToDelete?.vkSource?.name || translate('Unknown source')}" 
+            {translate('and')} 
+            "{mappingToDelete?.telegramChannel?.name || translate('Unknown channel')}"?
             {translate('This action cannot be undone.')}
           </DialogContentText>
         </DialogContent>

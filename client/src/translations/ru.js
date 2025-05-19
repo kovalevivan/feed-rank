@@ -284,7 +284,13 @@ const translations = {
   'In the VK Sources section, when editing a source, you can view detailed view statistics and configure the virality threshold calculation.': 'В разделе "Источники ВК" при редактировании источника вы можете просмотреть детальную статистику просмотров и настроить расчет порога вирусности.',
   'In the settings section, you can check the connection status to the VK API, Telegram bot, and database.': 'В разделе настроек вы можете проверить статус подключения к API ВКонтакте, боту Telegram и базе данных.',
   'Additional Help': 'Дополнительная помощь',
-  'If you have questions or problems using the system, please contact technical support.': 'Если у вас возникли вопросы или проблемы при использовании системы, пожалуйста, свяжитесь с технической поддержкой.'
+  'If you have questions or problems using the system, please contact technical support.': 'Если у вас возникли вопросы или проблемы при использовании системы, пожалуйста, свяжитесь с технической поддержкой.',
+
+  // New error messages
+  'Source not found': 'Источник не найден',
+  'Channel not found': 'Канал не найден',
+  'Unknown source': 'Неизвестный источник',
+  'Unknown channel': 'Неизвестный канал'
 };
 
 export default translations; 
