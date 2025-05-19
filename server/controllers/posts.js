@@ -71,15 +71,28 @@ router.get('/dashboard', async (req, res) => {
     // Get total posts count
     const totalCount = await Post.countDocuments({});
     
-    // Get recent viral posts
-    const recentViralPosts = await Post.find({ isViral: true })
+    // Get recent viral posts - populate source but filter out null references after populating
+    let recentViralPosts = await Post.find({ isViral: true })
       .populate('vkSource')
       .sort({ publishedAt: -1 })
-      .limit(5);
+      .limit(10); // Fetch more and then filter
     
-    // Get top VK sources by viral post count
+    // Filter out posts with missing/null vkSource
+    recentViralPosts = recentViralPosts.filter(post => post.vkSource);
+    
+    // Limit to 5 posts after filtering
+    recentViralPosts = recentViralPosts.slice(0, 5);
+    
+    // Get top VK sources by viral post count - use lookup to ensure we only count posts with valid sources
     const topSources = await Post.aggregate([
       { $match: { isViral: true } },
+      { $lookup: {
+          from: 'vksources',
+          localField: 'vkSource',
+          foreignField: '_id',
+          as: 'sourceData'
+      }},
+      { $match: { 'sourceData': { $ne: [] } }}, // Only include posts with valid sources
       { $group: { _id: '$vkSource', count: { $sum: 1 } } },
       { $sort: { count: -1 } },
       { $limit: 5 }
@@ -87,6 +100,9 @@ router.get('/dashboard', async (req, res) => {
     
     // Populate sources
     await Post.populate(topSources, { path: '_id', model: 'VkSource' });
+    
+    // Filter out items with null _id (source) references
+    const filteredTopSources = topSources.filter(item => item._id);
     
     res.json({
       counts: {
@@ -98,7 +114,7 @@ router.get('/dashboard', async (req, res) => {
         total: totalCount
       },
       recentViralPosts,
-      topSources: topSources.map(item => ({
+      topSources: filteredTopSources.map(item => ({
         source: item._id,
         count: item.count
       }))

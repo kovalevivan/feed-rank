@@ -43,9 +43,14 @@ const Dashboard = () => {
     );
   }
   
-  // Filter out any posts with missing sources to prevent errors
-  const filteredRecentViralPosts = dashboardData.recentViralPosts.filter(post => post.vkSource);
-  const filteredTopSources = dashboardData.topSources.filter(item => item.source);
+  // Enhanced filtering to handle null references more robustly
+  const filteredRecentViralPosts = Array.isArray(dashboardData.recentViralPosts) 
+    ? dashboardData.recentViralPosts.filter(post => post && post.vkSource)
+    : [];
+    
+  const filteredTopSources = Array.isArray(dashboardData.topSources) 
+    ? dashboardData.topSources.filter(item => item && item.source)
+    : [];
   
   const { counts } = dashboardData;
   
