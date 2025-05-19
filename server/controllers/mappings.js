@@ -8,10 +8,34 @@ const TelegramChannel = require('../models/TelegramChannel');
 // Get all mappings
 router.get('/', async (req, res) => {
   try {
-    const mappings = await Mapping.find()
+    let mappings = await Mapping.find()
       .populate('vkSource')
       .populate('telegramChannel')
       .sort({ createdAt: -1 });
+    
+    // Filter out mappings with deleted sources or channels
+    const validMappings = mappings.filter(mapping => mapping.vkSource && mapping.telegramChannel);
+    
+    // If some mappings have invalid references, clean them up
+    if (validMappings.length < mappings.length) {
+      console.warn(`Found ${mappings.length - validMappings.length} mappings with deleted references`);
+      
+      // Optionally, we could automatically clean up these invalid mappings
+      // This section can be uncommented if that's desired behavior
+      /*
+      const invalidMappingIds = mappings
+        .filter(mapping => !mapping.vkSource || !mapping.telegramChannel)
+        .map(mapping => mapping._id);
+        
+      if (invalidMappingIds.length > 0) {
+        const deleteResult = await Mapping.deleteMany({ _id: { $in: invalidMappingIds } });
+        console.log(`Deleted ${deleteResult.deletedCount} invalid mappings`);
+      }
+      */
+      
+      // Return the valid mappings only
+      mappings = validMappings;
+    }
     
     res.json(mappings);
   } catch (error) {
@@ -23,10 +47,19 @@ router.get('/', async (req, res) => {
 // Get mappings for a specific VK source
 router.get('/vk-source/:sourceId', async (req, res) => {
   try {
-    const mappings = await Mapping.find({ vkSource: req.params.sourceId })
+    // First verify source exists
+    const source = await VkSource.findById(req.params.sourceId);
+    if (!source) {
+      return res.status(404).json({ message: 'VK source not found' });
+    }
+    
+    let mappings = await Mapping.find({ vkSource: req.params.sourceId })
       .populate('vkSource')
       .populate('telegramChannel')
       .sort({ createdAt: -1 });
+    
+    // Filter out mappings with deleted channels
+    mappings = mappings.filter(mapping => mapping.telegramChannel);
     
     res.json(mappings);
   } catch (error) {
@@ -38,10 +71,19 @@ router.get('/vk-source/:sourceId', async (req, res) => {
 // Get mappings for a specific Telegram channel
 router.get('/telegram-channel/:channelId', async (req, res) => {
   try {
-    const mappings = await Mapping.find({ telegramChannel: req.params.channelId })
+    // First verify channel exists
+    const channel = await TelegramChannel.findById(req.params.channelId);
+    if (!channel) {
+      return res.status(404).json({ message: 'Telegram channel not found' });
+    }
+    
+    let mappings = await Mapping.find({ telegramChannel: req.params.channelId })
       .populate('vkSource')
       .populate('telegramChannel')
       .sort({ createdAt: -1 });
+    
+    // Filter out mappings with deleted sources
+    mappings = mappings.filter(mapping => mapping.vkSource);
     
     res.json(mappings);
   } catch (error) {
@@ -59,6 +101,14 @@ router.get('/:id', async (req, res) => {
     
     if (!mapping) {
       return res.status(404).json({ message: 'Mapping not found' });
+    }
+    
+    // Check if either the source or channel has been deleted
+    if (!mapping.vkSource || !mapping.telegramChannel) {
+      return res.status(400).json({ 
+        message: 'Invalid mapping', 
+        details: !mapping.vkSource ? 'VK source has been deleted' : 'Telegram channel has been deleted'
+      });
     }
     
     res.json(mapping);

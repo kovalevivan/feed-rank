@@ -431,6 +431,12 @@ const registerCommands = () => {
 const forwardPost = async (post, channel) => {
   if (!bot) throw new Error('Telegram bot not initialized');
   
+  // Validate required parameters
+  if (!post) throw new Error('Post object is required');
+  if (!channel) throw new Error('Channel object is required');
+  if (!channel.chatId) throw new Error('Channel must have a valid chatId');
+  if (!post.vkSource) throw new Error('Post must have a valid vkSource reference');
+  
   try {
     // Get VK source name
     const vkSource = await VkSource.findById(post.vkSource);
@@ -480,7 +486,7 @@ const forwardPost = async (post, channel) => {
       channelId: channel._id
     };
   } catch (error) {
-    console.error(`Error forwarding post to Telegram channel ${channel.name}:`, error);
+    console.error(`Error forwarding post to Telegram channel ${channel.name || channel.chatId}:`, error);
     throw error;
   }
 };
@@ -495,21 +501,40 @@ const processPendingPosts = async () => {
     const pendingPosts = await Post.find({
       isViral: true,
       status: 'pending'
-    });
+    }).populate('vkSource');
+    
+    // Filter out posts with deleted sources
+    const validPosts = pendingPosts.filter(post => post.vkSource);
+    
+    if (validPosts.length < pendingPosts.length) {
+      console.warn(`${pendingPosts.length - validPosts.length} posts skipped due to deleted sources`);
+    }
     
     let forwardedCount = 0;
     let errorCount = 0;
+    let skippedCount = 0;
     
     // Process each post
-    for (const post of pendingPosts) {
+    for (const post of validPosts) {
       // Find mappings for this post's source
       const mappings = await Mapping.find({
-        vkSource: post.vkSource,
+        vkSource: post.vkSource._id,
         active: true
-      }).populate('telegramChannel');
+      }).populate('vkSource').populate('telegramChannel');
+      
+      // Filter out mappings with deleted sources or channels
+      const validMappings = mappings.filter(mapping => 
+        mapping.vkSource && mapping.telegramChannel
+      );
+      
+      if (validMappings.length === 0) {
+        console.warn(`No valid mappings found for post ${post._id} with source ${post.vkSource._id}`);
+        skippedCount++;
+        continue;
+      }
       
       // Forward to each mapped channel
-      for (const mapping of mappings) {
+      for (const mapping of validMappings) {
         try {
           await forwardPost(post, mapping.telegramChannel);
           forwardedCount++;
@@ -522,6 +547,8 @@ const processPendingPosts = async () => {
     
     return {
       processed: pendingPosts.length,
+      valid: validPosts.length,
+      skipped: skippedCount,
       forwarded: forwardedCount,
       errors: errorCount
     };

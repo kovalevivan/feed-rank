@@ -182,12 +182,21 @@ router.put(
           const mappings = await Mapping.find({
             vkSource: post.vkSource,
             active: true
-          }).populate('telegramChannel');
+          }).populate('vkSource').populate('telegramChannel');
+          
+          // Filter out mappings with deleted sources or channels
+          const validMappings = mappings.filter(mapping => 
+            mapping.vkSource && mapping.telegramChannel
+          );
+          
+          if (validMappings.length === 0) {
+            console.warn(`No valid mappings found for post ${post._id} with source ${post.vkSource}`);
+          }
           
           // Forward to each channel
           const forwardResults = [];
           
-          for (const mapping of mappings) {
+          for (const mapping of validMappings) {
             try {
               const result = await telegramService.forwardPost(post, mapping.telegramChannel);
               forwardResults.push({
@@ -262,29 +271,57 @@ router.put(
         const postsToForward = await Post.find({
           _id: { $in: ids },
           status: 'approved'
-        });
+        }).populate('vkSource');
+        
+        // Filter out posts with deleted sources
+        const validPostsToForward = postsToForward.filter(post => post.vkSource);
+        
+        if (validPostsToForward.length < postsToForward.length) {
+          console.warn(`${postsToForward.length - validPostsToForward.length} posts skipped due to deleted sources`);
+        }
         
         // Process each post asynchronously
-        const forwardPromises = postsToForward.map(async (post) => {
+        const forwardPromises = validPostsToForward.map(async (post) => {
           try {
             // Get mappings for this source
             const mappings = await Mapping.find({
-              vkSource: post.vkSource,
+              vkSource: post.vkSource._id,
               active: true
-            }).populate('telegramChannel');
+            }).populate('vkSource').populate('telegramChannel');
+            
+            // Filter out mappings with deleted sources or channels
+            const validMappings = mappings.filter(mapping => 
+              mapping.vkSource && mapping.telegramChannel
+            );
+            
+            if (validMappings.length === 0) {
+              console.warn(`No valid mappings found for post ${post._id} with source ${post.vkSource._id}`);
+              return {
+                postId: post._id,
+                success: false,
+                error: 'No valid mappings found'
+              };
+            }
             
             // Forward to each channel
-            for (const mapping of mappings) {
+            let successCount = 0;
+            let errorCount = 0;
+            
+            for (const mapping of validMappings) {
               try {
                 await telegramService.forwardPost(post, mapping.telegramChannel);
+                successCount++;
               } catch (error) {
                 console.error(`Error forwarding post ${post._id} to channel ${mapping.telegramChannel._id}:`, error);
+                errorCount++;
               }
             }
             
             return {
               postId: post._id,
-              success: true
+              success: successCount > 0,
+              successCount,
+              errorCount
             };
           } catch (error) {
             return {
