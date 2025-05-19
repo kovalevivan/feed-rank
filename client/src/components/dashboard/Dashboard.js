@@ -20,7 +20,8 @@ import {
 import {
   Visibility as VisibilityIcon,
   SendToMobile as SendToMobileIcon,
-  ThumbUp as ThumbUpIcon
+  ThumbUp as ThumbUpIcon,
+  Error as ErrorIcon
 } from '@mui/icons-material';
 import { fetchDashboardData } from '../../redux/slices/postsSlice';
 import { useTranslation } from '../../translations/TranslationContext';
@@ -42,7 +43,11 @@ const Dashboard = () => {
     );
   }
   
-  const { counts, recentViralPosts, topSources } = dashboardData;
+  // Filter out any posts with missing sources to prevent errors
+  const filteredRecentViralPosts = dashboardData.recentViralPosts.filter(post => post.vkSource);
+  const filteredTopSources = dashboardData.topSources.filter(item => item.source);
+  
+  const { counts } = dashboardData;
   
   // Stats cards data
   const statCards = [
@@ -122,9 +127,9 @@ const Dashboard = () => {
             </Typography>
             <Divider sx={{ mb: 2 }} />
             
-            {recentViralPosts && recentViralPosts.length > 0 ? (
+            {filteredRecentViralPosts && filteredRecentViralPosts.length > 0 ? (
               <List>
-                {recentViralPosts.map((post) => (
+                {filteredRecentViralPosts.map((post) => (
                   <ListItem key={post._id} divider>
                     <ListItemAvatar>
                       <Avatar src={post.attachments && post.attachments[0]?.thumbnailUrl} />
@@ -134,7 +139,7 @@ const Dashboard = () => {
                       secondary={
                         <React.Fragment>
                           <Typography variant="body2" component="span" color="text.primary">
-                            {post.vkSource?.name} | {formatDate(post.publishedAt)}
+                            {post.vkSource?.name || translate('Unknown source')} | {formatDate(post.publishedAt)}
                           </Typography>
                           <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', mr: 2 }}>
@@ -153,14 +158,26 @@ const Dashboard = () => {
                         </React.Fragment>
                       }
                     />
-                    <Button
-                      component={RouterLink}
-                      to={`/sources/${post.vkSource._id}`}
-                      variant="outlined"
-                      size="small"
-                    >
-                      {translate('View Source')}
-                    </Button>
+                    {post.vkSource ? (
+                      <Button
+                        component={RouterLink}
+                        to={`/sources/${post.vkSource._id}`}
+                        variant="outlined"
+                        size="small"
+                      >
+                        {translate('View Source')}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        color="error"
+                        startIcon={<ErrorIcon />}
+                        disabled
+                      >
+                        {translate('Source deleted')}
+                      </Button>
+                    )}
                   </ListItem>
                 ))}
               </List>
@@ -190,9 +207,9 @@ const Dashboard = () => {
             </Typography>
             <Divider sx={{ mb: 2 }} />
             
-            {topSources && topSources.length > 0 ? (
+            {filteredTopSources && filteredTopSources.length > 0 ? (
               <List>
-                {topSources.map((item, index) => (
+                {filteredTopSources.map((item, index) => (
                   <ListItem key={index} divider>
                     <ListItemAvatar>
                       <Avatar sx={{ bgcolor: 'primary.main' }}>
@@ -203,14 +220,26 @@ const Dashboard = () => {
                       primary={item.source?.name || translate('Unknown Source')}
                       secondary={`${item.count} ${translate('viral posts')}`}
                     />
-                    <Button
-                      component={RouterLink}
-                      to={`/sources/${item.source?._id}`}
-                      variant="outlined"
-                      size="small"
-                    >
-                      {translate('Details')}
-                    </Button>
+                    {item.source ? (
+                      <Button
+                        component={RouterLink}
+                        to={`/sources/${item.source._id}`}
+                        variant="outlined"
+                        size="small"
+                      >
+                        {translate('Details')}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        color="error"
+                        startIcon={<ErrorIcon />}
+                        disabled
+                      >
+                        {translate('Source deleted')}
+                      </Button>
+                    )}
                   </ListItem>
                 ))}
               </List>

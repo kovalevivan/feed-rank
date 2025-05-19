@@ -358,15 +358,20 @@ const processSourcePosts = async (sourceId) => {
     // Fetch recent posts
     const posts = await fetchPosts(source.groupId, 50);
     let viralCount = 0;
+    let updatedCount = 0;
+    let createdCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
     
     // Process each post
     for (const post of posts) {
+      const postId = post.id.toString();
       const viewCount = post.views?.count || 0;
       const isViral = viewCount > threshold;
       
       // Create or update post in our database
       const postData = {
-        postId: post.id.toString(),
+        postId: postId,
         text: post.text,
         viewCount,
         likeCount: post.likes?.count || 0,
@@ -411,17 +416,50 @@ const processSourcePosts = async (sourceId) => {
         });
       }
       
-      // Try to find existing post or create new one
+      // First check if post already exists
       try {
-        await Post.findOneAndUpdate(
-          { vkSource: sourceId, postId: postData.postId },
-          { vkSource: sourceId, ...postData },
-          { upsert: true, new: true }
-        );
+        const existingPost = await Post.findOne({ vkSource: sourceId, postId: postId });
         
-        if (isViral) viralCount++;
+        if (existingPost) {
+          // Update existing post
+          existingPost.text = postData.text;
+          existingPost.viewCount = postData.viewCount;
+          existingPost.likeCount = postData.likeCount;
+          existingPost.repostCount = postData.repostCount;
+          existingPost.isViral = postData.isViral;
+          existingPost.thresholdUsed = postData.thresholdUsed;
+          
+          if (postData.attachments && postData.attachments.length > 0) {
+            existingPost.attachments = postData.attachments;
+          }
+          
+          await existingPost.save();
+          updatedCount++;
+          
+          if (isViral) viralCount++;
+        } else {
+          // Create new post
+          const newPost = new Post({
+            vkSource: sourceId,
+            ...postData
+          });
+          
+          await newPost.save();
+          createdCount++;
+          
+          if (isViral) viralCount++;
+        }
       } catch (error) {
-        console.error(`Error saving post ${post.id} from source ${sourceId}:`, error);
+        console.error(`Error saving post ${postId} from source ${sourceId}:`, error);
+        errorCount++;
+        
+        // If it's a duplicate key error, try to handle it specially
+        if (error.name === 'MongoError' && error.code === 11000) {
+          skippedCount++;
+          console.warn(`Skipped duplicate post ${postId} from source ${sourceId}`);
+        } else {
+          errorCount++;
+        }
       }
     }
     
@@ -432,6 +470,10 @@ const processSourcePosts = async (sourceId) => {
     return {
       sourceId,
       postsProcessed: posts.length,
+      created: createdCount,
+      updated: updatedCount,
+      skipped: skippedCount,
+      errors: errorCount,
       viralPostsFound: viralCount
     };
   } catch (error) {
