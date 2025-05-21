@@ -6,6 +6,7 @@ import telegramChannelsReducer from './slices/telegramChannelsSlice';
 import mappingsReducer from './slices/mappingsSlice';
 import postsReducer from './slices/postsSlice';
 import settingsReducer from './slices/settingsSlice';
+import vkSourceGroupsReducer from './slices/vkSourceGroupsSlice';
 
 const store = configureStore({
   reducer: {
@@ -15,7 +16,8 @@ const store = configureStore({
     telegramChannels: telegramChannelsReducer,
     mappings: mappingsReducer,
     posts: postsReducer,
-    settings: settingsReducer
+    settings: settingsReducer,
+    vkSourceGroups: vkSourceGroupsReducer
   }
 });
 

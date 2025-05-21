@@ -15,6 +15,17 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// CORS configuration
+const corsOptions = {
+  origin: '*', // Allow all origins in development
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'x-auth-token', 'Authorization'],
+  credentials: true
+};
+
+app.use(cors(corsOptions));
+console.log('🌐 CORS configured with options:', corsOptions);
+
 // Request logging middleware
 app.use((req, res, next) => {
   const start = Date.now();
@@ -87,6 +98,7 @@ app.use('/api/telegram-channels', require('./controllers/telegramChannels'));
 app.use('/api/mappings', require('./controllers/mappings'));
 app.use('/api/posts', require('./controllers/posts'));
 app.use('/api/settings', require('./controllers/settings'));
+app.use('/api/vk-source-groups', require('./controllers/vkSourceGroups'));
 
 // Initialize services
 const vkService = require('./services/vk');

@@ -1,22 +1,28 @@
 import axios from 'axios';
 
 // Set base URL for API requests
-// Development: Assuming webpack dev server proxies API requests to backend
+// Development: Point to the actual backend server
 // Production: API runs on same origin as frontend when built
-axios.defaults.baseURL = process.env.NODE_ENV === 'production' ? '' : '';
+const apiBaseUrl = process.env.NODE_ENV === 'production' ? '' : 'http://localhost:5000';
+
+console.log(`🔧 Setting up axios with baseURL: ${apiBaseUrl}, environment: ${process.env.NODE_ENV}`);
+axios.defaults.baseURL = apiBaseUrl;
 
 // Add detailed request logging
 axios.interceptors.request.use(
   config => {
-    console.log(`🔄 [Request] ${config.method.toUpperCase()} ${config.url}`, 
-      config.data ? { data: config.data } : '');
-    
     // Get token from localStorage
     const token = localStorage.getItem('token');
     
-    // If token exists, add it to authorization header
+    console.log(`🔄 [Request] ${config.method.toUpperCase()} ${config.url}`, 
+      config.data ? { data: config.data } : '');
+    
+    // If token exists, add it to x-auth-token header (not Authorization)
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      config.headers['x-auth-token'] = token;
+      console.log('🔑 Auth token added to request:', { token: token.substring(0, 15) + '...' });
+    } else {
+      console.warn('⚠️ No auth token found in localStorage');
     }
     
     return config;

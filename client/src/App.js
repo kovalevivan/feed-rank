@@ -23,6 +23,8 @@ import ChannelForm from './components/destinations/ChannelForm';
 import MappingsList from './components/mappings/MappingsList';
 import MappingForm from './components/mappings/MappingForm';
 import Settings from './components/settings/Settings';
+import SourceGroupsList from './components/sources/SourceGroupsList';
+import SourceGroupForm from './components/sources/SourceGroupForm';
 
 // Create a Material UI theme
 const theme = createTheme({
@@ -81,6 +83,11 @@ function App() {
                 <Route path="sources" element={<PrivateRoute><SourcesList /></PrivateRoute>} />
                 <Route path="sources/new" element={<PrivateRoute><SourceForm /></PrivateRoute>} />
                 <Route path="sources/:id" element={<PrivateRoute><SourceForm /></PrivateRoute>} />
+                
+                {/* Source Groups Routes */}
+                <Route path="source-groups" element={<PrivateRoute><SourceGroupsList /></PrivateRoute>} />
+                <Route path="source-groups/new" element={<PrivateRoute><SourceGroupForm /></PrivateRoute>} />
+                <Route path="source-groups/:id" element={<PrivateRoute><SourceGroupForm /></PrivateRoute>} />
                 
                 {/* Channels Routes */}
                 <Route path="channels" element={<PrivateRoute><ChannelsList /></PrivateRoute>} />

@@ -95,6 +95,7 @@ const Layout = () => {
   const navItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
     { text: 'VK Sources', icon: <SourceIcon />, path: '/sources' },
+    { text: 'VK Source Groups', icon: <SourceIcon />, path: '/source-groups' },
     { text: 'Telegram Channels', icon: <SendIcon />, path: '/channels' },
     { text: 'Mappings', icon: <LinkIcon />, path: '/mappings' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
