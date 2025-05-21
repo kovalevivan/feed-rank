@@ -38,11 +38,14 @@ router.get('/', [
       .skip(skip)
       .limit(parseInt(limit));
     
+    // Filter out posts with deleted sources to prevent null reference errors
+    const validPosts = posts.filter(post => post.vkSource);
+    
     // Get total count
     const total = await Post.countDocuments(filter);
     
     res.json({
-      posts,
+      posts: validPosts,
       pagination: {
         total,
         page: parseInt(page),
@@ -77,6 +80,9 @@ router.get('/dashboard', async (req, res) => {
       .sort({ publishedAt: -1 })
       .limit(5);
     
+    // Filter out posts with deleted sources to prevent null reference errors
+    const validRecentViralPosts = recentViralPosts.filter(post => post.vkSource);
+    
     // Get top VK sources by viral post count
     const topSources = await Post.aggregate([
       { $match: { isViral: true } },
@@ -88,6 +94,9 @@ router.get('/dashboard', async (req, res) => {
     // Populate sources
     await Post.populate(topSources, { path: '_id', model: 'VkSource' });
     
+    // Filter out null sources from topSources
+    const validTopSources = topSources.filter(item => item._id);
+    
     res.json({
       counts: {
         pending: pendingCount,
@@ -97,8 +106,8 @@ router.get('/dashboard', async (req, res) => {
         totalViral: totalViralCount,
         total: totalCount
       },
-      recentViralPosts,
-      topSources: topSources.map(item => ({
+      recentViralPosts: validRecentViralPosts,
+      topSources: validTopSources.map(item => ({
         source: item._id,
         count: item.count
       }))

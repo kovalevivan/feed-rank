@@ -158,12 +158,21 @@ const ThresholdStats = ({ stats, loading }) => {
           
           <Grid item xs={12}>
             <Alert severity="info" sx={{ mt: 2 }}>
-              <Typography variant="body2">
-                <strong>{translate('Current calculated threshold')}:</strong> {formatNumber(stats.calculatedThreshold)} {translate('views')}
-                {stats.thresholdMethod === 'statistical' && stats.multiplier && (
-                  <span> ({translate('using')} {stats.multiplier} × {translate('Standard Deviation')})</span>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Typography variant="body2">
+                  <strong>{translate('Current calculated threshold')}:</strong> {formatNumber(stats.calculatedThreshold)} {translate('views')}
+                </Typography>
+                
+                {stats.thresholdMethod === 'statistical' && stats.multiplier !== undefined && (
+                  <Chip 
+                    size="small"
+                    color="primary"
+                    variant="outlined"
+                    sx={{ ml: 1 }}
+                    label={`${translate('Using')} ${parseFloat(stats.multiplierUsed || stats.multiplier).toFixed(1)} × SD`}
+                  />
                 )}
-              </Typography>
+              </Box>
             </Alert>
           </Grid>
         </Grid>
@@ -173,15 +182,48 @@ const ThresholdStats = ({ stats, loading }) => {
 };
 
 // Advanced threshold calculator component
-const AdvancedThresholdCalculator = ({ sourceId, loading, currentMethod, onCalculate, onMethodChange }) => {
+const AdvancedThresholdCalculator = ({ sourceId, loading, currentMethod, onCalculate, onMethodChange, initialMultiplier }) => {
   const translate = useTranslation();
+  // Track if we've been initialized with source value
+  const initializedRef = React.useRef(false);
+  // Track if the user has made manual changes
+  const userChangedValueRef = React.useRef(false);
+  
   const [calculationParams, setCalculationParams] = useState({
     thresholdMethod: currentMethod || 'statistical',
     postsCount: 100,
-    multiplier: 1.5
+    // Only use default 1.5 if initialMultiplier is explicitly null or undefined
+    multiplier: initialMultiplier !== undefined && initialMultiplier !== null 
+      ? parseFloat(initialMultiplier) 
+      : 1.5
   });
   
-  // Update params when currentMethod changes
+  // Initialize multiplier from source ONLY on first load
+  useEffect(() => {
+    // Skip if user has manually changed the value or we already initialized
+    if (userChangedValueRef.current || initializedRef.current) {
+      return;
+    }
+    
+    // Only update if initialMultiplier is a valid number
+    const hasValidMultiplier = initialMultiplier !== undefined && 
+                              initialMultiplier !== null && 
+                              !isNaN(parseFloat(initialMultiplier));
+    
+    if (hasValidMultiplier) {
+      const newMultiplier = parseFloat(initialMultiplier);
+      console.log(`Initial load: setting multiplier to ${newMultiplier} from source`);
+      
+      initializedRef.current = true;
+      
+      setCalculationParams(prev => ({
+        ...prev,
+        multiplier: newMultiplier
+      }));
+    }
+  }, [initialMultiplier]);
+  
+  // Update method when currentMethod changes
   useEffect(() => {
     if (currentMethod && currentMethod !== calculationParams.thresholdMethod) {
       setCalculationParams(prev => ({
@@ -189,10 +231,16 @@ const AdvancedThresholdCalculator = ({ sourceId, loading, currentMethod, onCalcu
         thresholdMethod: currentMethod
       }));
     }
-  }, [currentMethod]);
+  }, [currentMethod, calculationParams.thresholdMethod]);
   
   const handleChange = (e) => {
     const { name, value } = e.target;
+    
+    // Mark that user has made manual changes if changing multiplier
+    if (name === 'multiplier') {
+      userChangedValueRef.current = true;
+    }
+    
     setCalculationParams({
       ...calculationParams,
       [name]: value
@@ -205,6 +253,13 @@ const AdvancedThresholdCalculator = ({ sourceId, loading, currentMethod, onCalcu
   };
   
   const handleSliderChange = (name) => (e, value) => {
+    console.log(`Slider changed: setting ${name} to ${value}`);
+    
+    // Mark that user has made manual changes when using slider
+    if (name === 'multiplier') {
+      userChangedValueRef.current = true;
+    }
+    
     setCalculationParams({
       ...calculationParams,
       [name]: value
@@ -212,14 +267,31 @@ const AdvancedThresholdCalculator = ({ sourceId, loading, currentMethod, onCalcu
   };
   
   const handleSubmit = () => {
-    onCalculate({
+    // Get multiplier as numeric value, preserving zero
+    const rawMultiplier = calculationParams.multiplier;
+    console.log('Raw multiplier input:', rawMultiplier, typeof rawMultiplier);
+    
+    // Ensure multiplier is a valid number (default to 1.5 only as last resort)
+    const multiplier = (rawMultiplier !== undefined && 
+                       rawMultiplier !== null && 
+                       rawMultiplier !== '' &&
+                       !isNaN(parseFloat(rawMultiplier)))
+      ? parseFloat(rawMultiplier)
+      : 1.5;
+    
+    console.log('Parsed multiplier value:', multiplier);
+    
+    const params = {
       id: sourceId,
       params: {
         thresholdMethod: calculationParams.thresholdMethod,
         postsCount: parseInt(calculationParams.postsCount),
-        multiplier: parseFloat(calculationParams.multiplier)
+        multiplier: multiplier
       }
-    });
+    };
+    
+    console.log('Submitting threshold calculation with params:', params);
+    onCalculate(params);
   };
   
   return (
@@ -274,12 +346,17 @@ const AdvancedThresholdCalculator = ({ sourceId, loading, currentMethod, onCalcu
           
           {calculationParams.thresholdMethod === 'statistical' && (
             <Grid item xs={12} sm={6}>
-              <Typography id="multiplier-slider" gutterBottom>
-                {translate('Standard Deviation Multiplier')}: {calculationParams.multiplier}
+              <Typography variant="subtitle2" gutterBottom>
+                {translate('Standard Deviation Multiplier')}
               </Typography>
+              
               <Slider
-                value={calculationParams.multiplier}
+                value={parseFloat(calculationParams.multiplier) || 1.5}
                 onChange={handleSliderChange('multiplier')}
+                onChangeCommitted={(e, value) => {
+                  console.log(`Slider change committed: ${value}`);
+                  userChangedValueRef.current = true;
+                }}
                 aria-labelledby="multiplier-slider"
                 step={0.1}
                 marks={[
@@ -293,7 +370,25 @@ const AdvancedThresholdCalculator = ({ sourceId, loading, currentMethod, onCalcu
                 min={0.5}
                 max={3.0}
               />
-              <Typography variant="body2" color="textSecondary">
+              <TextField
+                fullWidth
+                label={translate('Exact Multiplier Value')}
+                name="multiplier"
+                type="number"
+                value={calculationParams.multiplier}
+                onChange={handleChange}
+                margin="normal"
+                InputProps={{
+                  inputProps: { 
+                    min: 0.5, 
+                    max: 3.0,
+                    step: 0.1
+                  }
+                }}
+                helperText={translate('Enter a value between 0.5 and 3.0')}
+                sx={{ mt: 2 }}
+              />
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                 {translate('Higher values make the threshold more strict (fewer posts will be considered viral)')}
               </Typography>
             </Grid>
@@ -433,6 +528,17 @@ const SourceForm = () => {
   
   // Handle threshold calculation
   const handleCalculateThreshold = (params) => {
+    console.log('Source form received calculate threshold request with params:', params);
+    
+    // Ensure the multiplier is a number if present
+    if (params.params && params.params.multiplier !== undefined) {
+      const multiplier = parseFloat(params.params.multiplier);
+      if (!isNaN(multiplier)) {
+        params.params.multiplier = multiplier;
+        console.log(`Ensuring multiplier is numeric: ${multiplier}`);
+      }
+    }
+    
     dispatch(calculateThresholdAdvanced(params));
   };
   
@@ -519,19 +625,20 @@ const SourceForm = () => {
           
           {isEditMode && formData.thresholdType === 'auto' && (
             <Box mt={2}>
-              <Chip 
-                label={`${translate('Current Threshold')}: ${formatNumber(vkSource?.calculatedThreshold || 0)} ${translate('views')}`}
-                color="primary"
-                variant="outlined"
-              />
+              <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+                <Chip 
+                  label={`${translate('Current Threshold')}: ${formatNumber(vkSource?.calculatedThreshold || 0)} ${translate('views')}`}
+                  color="primary"
+                  variant="outlined"
+                  size="medium"
+                />
+              </Box>
+              
               {vkSource?.lastPostsData?.lastAnalysisDate && (
-                <Typography variant="caption" display="block" mt={1}>
+                <Typography variant="caption" display="block" mt={1} color="text.secondary">
                   {translate('Last calculated')}: {new Date(vkSource.lastPostsData.lastAnalysisDate).toLocaleString()}
                 </Typography>
               )}
-              <Typography variant="caption" display="block" color="textSecondary">
-                {translate('Method')}: {formData.thresholdMethod === 'statistical' ? translate('Statistical (Mean + SD)') : translate('Average (Mean)')}
-              </Typography>
             </Box>
           )}
           
@@ -627,12 +734,27 @@ const SourceForm = () => {
                   <Typography variant="subtitle1" gutterBottom>
                     {translate('Advanced Calculation Options')}
                   </Typography>
+                  {vkSource?.statisticalMultiplier !== undefined && (
+                    <Box sx={{ 
+                      display: 'flex', 
+                      justifyContent: 'flex-end', 
+                      mb: 1
+                    }}>
+                      <Chip
+                        color="primary"
+                        variant="outlined"
+                        size="small"
+                        label={`${translate('Current multiplier')}: ${parseFloat(vkSource.statisticalMultiplier).toFixed(1)}`}
+                      />
+                    </Box>
+                  )}
                   <AdvancedThresholdCalculator 
                     sourceId={id} 
                     loading={calculatingThreshold} 
                     currentMethod={formData.thresholdMethod} 
                     onCalculate={handleCalculateThreshold} 
                     onMethodChange={handleThresholdMethodChange} 
+                    initialMultiplier={vkSource?.statisticalMultiplier} 
                   />
                 </Grid>
               </Grid>

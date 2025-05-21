@@ -44,6 +44,10 @@ const VkSourceSchema = new mongoose.Schema({
     enum: ['average', 'statistical'],
     default: 'statistical'
   },
+  statisticalMultiplier: {
+    type: Number,
+    default: 1.5
+  },
   manualThreshold: {
     type: Number,
     default: 0
@@ -69,6 +73,7 @@ const VkSourceSchema = new mongoose.Schema({
     postsAnalyzed: { type: Number, default: 0 },
     lastAnalysisDate: { type: Date, default: null },
     thresholdMethod: { type: String, default: 'statistical' },
+    multiplierUsed: { type: Number, default: 1.5 },
     detailedStats: { type: DetailedStatsSchema, default: () => ({}) }
   },
   createdBy: {

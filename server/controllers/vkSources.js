@@ -5,6 +5,7 @@ const VkSource = require('../models/VkSource');
 const Mapping = require('../models/Mapping');
 const vkService = require('../services/vk');
 const schedulerService = require('../services/scheduler');
+const Post = require('../models/Post');
 
 // Get all VK sources
 router.get('/', async (req, res) => {
@@ -211,6 +212,17 @@ router.put(
       
       if (active !== undefined) {
         source.active = active;
+        
+        // If source is deactivated, immediately stop its job
+        if (active === false) {
+          const sourceId = source._id.toString();
+          const cronJobs = schedulerService.getCronJobs();
+          if (cronJobs[sourceId]) {
+            console.log(`Stopping scheduler job for deactivated source ${sourceId}`);
+            cronJobs[sourceId].job.stop();
+            delete cronJobs[sourceId];
+          }
+        }
       }
       
       // Save updated source
@@ -250,8 +262,20 @@ router.delete('/:id', async (req, res) => {
     // First, delete all mappings that reference this source
     await Mapping.deleteMany({ vkSource: req.params.id });
     
+    // Also delete all posts from this source
+    await Post.deleteMany({ vkSource: req.params.id });
+    
     // Then delete the source
     await source.deleteOne();
+    
+    // Immediately stop the cron job if it exists
+    const sourceId = req.params.id.toString();
+    const cronJobs = schedulerService.getCronJobs();
+    if (cronJobs[sourceId]) {
+      console.log(`Stopping scheduler job for deleted source ${sourceId}`);
+      cronJobs[sourceId].job.stop();
+      delete cronJobs[sourceId];
+    }
     
     // Update scheduler (don't await)
     schedulerService.updateSourceSchedules().catch(err => {
@@ -292,8 +316,36 @@ router.post('/:id/calculate-threshold',
       // Use provided posts count or default to 200
       const postsCount = req.body.postsCount || 200;
       
-      // Use provided multiplier for statistical method (default is 1.5)
-      const multiplier = req.body.multiplier || 1.5;
+      // Carefully parse and validate multiplier value
+      let multiplier;
+      
+      if (req.body.multiplier !== undefined) {
+        // Explicitly provided in request - parse and validate
+        multiplier = parseFloat(req.body.multiplier);
+        if (isNaN(multiplier)) {
+          console.warn(`Invalid multiplier value provided: ${req.body.multiplier}, using default`);
+          multiplier = source.statisticalMultiplier || 1.5;
+        }
+      } else {
+        // Not provided - use source value or default
+        multiplier = source.statisticalMultiplier !== undefined ? source.statisticalMultiplier : 1.5;
+      }
+      
+      console.log(`Threshold calculation request for source ${req.params.id} (${source.name}):`);
+      console.log(`- Method: ${thresholdMethod}`);
+      console.log(`- Request body multiplier: ${req.body.multiplier !== undefined ? req.body.multiplier : 'NOT PROVIDED'} (${typeof req.body.multiplier})`);
+      console.log(`- Parsed multiplier: ${multiplier} (${typeof multiplier})`);
+      console.log(`- Current source multiplier: ${source.statisticalMultiplier} (${typeof source.statisticalMultiplier})`);
+      
+      // Always store the multiplier in the source for future calculations
+      if (multiplier !== undefined && !isNaN(multiplier)) {
+        source.statisticalMultiplier = multiplier;
+        console.log(`- Setting source.statisticalMultiplier = ${multiplier}`);
+        // Save immediately to ensure it's persisted
+        await source.save();
+      } else {
+        console.warn('Skipping statisticalMultiplier update due to invalid value');
+      }
       
       // Fetch posts with the specified count
       const posts = await vkService.fetchPosts(source.groupId, postsCount);
@@ -319,6 +371,7 @@ router.post('/:id/calculate-threshold',
         postsAnalyzed: posts.length,
         lastAnalysisDate: new Date(),
         thresholdMethod: thresholdMethod,
+        multiplierUsed: thresholdMethod === 'statistical' ? multiplier : null,
         detailedStats: detailedStats
       };
       
@@ -333,10 +386,16 @@ router.post('/:id/calculate-threshold',
         calculatedThreshold: calculatedThreshold,
         effectiveThreshold: source.thresholdType === 'manual' ? source.manualThreshold : calculatedThreshold,
         postsAnalyzed: posts.length,
-        multiplier: thresholdMethod === 'statistical' ? multiplier : null,
+        multiplier: multiplier,
+        statisticalMultiplier: source.statisticalMultiplier,
+        lastPostsData: {
+          multiplierUsed: source.lastPostsData?.multiplierUsed || null,
+          lastAnalysisDate: source.lastPostsData?.lastAnalysisDate || null
+        },
         detailedStats: detailedStats
       };
       
+      console.log('Sending response with multiplier:', multiplier);
       res.json(response);
     } catch (error) {
       // Check if this is a VK authentication error
@@ -357,7 +416,8 @@ router.post('/:id/calculate-threshold',
 // Update threshold method for a source
 router.post('/:id/threshold-method',
   [
-    body('thresholdMethod').isIn(['average', 'statistical']).withMessage('Invalid threshold method')
+    body('thresholdMethod').isIn(['average', 'statistical']).withMessage('Invalid threshold method'),
+    body('multiplier').optional().isFloat({ min: 0.5, max: 3.0 }).withMessage('Multiplier must be between 0.5 and 3.0')
   ],
   async (req, res) => {
     // Validate request
@@ -373,14 +433,24 @@ router.post('/:id/threshold-method',
         return res.status(404).json({ message: 'VK source not found' });
       }
       
-      const { thresholdMethod } = req.body;
+      const { thresholdMethod, multiplier } = req.body;
       
       // Update threshold method
       source.thresholdMethod = thresholdMethod;
       
+      // Always update multiplier when using statistical method, even if not explicitly provided
+      if (thresholdMethod === 'statistical') {
+        // Use provided multiplier or fall back to existing one or default
+        source.statisticalMultiplier = multiplier !== undefined ? multiplier : (source.statisticalMultiplier || 1.5);
+      }
+      
       // Recalculate if auto threshold
       if (source.thresholdType === 'auto') {
-        const updatedSource = await vkService.updateSourceThreshold(source._id, thresholdMethod);
+        const updatedSource = await vkService.updateSourceThreshold(
+          source._id, 
+          thresholdMethod, 
+          thresholdMethod === 'statistical' ? (multiplier || source.statisticalMultiplier) : null
+        );
         res.json(updatedSource);
       } else {
         // Just save the new method without recalculating
@@ -441,8 +511,19 @@ router.get('/:id/threshold-stats', async (req, res) => {
       effectiveThreshold: source.thresholdType === 'manual' ? source.manualThreshold : source.calculatedThreshold,
       lastAnalysisDate: source.lastPostsData?.lastAnalysisDate || null,
       postsAnalyzed: source.lastPostsData?.postsAnalyzed || 0,
+      // Send exact values from the database
+      statisticalMultiplier: source.statisticalMultiplier,
+      // Only default to 1.5 if no source values exist whatsoever
+      multiplier: source.statisticalMultiplier !== undefined ? source.statisticalMultiplier : 1.5,
+      multiplierUsed: source.lastPostsData?.multiplierUsed || source.statisticalMultiplier,
       detailedStats: source.lastPostsData?.detailedStats || {}
     };
+    
+    console.log('Sending threshold stats with multipliers:', {
+      statisticalMultiplier: stats.statisticalMultiplier,
+      multiplier: stats.multiplier,
+      multiplierUsed: stats.multiplierUsed
+    });
     
     res.json(stats);
   } catch (error) {

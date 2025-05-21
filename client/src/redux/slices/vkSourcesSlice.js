@@ -172,6 +172,20 @@ export const calculateThresholdAdvanced = createAsyncThunk(
     try {
       const { auth } = getState();
       
+      // Parse and validate multiplier as a number if present
+      if (params.multiplier !== undefined) {
+        const multiplier = parseFloat(params.multiplier);
+        if (!isNaN(multiplier)) {
+          params.multiplier = multiplier;
+          console.log(`Validated multiplier for calculation: ${multiplier} (${typeof multiplier})`);
+        } else {
+          console.warn(`Invalid multiplier value: ${params.multiplier}, using default`);
+          delete params.multiplier; // Let server use default
+        }
+      }
+      
+      console.log('Sending calculateThresholdAdvanced request with params:', params);
+      
       const config = {
         headers: {
           'Content-Type': 'application/json',
@@ -180,6 +194,8 @@ export const calculateThresholdAdvanced = createAsyncThunk(
       };
       
       const response = await axios.post(`/api/vk-sources/${id}/calculate-threshold`, params, config);
+      
+      console.log('Received calculateThresholdAdvanced response:', response.data);
       
       return response.data;
     } catch (error) {
@@ -269,7 +285,19 @@ const vkSourcesSlice = createSlice({
     });
     builder.addCase(fetchVkSourceById.fulfilled, (state, action) => {
       state.loading = false;
-      state.vkSource = action.payload;
+      
+      // Store the source as-is without modifying the multiplier
+      const source = action.payload;
+      console.log('Received source:', source);
+      console.log(`Source statisticalMultiplier value: ${source.statisticalMultiplier}`);
+      
+      // Only set default if server explicitly sends null (not if undefined or 0)
+      if (source.statisticalMultiplier === null) {
+        console.log('Source had null statisticalMultiplier, setting default placeholder');
+        source.statisticalMultiplier = undefined; // Let component handle defaults
+      }
+      
+      state.vkSource = source;
     });
     builder.addCase(fetchVkSourceById.rejected, (state, action) => {
       state.loading = false;
@@ -363,17 +391,63 @@ const vkSourcesSlice = createSlice({
       state.calculatingThreshold = false;
       state.thresholdStats = action.payload;
       
-      // Update source in sources array if it has an _id property
-      if (action.payload._id) {
-        const index = state.vkSources.findIndex((source) => source._id === action.payload._id);
-        if (index !== -1) {
-          state.vkSources[index] = action.payload;
+      console.log('Processing calculateThresholdAdvanced response:', action.payload);
+      
+      // If we have a current source, update its relevant fields based on the calculation results
+      if (state.vkSource && state.vkSource._id === action.payload.sourceId) {
+        state.vkSource.calculatedThreshold = action.payload.calculatedThreshold;
+        state.vkSource.thresholdMethod = action.payload.thresholdMethod;
+        
+        // Always update statistical multiplier if it's provided in the response
+        if (action.payload.multiplier !== undefined) {
+          console.log(`Updating vkSource.statisticalMultiplier to ${action.payload.multiplier}`);
+          state.vkSource.statisticalMultiplier = action.payload.multiplier;
+        } else if (action.payload.statisticalMultiplier !== undefined) {
+          console.log(`Updating vkSource.statisticalMultiplier to ${action.payload.statisticalMultiplier} (from statisticalMultiplier field)`);
+          state.vkSource.statisticalMultiplier = action.payload.statisticalMultiplier;
         }
         
-        // Update current source if it's the same
-        if (state.vkSource && state.vkSource._id === action.payload._id) {
-          state.vkSource = action.payload;
+        // Update lastPostsData
+        if (!state.vkSource.lastPostsData) {
+          state.vkSource.lastPostsData = {};
         }
+        
+        state.vkSource.lastPostsData.averageViews = action.payload.detailedStats?.mean || 0;
+        state.vkSource.lastPostsData.postsAnalyzed = action.payload.postsAnalyzed || 0;
+        state.vkSource.lastPostsData.lastAnalysisDate = new Date().toISOString();
+        state.vkSource.lastPostsData.thresholdMethod = action.payload.thresholdMethod;
+        state.vkSource.lastPostsData.multiplierUsed = 
+          action.payload.thresholdMethod === 'statistical' ? action.payload.multiplier : null;
+        state.vkSource.lastPostsData.detailedStats = action.payload.detailedStats;
+      }
+      
+      // Also update the source in the sources array if it exists
+      const sourceIndex = state.vkSources.findIndex(source => source._id === action.payload.sourceId);
+      if (sourceIndex !== -1) {
+        state.vkSources[sourceIndex].calculatedThreshold = action.payload.calculatedThreshold;
+        state.vkSources[sourceIndex].thresholdMethod = action.payload.thresholdMethod;
+        
+        // Always update statistical multiplier if it's provided in the response
+        if (action.payload.multiplier !== undefined) {
+          console.log(`Updating vkSources[${sourceIndex}].statisticalMultiplier to ${action.payload.multiplier}`);
+          state.vkSources[sourceIndex].statisticalMultiplier = action.payload.multiplier;
+        } else if (action.payload.statisticalMultiplier !== undefined) {
+          console.log(`Updating vkSources[${sourceIndex}].statisticalMultiplier to ${action.payload.statisticalMultiplier} (from statisticalMultiplier field)`);
+          state.vkSources[sourceIndex].statisticalMultiplier = action.payload.statisticalMultiplier;
+        }
+        
+        // Update lastPostsData 
+        if (!state.vkSources[sourceIndex].lastPostsData) {
+          state.vkSources[sourceIndex].lastPostsData = {};
+        }
+        
+        state.vkSources[sourceIndex].lastPostsData.averageViews = action.payload.detailedStats?.mean || 0;
+        state.vkSources[sourceIndex].lastPostsData.postsAnalyzed = action.payload.postsAnalyzed || 0;
+        state.vkSources[sourceIndex].lastPostsData.lastAnalysisDate = new Date().toISOString();
+        state.vkSources[sourceIndex].lastPostsData.thresholdMethod = action.payload.thresholdMethod;
+        state.vkSources[sourceIndex].lastPostsData.multiplierUsed = 
+          action.payload.thresholdMethod === 'statistical' ? action.payload.multiplier : null;
+        state.vkSources[sourceIndex].lastPostsData.detailedStats = action.payload.detailedStats;
       }
     });
     builder.addCase(calculateThresholdAdvanced.rejected, (state, action) => {
@@ -389,6 +463,25 @@ const vkSourcesSlice = createSlice({
     builder.addCase(getThresholdStats.fulfilled, (state, action) => {
       state.thresholdStatsLoading = false;
       state.thresholdStats = action.payload;
+      
+      // Update multiplier in source when present in response
+      // Ensure we handle all numerical values including zero
+      if (state.vkSource && state.vkSource._id === action.payload.sourceId) {
+        // First check if the response has a valid multiplier
+        const hasMultiplier = action.payload.multiplier !== undefined && 
+                              action.payload.multiplier !== null;
+                          
+        const hasStatisticalMultiplier = action.payload.statisticalMultiplier !== undefined && 
+                                         action.payload.statisticalMultiplier !== null;
+        
+        if (hasMultiplier) {
+          console.log(`Updating vkSource statisticalMultiplier to ${action.payload.multiplier} (from multiplier field)`);
+          state.vkSource.statisticalMultiplier = action.payload.multiplier;
+        } else if (hasStatisticalMultiplier) {
+          console.log(`Updating vkSource statisticalMultiplier to ${action.payload.statisticalMultiplier} (from statisticalMultiplier field)`);
+          state.vkSource.statisticalMultiplier = action.payload.statisticalMultiplier;
+        }
+      }
     });
     builder.addCase(getThresholdStats.rejected, (state, action) => {
       state.thresholdStatsLoading = false;

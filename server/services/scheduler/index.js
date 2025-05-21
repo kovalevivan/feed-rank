@@ -87,10 +87,10 @@ const updateSourceSchedules = async () => {
       console.log(`Scheduled job for source ${source.name} (${sourceId}): ${cronExpression}`);
     }
     
-    // Clean up removed sources
+    // Clean up removed or deactivated sources
     for (const jobId of Object.keys(cronJobs)) {
       if (!currentSourceIds.has(jobId)) {
-        console.log(`Removing job for deleted source ${jobId}`);
+        console.log(`Removing job for deleted or deactivated source ${jobId}`);
         cronJobs[jobId].job.stop();
         delete cronJobs[jobId];
       }

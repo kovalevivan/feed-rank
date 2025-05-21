@@ -267,22 +267,26 @@ const calculateAverageViews = (posts) => {
 };
 
 /**
- * Calculates the threshold using mean + 1.5 standard deviation of view counts
+ * Calculates the threshold using mean + multiplier * standard deviation of view counts
  * This provides a more statistically sound way to identify viral posts
  * @param {Array} posts - Array of VK posts
+ * @param {number} multiplier - Multiplier for standard deviation
  * @returns {number} - Calculated threshold
  */
-const calculateStatisticalThreshold = (posts) => {
+const calculateStatisticalThreshold = (posts, multiplier) => {
   if (!posts || posts.length === 0) return 0;
+  if (multiplier === undefined || multiplier === null) {
+    console.error(`WARNING: No multiplier provided to calculateStatisticalThreshold, using default 1.5`);
+    multiplier = 1.5;
+  }
   
   // Get detailed statistics
   const stats = calculateDetailedStats(posts);
   
-  // Calculate threshold as mean + 1.5 standard deviations
-  // This will identify approximately the top ~7% as viral (if normally distributed)
-  const threshold = Math.round(stats.mean + (1.5 * stats.standardDeviation));
+  // Calculate threshold as mean + multiplier * standard deviations
+  const threshold = Math.round(stats.mean + (multiplier * stats.standardDeviation));
   
-  console.log(`Statistical threshold calculation: Mean = ${stats.mean}, SD = ${stats.standardDeviation}, Threshold = ${threshold}`);
+  console.log(`Statistical threshold calculation: Mean = ${stats.mean}, SD = ${stats.standardDeviation}, Multiplier = ${multiplier}, Threshold = ${threshold}`);
   console.log(`Additional stats: Median = ${stats.median}, Min = ${stats.min}, Max = ${stats.max}`);
   console.log(`Percentiles: 75th = ${stats.percentiles.p75}, 90th = ${stats.percentiles.p90}, 95th = ${stats.percentiles.p95}, 99th = ${stats.percentiles.p99}`);
   
@@ -293,22 +297,35 @@ const calculateStatisticalThreshold = (posts) => {
  * Updates the calculated threshold for a VK source
  * @param {string} sourceId - VK source ID in our database
  * @param {string} thresholdMethod - Method to use for threshold calculation ('average' or 'statistical')
+ * @param {number} multiplier - Multiplier for statistical threshold (default: 1.5)
  * @returns {Promise<Object>} - Updated VK source
  */
-const updateSourceThreshold = async (sourceId, thresholdMethod = 'statistical') => {
+const updateSourceThreshold = async (sourceId, thresholdMethod = 'statistical', multiplier = 1.5) => {
   try {
     validateVkCredentials();
     
+    console.log(`=== Updating threshold for source ${sourceId} ===`);
+    console.log(`Method: ${thresholdMethod}, Provided multiplier: ${multiplier}`);
+    
     const source = await VkSource.findById(sourceId);
     if (!source) throw new Error(`VK source with ID ${sourceId} not found`);
+    
+    console.log(`Found source: ${source.name}`);
+    console.log(`Current statisticalMultiplier: ${source.statisticalMultiplier || 'NOT SET'}`);
     
     const posts = await fetchPosts(source.groupId, 200);
     
     let calculatedThreshold;
     let detailedStats = calculateDetailedStats(posts);
     
+    // Always update the statisticalMultiplier, even if not using statistical method
+    // This ensures it's available if they switch methods later
+    const usedMultiplier = multiplier || source.statisticalMultiplier || 1.5;
+    source.statisticalMultiplier = usedMultiplier;
+    console.log(`Setting source.statisticalMultiplier = ${usedMultiplier}`);
+    
     if (thresholdMethod === 'statistical') {
-      calculatedThreshold = calculateStatisticalThreshold(posts);
+      calculatedThreshold = calculateStatisticalThreshold(posts, usedMultiplier);
     } else {
       calculatedThreshold = calculateAverageViews(posts);
     }
@@ -321,10 +338,16 @@ const updateSourceThreshold = async (sourceId, thresholdMethod = 'statistical') 
       postsAnalyzed: posts.length,
       lastAnalysisDate: new Date(),
       thresholdMethod: thresholdMethod,
+      multiplierUsed: thresholdMethod === 'statistical' ? usedMultiplier : null,
       detailedStats: detailedStats // Store the detailed statistics
     };
     
+    console.log(`Saving source with statisticalMultiplier = ${source.statisticalMultiplier}`);
     await source.save();
+    
+    console.log(`Source saved successfully`);
+    console.log(`Post-save check - source.statisticalMultiplier = ${source.statisticalMultiplier}`);
+    
     return source;
   } catch (error) {
     console.error(`Error updating threshold for VK source ${sourceId}:`, error);
