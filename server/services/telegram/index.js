@@ -538,10 +538,10 @@ const forwardPost = async (post, channel) => {
     // Prepare post caption with HTML formatting
     let caption = `<b>From VK group: ${escapeHtml(sourceName)}</b>\n\n`;
     caption += `${escapeHtml(post.text)}\n\n`;
-    caption += `👁 Views: <b>${post.viewCount.toLocaleString()}</b>\n`;
-    caption += `👍 Likes: <b>${post.likeCount.toLocaleString()}</b>\n`;
-    caption += `🔄 Reposts: <b>${post.repostCount.toLocaleString()}</b>\n`;
-    caption += post.publishedAt ? `📅 ${formatDate(post.publishedAt)}\n\n` : '\n';
+    caption += `👁 Просмотры: <b>${post.viewCount.toLocaleString()}</b>\n`;
+    caption += `👍 Лайки: <b>${post.likeCount.toLocaleString()}</b>\n`;
+    caption += `🔄 Репосты: <b>${post.repostCount.toLocaleString()}</b>\n`;
+    caption += post.publishedAt ? `📅 Опубликовано: ${formatDate(post.publishedAt)}\n\n` : '\n';
     caption += `<a href="${post.originalPostUrl}">View original post</a>`;
     
     let sentMessage;
