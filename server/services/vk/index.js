@@ -424,10 +424,36 @@ const processSourcePosts = async (sourceId) => {
             const thumbnail = photos.find(p => p.type === 'x') || photos[0] || {};
             attachment.thumbnailUrl = thumbnail.url;
           } else if (att.type === 'video') {
+            // Create the VK video URL
             attachment.url = `https://vk.com/video${att.video.owner_id}_${att.video.id}`;
+            
+            // Extract thumbnail
             attachment.thumbnailUrl = att.video.image?.length > 0 
               ? att.video.image[att.video.image.length - 1].url 
               : null;
+              
+            // Try to extract direct video URL
+            // First check if direct URLs are provided in the API response
+            if (att.video.files) {
+              // Choose the best quality available
+              const qualities = ['mp4_1080', 'mp4_720', 'mp4_480', 'mp4_360', 'mp4_240'];
+              for (const quality of qualities) {
+                if (att.video.files[quality]) {
+                  attachment.directUrl = att.video.files[quality];
+                  break;
+                }
+              }
+            }
+            
+            // Include duration if available
+            if (att.video.duration) {
+              attachment.duration = att.video.duration;
+            }
+            
+            // Include video title if available
+            if (att.video.title) {
+              attachment.title = att.video.title;
+            }
           } else if (att.type === 'link') {
             attachment.url = att.link.url;
             attachment.thumbnailUrl = att.link.photo?.sizes?.length > 0 
@@ -505,6 +531,107 @@ const processSourcePosts = async (sourceId) => {
   }
 };
 
+/**
+ * Extract owner and video IDs from a VK video URL
+ * @param {string} url - VK video URL
+ * @returns {Object|null} - Object with ownerId and videoId, or null if invalid URL
+ */
+const extractVideoIds = (url) => {
+  if (!url) return null;
+  
+  // Try various formats of VK video URLs
+  const patterns = [
+    /video(-?\d+)_(\d+)/, // Standard format: video{owner_id}_{video_id}
+    /video\/(-?\d+)_(\d+)/, // Alternative format: video/{owner_id}_{video_id}
+    /video.php\?vid=(\d+)&owner_id=(-?\d+)/ // Old format: video.php?vid={video_id}&owner_id={owner_id}
+  ];
+  
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) {
+      // For the standard and alternative formats
+      if (pattern === patterns[0] || pattern === patterns[1]) {
+        return {
+          ownerId: match[1],
+          videoId: match[2]
+        };
+      }
+      // For the old format (note the parameter order difference)
+      else if (pattern === patterns[2]) {
+        return {
+          ownerId: match[2],
+          videoId: match[1]
+        };
+      }
+    }
+  }
+  
+  return null;
+};
+
+/**
+ * Get direct video URLs from VK API
+ * @param {string} ownerId - Video owner ID
+ * @param {string} videoId - Video ID
+ * @param {string} accessKey - Access key (optional)
+ * @returns {Promise<Object>} - Object with video data including direct URLs
+ */
+const getVideoUrls = async (ownerId, videoId, accessKey) => {
+  try {
+    validateVkCredentials();
+    
+    // Request video data from VK API
+    const response = await vk.api.video.get({
+      videos: `${ownerId}_${videoId}${accessKey ? '_' + accessKey : ''}`,
+      extended: 1
+    });
+    
+    if (!response.items || response.items.length === 0) {
+      throw new Error('No video data returned from VK API');
+    }
+    
+    const videoData = response.items[0];
+    
+    // Return relevant video data
+    return {
+      title: videoData.title || 'VK Video',
+      duration: videoData.duration || 0,
+      playerUrl: videoData.player,
+      files: videoData.files || {},
+      image: videoData.image && videoData.image.length > 0 
+        ? videoData.image[videoData.image.length - 1].url 
+        : null,
+      directUrl: extractBestVideoUrl(videoData)
+    };
+  } catch (error) {
+    console.error('Error getting video URLs:', error);
+    return {
+      playerUrl: `https://vk.com/video${ownerId}_${videoId}${accessKey ? '_' + accessKey : ''}`,
+      directUrl: null
+    };
+  }
+};
+
+/**
+ * Extract the best quality direct URL from video data
+ * @param {Object} videoData - Video data from VK API
+ * @returns {string|null} - Best quality direct URL or null
+ */
+const extractBestVideoUrl = (videoData) => {
+  if (!videoData.files) return null;
+  
+  // VK provides multiple quality options, try to get the highest quality
+  const qualities = ['mp4_1080', 'mp4_720', 'mp4_480', 'mp4_360', 'mp4_240'];
+  
+  for (const quality of qualities) {
+    if (videoData.files[quality]) {
+      return videoData.files[quality];
+    }
+  }
+  
+  return null;
+};
+
 module.exports = {
   fetchPosts,
   resolveGroupId,
@@ -512,5 +639,8 @@ module.exports = {
   calculateStatisticalThreshold,
   calculateDetailedStats,
   updateSourceThreshold,
-  processSourcePosts
+  processSourcePosts,
+  extractVideoIds,
+  getVideoUrls,
+  extractBestVideoUrl
 }; 

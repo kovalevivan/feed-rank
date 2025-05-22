@@ -1,0 +1,5 @@
+/server/node_modules/
+/node_modules/
+/.env
+/.idea/
+/feedrank2.iml

@@ -4,6 +4,13 @@ const TelegramChannel = require('../../models/TelegramChannel');
 const Mapping = require('../../models/Mapping');
 const Post = require('../../models/Post');
 const vkService = require('../vk');
+const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+// Temporary directory for downloaded videos
+const tempDir = os.tmpdir();
 
 // Initialize Telegram Bot
 let bot;
@@ -423,6 +430,68 @@ const registerCommands = () => {
 };
 
 /**
+ * Download a video file from a URL
+ * @param {string} url - Video URL
+ * @param {string} filename - Output filename
+ * @returns {Promise<string>} - Path to downloaded file
+ */
+const downloadVideo = async (url, filename) => {
+  const outputPath = path.join(tempDir, filename);
+  
+  console.log(`Downloading video from ${url} to ${outputPath}`);
+  
+  try {
+    const response = await axios({
+      method: 'get',
+      url: url,
+      responseType: 'stream',
+      timeout: 30000, // 30 seconds timeout
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+
+    const writer = fs.createWriteStream(outputPath);
+    
+    return new Promise((resolve, reject) => {
+      response.data.pipe(writer);
+      
+      let error = null;
+      writer.on('error', err => {
+        error = err;
+        writer.close();
+        reject(err);
+      });
+      
+      writer.on('close', () => {
+        if (!error) {
+          console.log(`Video downloaded successfully to ${outputPath}`);
+          resolve(outputPath);
+        }
+      });
+    });
+  } catch (error) {
+    console.error(`Error downloading video from ${url}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Clean up temporary files
+ * @param {string} filePath - Path to file to delete
+ */
+const cleanupTempFiles = (filePath) => {
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      console.log(`Deleted temporary file: ${filePath}`);
+    }
+  } catch (error) {
+    console.error(`Error deleting temporary file ${filePath}:`, error);
+  }
+};
+
+/**
  * Forwards a post to a Telegram channel
  * @param {Object} post - Post document from database
  * @param {Object} channel - Telegram channel document from database
@@ -451,12 +520,28 @@ const forwardPost = async (post, channel) => {
         .replace(/>/g, '&gt;');
     };
     
+    // Format date
+    const formatDate = (date) => {
+      if (!date) return '';
+      
+      const d = new Date(date);
+      return d.toLocaleString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+    };
+    
     // Prepare post caption with HTML formatting
     let caption = `<b>From VK group: ${escapeHtml(sourceName)}</b>\n\n`;
     caption += `${escapeHtml(post.text)}\n\n`;
     caption += `👁 Views: <b>${post.viewCount.toLocaleString()}</b>\n`;
-    caption += `👍 Likes: ${post.likeCount.toLocaleString()}\n`;
-    caption += `🔄 Reposts: ${post.repostCount.toLocaleString()}\n\n`;
+    caption += `👍 Likes: <b>${post.likeCount.toLocaleString()}</b>\n`;
+    caption += `🔄 Reposts: <b>${post.repostCount.toLocaleString()}</b>\n`;
+    caption += post.publishedAt ? `📅 ${formatDate(post.publishedAt)}\n\n` : '\n';
     caption += `<a href="${post.originalPostUrl}">View original post</a>`;
     
     let sentMessage;
@@ -534,38 +619,108 @@ const forwardPost = async (post, channel) => {
     // If we have a video attachment, send a video or link to it
     else if (videoAttachment) {
       try {
-        // For videos, we'll use sendVideo if it's a direct video URL
-        if (videoAttachment.url.match(/\.(mp4|mov|avi|mkv)$/i)) {
-          sentMessage = await bot.sendVideo(
-            channel.chatId,
-            videoAttachment.url,
-            {
-              caption: caption,
-              parse_mode: 'HTML'
-            }
-          );
+        // First, try with direct URL if available
+        if (videoAttachment.directUrl && videoAttachment.directUrl.match(/\.(mp4|mov|avi|mkv)$/i)) {
+          console.log(`Attempting to send video with direct URL: ${videoAttachment.directUrl}`);
+          try {
+            sentMessage = await bot.sendVideo(
+              channel.chatId,
+              videoAttachment.directUrl,
+              {
+                caption: caption,
+                parse_mode: 'HTML',
+                thumbnail: videoAttachment.thumbnailUrl,
+                supports_streaming: true
+              }
+            );
+            console.log('Successfully sent video using direct URL');
+          } catch (directVideoError) {
+            console.error(`Error sending video with direct URL: ${directVideoError.message}`);
+            throw directVideoError; // Let the next section handle it
+          }
         } else {
-          // If it's not a direct video file, send a message with the video preview 
+          // If no direct URL available, try to extract video info from VK
+          console.log(`No direct URL available, trying to extract from VK URL: ${videoAttachment.url}`);
+          const videoIds = vkService.extractVideoIds(videoAttachment.url);
+          
+          if (videoIds) {
+            try {
+              // Get video URLs from VK API
+              const videoData = await vkService.getVideoUrls(
+                videoIds.ownerId, 
+                videoIds.videoId
+              );
+              
+              if (videoData.directUrl) {
+                // We have a direct URL from the API, try to download and send it
+                console.log(`Got direct URL from VK API: ${videoData.directUrl}`);
+                
+                try {
+                  // Download the video
+                  const videoFilename = `vk_video_${videoIds.ownerId}_${videoIds.videoId}.mp4`;
+                  const videoPath = await downloadVideo(videoData.directUrl, videoFilename);
+                  
+                  // Send the video to Telegram
+                  sentMessage = await bot.sendVideo(
+                    channel.chatId,
+                    videoPath,
+                    {
+                      caption: caption,
+                      parse_mode: 'HTML',
+                      thumb: videoData.image,
+                      duration: videoData.duration,
+                      supports_streaming: true
+                    }
+                  );
+                  
+                  console.log('Successfully sent downloaded video');
+                  
+                  // Clean up the temporary file
+                  cleanupTempFiles(videoPath);
+                } catch (downloadError) {
+                  console.error(`Error downloading/sending video: ${downloadError.message}`);
+                  throw downloadError; // Let the next section handle it
+                }
+              } else {
+                throw new Error('No direct video URL found in API response');
+              }
+            } catch (videoApiError) {
+              console.error(`Error getting video data from VK API: ${videoApiError.message}`);
+              throw videoApiError; // Let the next section handle it
+            }
+          } else {
+            throw new Error(`Could not extract video IDs from URL: ${videoAttachment.url}`);
+          }
+        }
+      } catch (videoError) {
+        console.error(`All video sending methods failed for post ${post._id}:`, videoError);
+        
+        // Fallback to regular message with video preview
+        try {
+          // Try to send with thumbnail and movie camera emoji
+          const videoMessage = `${caption}\n\n🎬 <b>Video available at:</b> <a href="${videoAttachment.url}">Watch on VK</a>`;
+          
           sentMessage = await bot.sendMessage(
             channel.chatId, 
-            caption, 
+            videoMessage, 
             { 
               parse_mode: 'HTML',
-              disable_web_page_preview: false
+              disable_web_page_preview: false // Enable preview for the video
+            }
+          );
+        } catch (fallbackError) {
+          console.error(`Even fallback video handling failed: ${fallbackError.message}`);
+          
+          // Last resort - plain text with link
+          sentMessage = await bot.sendMessage(
+            channel.chatId, 
+            `${caption}\n\n🎬 Video: ${videoAttachment.url}`, 
+            { 
+              parse_mode: 'HTML',
+              disable_web_page_preview: true
             }
           );
         }
-      } catch (mediaError) {
-        console.error(`Error handling video for post ${post._id}:`, mediaError);
-        // Fallback to regular message
-        sentMessage = await bot.sendMessage(
-          channel.chatId, 
-          `${caption}\n\n<a href="${videoAttachment.url}">View video</a>`, 
-          { 
-            parse_mode: 'HTML',
-            disable_web_page_preview: false
-          }
-        );
       }
     }
     // Default case - no media or unsupported media type
