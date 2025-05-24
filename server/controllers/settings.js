@@ -172,16 +172,9 @@ router.post('/initialize', async (req, res) => {
   try {
     const defaultSettings = [
       {
-        key: 'vk.posts_per_check',
-        value: 50,
-        description: 'Number of posts to fetch from each VK source during check',
-        category: 'vk',
-        isProtected: false
-      },
-      {
-        key: 'vk.posts_for_average',
-        value: 200,
-        description: 'Number of posts used to calculate average views',
+        key: 'vk.stop_words',
+        value: [],
+        description: 'List of words to filter out posts (comma-separated)',
         category: 'vk',
         isProtected: false
       },

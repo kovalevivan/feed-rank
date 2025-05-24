@@ -1,6 +1,7 @@
 const { VK } = require('vk-io');
 const VkSource = require('../../models/VkSource');
 const Post = require('../../models/Post');
+const Setting = require('../../models/Setting');
 
 // Initialize VK API client
 let vk;
@@ -313,7 +314,9 @@ const updateSourceThreshold = async (sourceId, thresholdMethod = 'statistical', 
     console.log(`Found source: ${source.name}`);
     console.log(`Current statisticalMultiplier: ${source.statisticalMultiplier || 'NOT SET'}`);
     
-    const posts = await fetchPosts(source.groupId, 200);
+    // Fixed value of 200 posts for threshold calculation
+    const postsForAverage = 200;
+    const posts = await fetchPosts(source.groupId, postsForAverage);
     
     let calculatedThreshold;
     let detailedStats = calculateDetailedStats(posts);
@@ -382,6 +385,41 @@ const processSourcePosts = async (sourceId) => {
     const postsToFetch = source.postsToCheck || 50;
     console.log(`Processing source ${sourceId}: Fetching ${postsToFetch} posts from VK group ${source.name} (ID: ${source.groupId})`);
     const posts = await fetchPosts(source.groupId, postsToFetch);
+    
+    // Get stop words from settings
+    const stopWordsSetting = await Setting.findOne({ key: 'vk.stop_words' });
+    let stopWords = [];
+    
+    if (stopWordsSetting) {
+      if (Array.isArray(stopWordsSetting.value)) {
+        // If value is already an array, use it directly
+        stopWords = stopWordsSetting.value
+          .filter(word => word && typeof word === 'string' && word.trim().length > 0)
+          .map(word => word.toLowerCase());
+      } else if (typeof stopWordsSetting.value === 'string') {
+        // If value is a string, split by commas, spaces, or newlines
+        stopWords = stopWordsSetting.value
+          .split(/[,\n\s]+/)
+          .map(word => word.trim().toLowerCase())
+          .filter(word => word.length > 0);
+      }
+    }
+    
+    console.log(`Using ${stopWords.length} stop words: ${stopWords.join(', ')}`);
+    
+    // Filter out posts containing stop words
+    const filteredPosts = stopWords.length > 0 
+      ? posts.filter(post => {
+          if (!post.text) return true; // Keep posts without text
+          
+          const postText = post.text.toLowerCase();
+          // Check if any stop word is in the post text
+          return !stopWords.some(word => postText.includes(word));
+        })
+      : posts;
+    
+    console.log(`Filtered out ${posts.length - filteredPosts.length} posts containing stop words`);
+    
     let viralCount = 0;
     let updatedCount = 0;
     let createdCount = 0;
@@ -389,7 +427,7 @@ const processSourcePosts = async (sourceId) => {
     let errorCount = 0;
     
     // Process each post
-    for (const post of posts) {
+    for (const post of filteredPosts) {
       const postId = post.id.toString();
       const viewCount = post.views?.count || 0;
       const isViral = viewCount > threshold;
@@ -525,7 +563,8 @@ const processSourcePosts = async (sourceId) => {
       updated: updatedCount,
       skipped: skippedCount,
       errors: errorCount,
-      viralPostsFound: viralCount
+      viralPostsFound: viralCount,
+      filteredByStopWords: posts.length - filteredPosts.length
     };
   } catch (error) {
     console.error(`Error processing posts for VK source ${sourceId}:`, error);
