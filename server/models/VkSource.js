@@ -60,6 +60,12 @@ const VkSourceSchema = new mongoose.Schema({
     type: Number,   // In minutes
     default: 60     // Default: hourly
   },
+  postsToCheck: {
+    type: Number,
+    default: 50,    // Default: 50 posts
+    min: 10,        // Minimum: 10 posts
+    max: 100        // Maximum: 100 posts (VK API limit)
+  },
   lastChecked: {
     type: Date,
     default: null

@@ -44,7 +44,8 @@ router.post(
     body('thresholdType').isIn(['auto', 'manual']).withMessage('Invalid threshold type'),
     body('thresholdMethod').optional().isIn(['average', 'statistical']).withMessage('Invalid threshold method'),
     body('manualThreshold').if(body('thresholdType').equals('manual')).isInt({ min: 1 }).withMessage('Manual threshold must be a positive number'),
-    body('checkFrequency').isInt({ min: 5 }).withMessage('Check frequency must be at least 5 minutes')
+    body('checkFrequency').isInt({ min: 5 }).withMessage('Check frequency must be at least 5 minutes'),
+    body('postsToCheck').optional().isInt({ min: 10, max: 100 }).withMessage('Posts to check must be between 10 and 100')
   ],
   async (req, res) => {
     // Validate request
@@ -54,7 +55,7 @@ router.post(
     }
     
     try {
-      const { name, thresholdType, thresholdMethod, manualThreshold, checkFrequency } = req.body;
+      const { name, thresholdType, thresholdMethod, manualThreshold, checkFrequency, postsToCheck } = req.body;
       
       // Resolve group ID from name
       let groupId;
@@ -88,6 +89,7 @@ router.post(
         thresholdMethod: thresholdMethod || 'statistical',
         manualThreshold: thresholdType === 'manual' ? manualThreshold : 0,
         checkFrequency: checkFrequency || 60, // Default to hourly
+        postsToCheck: postsToCheck || 50, // Default to 50
         createdBy: req.user?._id // If authentication is implemented
       });
       
@@ -133,6 +135,7 @@ router.put(
     body('thresholdMethod').optional().isIn(['average', 'statistical']).withMessage('Invalid threshold method'),
     body('manualThreshold').if(body('thresholdType').equals('manual')).isInt({ min: 1 }).withMessage('Manual threshold must be a positive number'),
     body('checkFrequency').optional().isInt({ min: 5 }).withMessage('Check frequency must be at least 5 minutes'),
+    body('postsToCheck').optional().isInt({ min: 10, max: 100 }).withMessage('Posts to check must be between 10 and 100'),
     body('active').optional().isBoolean().withMessage('Active must be boolean')
   ],
   async (req, res) => {
@@ -149,7 +152,7 @@ router.put(
         return res.status(404).json({ message: 'VK source not found' });
       }
       
-      const { name, thresholdType, thresholdMethod, manualThreshold, checkFrequency, active } = req.body;
+      const { name, thresholdType, thresholdMethod, manualThreshold, checkFrequency, postsToCheck, active } = req.body;
       
       // Update fields
       if (name !== undefined) {
@@ -208,6 +211,10 @@ router.put(
       
       if (checkFrequency !== undefined) {
         source.checkFrequency = checkFrequency;
+      }
+      
+      if (postsToCheck !== undefined) {
+        source.postsToCheck = postsToCheck;
       }
       
       if (active !== undefined) {

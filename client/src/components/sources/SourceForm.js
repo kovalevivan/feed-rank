@@ -436,6 +436,7 @@ const SourceForm = () => {
     thresholdMethod: 'statistical',
     manualThreshold: 1000,
     checkFrequency: 60,
+    postsToCheck: 50,
     active: true
   });
   
@@ -466,6 +467,7 @@ const SourceForm = () => {
         thresholdMethod: vkSource.thresholdMethod || 'statistical',
         manualThreshold: vkSource.manualThreshold || 1000,
         checkFrequency: vkSource.checkFrequency || 60,
+        postsToCheck: vkSource.postsToCheck || 50,
         active: vkSource.active !== undefined ? vkSource.active : true
       });
     }
@@ -511,7 +513,8 @@ const SourceForm = () => {
     const sourceData = {
       ...formData,
       manualThreshold: parseInt(formData.manualThreshold),
-      checkFrequency: parseInt(formData.checkFrequency)
+      checkFrequency: parseInt(formData.checkFrequency),
+      postsToCheck: parseInt(formData.postsToCheck)
     };
     
     if (id && id !== 'new') {
@@ -662,6 +665,22 @@ const SourceForm = () => {
               inputProps: { min: 5 }
             }}
             helperText={translate('How often to check for new posts (minimum 5 minutes, default 60 minutes)')}
+          />
+          
+          <TextField
+            fullWidth
+            label={translate('Posts to Check')}
+            name="postsToCheck"
+            type="number"
+            value={formData.postsToCheck}
+            onChange={handleChange}
+            margin="normal"
+            required
+            InputProps={{
+              endAdornment: <InputAdornment position="end">{translate('posts')}</InputAdornment>,
+              inputProps: { min: 10, max: 100 }
+            }}
+            helperText={translate('How many posts to check each time (minimum 10, maximum 100, default 50)')}
           />
           
           <Divider sx={{ my: 3 }} />

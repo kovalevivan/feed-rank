@@ -379,7 +379,9 @@ const processSourcePosts = async (sourceId) => {
     }
     
     // Fetch recent posts
-    const posts = await fetchPosts(source.groupId, 50);
+    const postsToFetch = source.postsToCheck || 50;
+    console.log(`Processing source ${sourceId}: Fetching ${postsToFetch} posts from VK group ${source.name} (ID: ${source.groupId})`);
+    const posts = await fetchPosts(source.groupId, postsToFetch);
     let viralCount = 0;
     let updatedCount = 0;
     let createdCount = 0;

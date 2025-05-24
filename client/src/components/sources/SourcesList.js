@@ -53,6 +53,8 @@ const SourcesList = () => {
   const [selectedSource, setSelectedSource] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredSources, setFilteredSources] = useState([]);
+  const [sortField, setSortField] = useState('name');
+  const [sortDirection, setSortDirection] = useState('asc');
   
   // Load sources on mount
   useEffect(() => {
@@ -62,13 +64,42 @@ const SourcesList = () => {
   // Filter sources when search term or sources change
   useEffect(() => {
     if (vkSources) {
-      setFilteredSources(
-        vkSources.filter((source) =>
-          source.name.toLowerCase().includes(searchTerm.toLowerCase())
-        )
+      // First filter by search term
+      let filtered = vkSources.filter((source) =>
+        source.name.toLowerCase().includes(searchTerm.toLowerCase())
       );
+      
+      // Then sort by the selected field
+      filtered = [...filtered].sort((a, b) => {
+        // Get values to compare, handling undefined/null
+        let valueA = a[sortField] !== undefined ? a[sortField] : '';
+        let valueB = b[sortField] !== undefined ? b[sortField] : '';
+        
+        // For string values, convert to lowercase for comparison
+        if (typeof valueA === 'string') {
+          valueA = valueA.toLowerCase();
+        }
+        if (typeof valueB === 'string') {
+          valueB = valueB.toLowerCase();
+        }
+        
+        // Handle date fields
+        if (sortField === 'lastChecked') {
+          valueA = valueA ? new Date(valueA).getTime() : 0;
+          valueB = valueB ? new Date(valueB).getTime() : 0;
+        }
+        
+        // Compare based on direction
+        if (sortDirection === 'asc') {
+          return valueA > valueB ? 1 : valueA < valueB ? -1 : 0;
+        } else {
+          return valueA < valueB ? 1 : valueA > valueB ? -1 : 0;
+        }
+      });
+      
+      setFilteredSources(filtered);
     }
-  }, [vkSources, searchTerm]);
+  }, [vkSources, searchTerm, sortField, sortDirection]);
   
   // Clear success message after 3 seconds
   useEffect(() => {
@@ -112,6 +143,24 @@ const SourcesList = () => {
   // Handle process now
   const handleProcessNow = (id) => {
     dispatch(processSourceNow(id));
+  };
+  
+  // Handle sorting
+  const handleSort = (field) => {
+    // If clicking the same field, toggle direction
+    if (field === sortField) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // If clicking a new field, set it and default to ascending
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+  
+  // Render sort indicator
+  const renderSortIndicator = (field) => {
+    if (sortField !== field) return null;
+    return sortDirection === 'asc' ? ' ↑' : ' ↓';
   };
   
   // Format date
@@ -171,11 +220,42 @@ const SourcesList = () => {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>{translate('Source Name')}</TableCell>
-                <TableCell>{translate('Threshold')}</TableCell>
-                <TableCell>{translate('Check Frequency')}</TableCell>
-                <TableCell>{translate('Last Check')}</TableCell>
-                <TableCell>{translate('Status')}</TableCell>
+                <TableCell 
+                  onClick={() => handleSort('name')} 
+                  style={{ cursor: 'pointer' }}
+                >
+                  {translate('Source Name')}{renderSortIndicator('name')}
+                </TableCell>
+                <TableCell 
+                  onClick={() => handleSort('calculatedThreshold')} 
+                  style={{ cursor: 'pointer' }}
+                >
+                  {translate('Threshold')}{renderSortIndicator('calculatedThreshold')}
+                </TableCell>
+                <TableCell 
+                  onClick={() => handleSort('checkFrequency')} 
+                  style={{ cursor: 'pointer' }}
+                >
+                  {translate('Check Frequency')}{renderSortIndicator('checkFrequency')}
+                </TableCell>
+                <TableCell 
+                  onClick={() => handleSort('postsToCheck')} 
+                  style={{ cursor: 'pointer' }}
+                >
+                  {translate('Posts to Check')}{renderSortIndicator('postsToCheck')}
+                </TableCell>
+                <TableCell 
+                  onClick={() => handleSort('lastChecked')} 
+                  style={{ cursor: 'pointer' }}
+                >
+                  {translate('Last Check')}{renderSortIndicator('lastChecked')}
+                </TableCell>
+                <TableCell 
+                  onClick={() => handleSort('active')} 
+                  style={{ cursor: 'pointer' }}
+                >
+                  {translate('Status')}{renderSortIndicator('active')}
+                </TableCell>
                 <TableCell align="right">{translate('Actions')}</TableCell>
               </TableRow>
             </TableHead>
@@ -222,6 +302,7 @@ const SourcesList = () => {
                         ? `${translate('Every')} ${source.checkFrequency} ${translate('minutes')}`
                         : `${translate('Every')} ${source.checkFrequency / 60} ${translate('hours')}`}
                     </TableCell>
+                    <TableCell>{source.postsToCheck}</TableCell>
                     <TableCell>{formatDate(source.lastChecked)}</TableCell>
                     <TableCell>
                       <Chip
