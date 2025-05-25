@@ -780,6 +780,65 @@ const getViewHistory = async (postId, sourceId, limit = 10) => {
   }
 };
 
+/**
+ * Check if a post has high view dynamics
+ * @param {Object} post - Post document
+ * @param {Object} source - VK source document
+ * @returns {Promise<Object>} - Object with isHighDynamics flag and growth rate
+ */
+const checkHighDynamics = async (post, source) => {
+  try {
+    // Check if high dynamics detection is enabled
+    if (!source.experimentalViewTracking || 
+        !source.highDynamicsDetection || 
+        !source.highDynamicsDetection.enabled) {
+      return { isHighDynamics: false, growthRate: 0 };
+    }
+    
+    // Get recent view history
+    const history = await ViewHistory.find({
+      post: post._id,
+      vkSource: source._id
+    }).sort({ timestamp: -1 }).limit(5);
+    
+    // Need minimum data points
+    const minDataPoints = source.highDynamicsDetection.minDataPoints || 2;
+    if (history.length < minDataPoints) {
+      return { isHighDynamics: false, growthRate: 0 };
+    }
+    
+    // Calculate average growth rate from recent history
+    const growthRates = history
+      .filter(h => h.growthRate > 0)
+      .map(h => h.growthRate);
+    
+    if (growthRates.length === 0) {
+      return { isHighDynamics: false, growthRate: 0 };
+    }
+    
+    const avgGrowthRate = growthRates.reduce((sum, rate) => sum + rate, 0) / growthRates.length;
+    const growthThreshold = source.highDynamicsDetection.growthRateThreshold || 30;
+    
+    // Check if growth rate exceeds threshold
+    const isHighDynamics = avgGrowthRate >= growthThreshold;
+    
+    // Also check if post is not already viral and wasn't already sent as high dynamics
+    const shouldSend = isHighDynamics && 
+                      !post.isViral && 
+                      !post.wasHighDynamics &&
+                      !post.highDynamicsForwardedAt;
+    
+    return { 
+      isHighDynamics: shouldSend, 
+      growthRate: avgGrowthRate,
+      history: history.slice(0, 3) // Return last 3 entries for display
+    };
+  } catch (error) {
+    console.error(`Error checking high dynamics for post ${post.postId}:`, error);
+    return { isHighDynamics: false, growthRate: 0 };
+  }
+};
+
 module.exports = {
   fetchPosts,
   resolveGroupId,
@@ -793,5 +852,6 @@ module.exports = {
   extractBestVideoUrl,
   trackViewHistory,
   cleanupOldViewHistory,
-  getViewHistory
+  getViewHistory,
+  checkHighDynamics
 }; 

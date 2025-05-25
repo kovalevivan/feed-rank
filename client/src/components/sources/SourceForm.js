@@ -438,7 +438,12 @@ const SourceForm = () => {
     checkFrequency: 60,
     postsToCheck: 50,
     active: true,
-    experimentalViewTracking: false
+    experimentalViewTracking: false,
+    highDynamicsDetection: {
+      enabled: true,
+      growthRateThreshold: 30,
+      minDataPoints: 2
+    }
   });
   
   // Load source data if editing
@@ -470,7 +475,12 @@ const SourceForm = () => {
         checkFrequency: vkSource.checkFrequency || 60,
         postsToCheck: vkSource.postsToCheck || 50,
         active: vkSource.active !== undefined ? vkSource.active : true,
-        experimentalViewTracking: vkSource.experimentalViewTracking || false
+        experimentalViewTracking: vkSource.experimentalViewTracking || false,
+        highDynamicsDetection: vkSource.highDynamicsDetection || {
+          enabled: true,
+          growthRateThreshold: 30,
+          minDataPoints: 2
+        }
       });
     }
   }, [vkSource, id]);
@@ -723,6 +733,71 @@ const SourceForm = () => {
               label={translate('Enable View Dynamics Tracking')}
             />
           </Box>
+          
+          {formData.experimentalViewTracking && (
+            <Box sx={{ ml: 4, mb: 2 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={formData.highDynamicsDetection?.enabled ?? true}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      highDynamicsDetection: {
+                        ...formData.highDynamicsDetection,
+                        enabled: e.target.checked
+                      }
+                    })}
+                    name="highDynamicsDetectionEnabled"
+                    color="secondary"
+                  />
+                }
+                label={translate('Enable High Dynamics Detection')}
+              />
+              
+              {formData.highDynamicsDetection?.enabled !== false && (
+                <Box sx={{ mt: 2 }}>
+                  <TextField
+                    fullWidth
+                    label={translate('Growth Rate Threshold')}
+                    type="number"
+                    value={formData.highDynamicsDetection?.growthRateThreshold ?? 30}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      highDynamicsDetection: {
+                        ...formData.highDynamicsDetection,
+                        growthRateThreshold: parseInt(e.target.value)
+                      }
+                    })}
+                    margin="normal"
+                    InputProps={{
+                      endAdornment: <InputAdornment position="end">{translate('views/min')}</InputAdornment>,
+                      inputProps: { min: 10, max: 100 }
+                    }}
+                    helperText={translate('Posts growing faster than this rate will be sent early')}
+                  />
+                  
+                  <TextField
+                    fullWidth
+                    label={translate('Minimum Data Points')}
+                    type="number"
+                    value={formData.highDynamicsDetection?.minDataPoints ?? 2}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      highDynamicsDetection: {
+                        ...formData.highDynamicsDetection,
+                        minDataPoints: parseInt(e.target.value)
+                      }
+                    })}
+                    margin="normal"
+                    InputProps={{
+                      inputProps: { min: 2, max: 10 }
+                    }}
+                    helperText={translate('Minimum view history entries needed before detecting high dynamics')}
+                  />
+                </Box>
+              )}
+            </Box>
+          )}
           
           <Alert severity="info" sx={{ mb: 2 }}>
             <Typography variant="body2">

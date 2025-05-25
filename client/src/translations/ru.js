@@ -390,7 +390,18 @@ const translations = {
   'Current Views': 'Текущие просмотры',
   'Total Growth': 'Общий рост',
   'Viral': 'Вирусный',
-  'Normal': 'Обычный'
+  'Normal': 'Обычный',
+  
+  // High Dynamics Detection
+  'Enable High Dynamics Detection': 'Включить обнаружение высокой динамики',
+  'Growth Rate Threshold': 'Порог скорости роста',
+  'Posts growing faster than this rate will be sent early': 'Посты, растущие быстрее этой скорости, будут отправлены заранее',
+  'Minimum Data Points': 'Минимум точек данных',
+  'Minimum view history entries needed before detecting high dynamics': 'Минимальное количество записей истории просмотров для обнаружения высокой динамики',
+  'HIGH DYNAMICS POST': 'ПОСТ С ВЫСОКОЙ ДИНАМИКОЙ',
+  'This post is gaining views rapidly!': 'Этот пост быстро набирает просмотры!',
+  'Growth Rate': 'Скорость роста',
+  'Recent Dynamics': 'Недавняя динамика'
 };
 
 export default translations; 

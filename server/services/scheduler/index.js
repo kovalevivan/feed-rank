@@ -2,6 +2,8 @@ const cron = require('node-cron');
 const VkSource = require('../../models/VkSource');
 const vkService = require('../vk');
 const telegramService = require('../telegram');
+const Post = require('../../models/Post');
+const Mapping = require('../../models/Mapping');
 
 // Store active cron jobs
 const cronJobs = {};
@@ -27,6 +29,15 @@ const init = () => {
       await processPendingPosts();
     } catch (error) {
       console.error('Error processing pending posts:', error);
+    }
+  });
+  
+  // Schedule job to check high dynamics posts every 5 minutes
+  cron.schedule('*/5 * * * *', async () => {
+    try {
+      await processHighDynamicsPosts();
+    } catch (error) {
+      console.error('Error processing high dynamics posts:', error);
     }
   });
   
@@ -163,10 +174,93 @@ const processSourceNow = async (sourceId) => {
   }
 };
 
+/**
+ * Process high dynamics posts for sources with experimental tracking
+ */
+const processHighDynamicsPosts = async () => {
+  try {
+    console.log('🚀 Checking for high dynamics posts...');
+    
+    // Get all active sources with experimental tracking enabled
+    const sources = await VkSource.find({ 
+      active: true, 
+      experimentalViewTracking: true,
+      'highDynamicsDetection.enabled': true 
+    });
+    
+    if (sources.length === 0) {
+      console.log('No sources with high dynamics detection enabled');
+      return;
+    }
+    
+    let highDynamicsCount = 0;
+    
+    for (const source of sources) {
+      try {
+        // Get recent posts that are not viral and not already sent as high dynamics
+        const recentPosts = await Post.find({
+          vkSource: source._id,
+          isViral: false,
+          wasHighDynamics: false,
+          createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Last 24 hours
+        }).sort({ createdAt: -1 }).limit(50);
+        
+        for (const post of recentPosts) {
+          // Check if post has high dynamics
+          const dynamicsCheck = await vkService.checkHighDynamics(post, source);
+          
+          if (dynamicsCheck.isHighDynamics) {
+            console.log(`🔥 High dynamics detected for post ${post.postId} from ${source.name} (${dynamicsCheck.growthRate.toFixed(2)} views/min)`);
+            
+            // Get mappings for this source
+            const mappings = await Mapping.find({ 
+              vkSource: source._id, 
+              active: true 
+            }).populate('telegramChannel');
+            
+            // Forward to all mapped channels with high dynamics marker
+            for (const mapping of mappings) {
+              if (mapping.telegramChannel && mapping.telegramChannel.active) {
+                try {
+                  await telegramService.forwardPost(post, source, mapping.telegramChannel, {
+                    isHighDynamics: true,
+                    growthRate: dynamicsCheck.growthRate,
+                    viewHistory: dynamicsCheck.history
+                  });
+                  
+                  console.log(`✅ Forwarded high dynamics post ${post.postId} to channel ${mapping.telegramChannel.name}`);
+                } catch (error) {
+                  console.error(`Failed to forward high dynamics post ${post.postId} to channel ${mapping.telegramChannel.name}:`, error);
+                }
+              }
+            }
+            
+            // Mark post as high dynamics sent
+            post.wasHighDynamics = true;
+            post.highDynamicsForwardedAt = new Date();
+            await post.save();
+            
+            highDynamicsCount++;
+          }
+        }
+      } catch (error) {
+        console.error(`Error processing high dynamics for source ${source.name}:`, error);
+      }
+    }
+    
+    if (highDynamicsCount > 0) {
+      console.log(`✨ Forwarded ${highDynamicsCount} high dynamics posts`);
+    }
+  } catch (error) {
+    console.error('Error in processHighDynamicsPosts:', error);
+  }
+};
+
 module.exports = {
   init,
   updateSourceSchedules,
   processPendingPosts,
   processSourceNow,
+  processHighDynamicsPosts,
   getCronJobs: () => cronJobs
 }; 

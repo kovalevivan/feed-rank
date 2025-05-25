@@ -86,6 +86,20 @@ const VkSourceSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  highDynamicsDetection: {
+    enabled: {
+      type: Boolean,
+      default: true
+    },
+    growthRateThreshold: {
+      type: Number,
+      default: 30 // views per minute
+    },
+    minDataPoints: {
+      type: Number,
+      default: 2 // minimum view history entries needed
+    }
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'

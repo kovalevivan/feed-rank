@@ -38,6 +38,14 @@ const PostSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  wasHighDynamics: {
+    type: Boolean,
+    default: false
+  },
+  highDynamicsForwardedAt: {
+    type: Date,
+    default: null
+  },
   thresholdUsed: {
     type: Number,
     default: 0

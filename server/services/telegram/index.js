@@ -494,11 +494,21 @@ const cleanupTempFiles = (filePath) => {
 /**
  * Forwards a post to a Telegram channel
  * @param {Object} post - Post document from database
+ * @param {Object} source - VK source document (optional, for compatibility)
  * @param {Object} channel - Telegram channel document from database
+ * @param {Object} options - Additional options (isHighDynamics, growthRate, viewHistory)
  * @returns {Promise<Object>} - Result of forwarding
  */
-const forwardPost = async (post, channel) => {
+const forwardPost = async (post, source, channel, options = {}) => {
   if (!bot) throw new Error('Telegram bot not initialized');
+  
+  // Handle both old (post, channel) and new (post, source, channel, options) signatures
+  if (arguments.length === 2 && !options) {
+    // Old signature: forwardPost(post, channel)
+    options = {};
+    channel = source;
+    source = null;
+  }
   
   // Validate required parameters
   if (!post) throw new Error('Post object is required');
@@ -507,9 +517,9 @@ const forwardPost = async (post, channel) => {
   if (!post.vkSource) throw new Error('Post must have a valid vkSource reference');
   
   try {
-    // Get VK source name
-    const vkSource = await VkSource.findById(post.vkSource);
-    const sourceName = vkSource ? vkSource.name : 'Unknown Source';
+    // Get VK source if not provided
+    const vkSource = source || await VkSource.findById(post.vkSource);
+    const sourceName = vkSource ? vkSource.name : 'Неизвестный источник';
     
     // Escape special HTML characters to prevent formatting issues
     const escapeHtml = (text) => {
@@ -536,19 +546,50 @@ const forwardPost = async (post, channel) => {
     };
     
     // Prepare post caption with HTML formatting
-    let caption = `<b>From VK group: ${escapeHtml(sourceName)}</b>\n\n`;
+    let caption = '';
+    
+    // Add high dynamics marker if applicable
+    if (options.isHighDynamics) {
+      caption += `🚀 <b>ПОСТ С ВЫСОКОЙ ДИНАМИКОЙ</b> 🚀\n`;
+      caption += `<i>Этот пост быстро набирает просмотры!</i>\n\n`;
+    }
+    
+    caption += `<b>Из группы ВК: ${escapeHtml(sourceName)}</b>\n\n`;
     caption += `${escapeHtml(post.text)}\n\n`;
     caption += `👁 Просмотры: <b>${post.viewCount.toLocaleString()}</b>\n`;
     caption += `👍 Лайки: <b>${post.likeCount.toLocaleString()}</b>\n`;
     caption += `🔄 Репосты: <b>${post.repostCount.toLocaleString()}</b>\n`;
     caption += post.publishedAt ? `📅 Опубликовано: ${formatDate(post.publishedAt)}\n` : '';
     
-    // Add view history data if experimental tracking is enabled
-    if (vkSource && vkSource.experimentalViewTracking) {
+    // Add high dynamics info if provided
+    if (options.isHighDynamics && options.growthRate) {
+      caption += `\n📈 <b>Скорость роста: ${options.growthRate.toFixed(1)} просмотров/мин</b>\n`;
+      
+      if (options.viewHistory && options.viewHistory.length > 0) {
+        caption += '\n📊 <b>Недавняя динамика:</b>\n';
+        options.viewHistory.forEach((history) => {
+          const timestamp = new Date(history.timestamp).toLocaleString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+          });
+          
+          let historyLine = `${timestamp}: ${history.viewCount.toLocaleString()} просмотров`;
+          if (history.viewDelta > 0) {
+            historyLine += ` (+${history.viewDelta.toLocaleString()})`;
+          }
+          caption += `${historyLine}\n`;
+        });
+      }
+    }
+    // Add regular view history for non-high-dynamics posts
+    else if (vkSource && vkSource.experimentalViewTracking && !options.isHighDynamics) {
       const viewHistory = await vkService.getViewHistory(post.postId, vkSource._id, 5);
       
       if (viewHistory && viewHistory.length > 0) {
-        caption += '\n📊 <b>View Dynamics (Experimental):</b>\n';
+        caption += '\n📊 <b>Динамика просмотров (Экспериментально):</b>\n';
         
         // Show last 5 view history entries
         viewHistory.forEach((history, index) => {
@@ -560,13 +601,13 @@ const forwardPost = async (post, channel) => {
             hour12: false
           });
           
-          let historyLine = `${timestamp}: ${history.viewCount.toLocaleString()} views`;
+          let historyLine = `${timestamp}: ${history.viewCount.toLocaleString()} просмотров`;
           
           if (history.viewDelta > 0 && index < viewHistory.length - 1) {
             historyLine += ` (+${history.viewDelta.toLocaleString()})`;
             
             if (history.growthRate > 0) {
-              historyLine += ` [${history.growthRate.toFixed(1)} views/min]`;
+              historyLine += ` [${history.growthRate.toFixed(1)} просмотров/мин]`;
             }
           }
           
@@ -582,13 +623,13 @@ const forwardPost = async (post, channel) => {
           
           if (totalMinutes > 0) {
             const avgGrowthRate = totalViews / totalMinutes;
-            caption += `\n📈 Avg growth: ${avgGrowthRate.toFixed(1)} views/min\n`;
+            caption += `\n📈 Средний рост: ${avgGrowthRate.toFixed(1)} просмотров/мин\n`;
           }
         }
       }
     }
     
-    caption += `\n<a href="${post.originalPostUrl}">View original post</a>`;
+    caption += `\n<a href="${post.originalPostUrl}">Смотреть оригинальный пост</a>`;
     
     let sentMessage;
     
@@ -626,7 +667,7 @@ const forwardPost = async (post, channel) => {
           // If that fails too, fall back to text message with links
           console.error(`Error sending single photo for post ${post._id}:`, photoError);
           const photoLinks = photoAttachments.map((photo, idx) => 
-            `<a href="${photo.url}">Photo ${idx + 1}</a>`).join('\n');
+            `<a href="${photo.url}">Фото ${idx + 1}</a>`).join('\n');
           sentMessage = await bot.sendMessage(
             channel.chatId,
             `${caption}\n\n${photoLinks}`,
@@ -654,7 +695,7 @@ const forwardPost = async (post, channel) => {
         // Fallback to regular message if media sending fails
         sentMessage = await bot.sendMessage(
           channel.chatId, 
-          `${caption}\n\n<a href="${photoAttachments[0].url}">View photo</a>`, 
+          `${caption}\n\n<a href="${photoAttachments[0].url}">Смотреть фото</a>`, 
           { 
             parse_mode: 'HTML',
             disable_web_page_preview: false
@@ -744,7 +785,7 @@ const forwardPost = async (post, channel) => {
         // Fallback to regular message with video preview
         try {
           // Try to send with thumbnail and movie camera emoji
-          const videoMessage = `${caption}\n\n🎬 <b>Video available at:</b> <a href="${videoAttachment.url}">Watch on VK</a>`;
+          const videoMessage = `${caption}\n\n🎬 <b>Видео доступно по ссылке:</b> <a href="${videoAttachment.url}">Смотреть в ВК</a>`;
           
           sentMessage = await bot.sendMessage(
             channel.chatId, 
@@ -760,7 +801,7 @@ const forwardPost = async (post, channel) => {
           // Last resort - plain text with link
           sentMessage = await bot.sendMessage(
             channel.chatId, 
-            `${caption}\n\n🎬 Video: ${videoAttachment.url}`, 
+            `${caption}\n\n🎬 Видео: ${videoAttachment.url}`, 
             { 
               parse_mode: 'HTML',
               disable_web_page_preview: true
@@ -865,7 +906,7 @@ const processPendingPosts = async () => {
       let postForwarded = false;
       for (const mapping of validMappings) {
         try {
-          await forwardPost(post, mapping.telegramChannel);
+          await forwardPost(post, mapping.vkSource, mapping.telegramChannel);
           forwardedCount++;
           postForwarded = true;
         } catch (error) {
