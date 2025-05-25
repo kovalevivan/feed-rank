@@ -7,6 +7,7 @@ import mappingsReducer from './slices/mappingsSlice';
 import postsReducer from './slices/postsSlice';
 import settingsReducer from './slices/settingsSlice';
 import vkSourceGroupsReducer from './slices/vkSourceGroupsSlice';
+import analyticsReducer from './slices/analyticsSlice';
 
 const store = configureStore({
   reducer: {
@@ -17,7 +18,8 @@ const store = configureStore({
     mappings: mappingsReducer,
     posts: postsReducer,
     settings: settingsReducer,
-    vkSourceGroups: vkSourceGroupsReducer
+    vkSourceGroups: vkSourceGroupsReducer,
+    analytics: analyticsReducer
   }
 });
 

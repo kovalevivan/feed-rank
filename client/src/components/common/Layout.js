@@ -26,7 +26,8 @@ import {
   Send as SendIcon,
   Link as LinkIcon,
   Settings as SettingsIcon,
-  AccountCircle
+  AccountCircle,
+  Analytics as AnalyticsIcon
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { logout } from '../../redux/slices/authSlice';
@@ -98,6 +99,7 @@ const Layout = () => {
     { text: 'VK Source Groups', icon: <SourceIcon />, path: '/source-groups' },
     { text: 'Telegram Channels', icon: <SendIcon />, path: '/channels' },
     { text: 'Mappings', icon: <LinkIcon />, path: '/mappings' },
+    { text: 'Analytics', icon: <AnalyticsIcon />, path: '/analytics' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
   ];
   

@@ -361,7 +361,36 @@ const translations = {
   'Experimental view dynamics tracking is enabled': 'Экспериментальное отслеживание динамики просмотров включено',
   'View Dynamics (Experimental):': 'Динамика просмотров (Экспериментально):',
   'Avg growth': 'Средний рост',
-  'views/min': 'просмотров/мин'
+  'views/min': 'просмотров/мин',
+  
+  // Analytics Page
+  'Analytics': 'Аналитика',
+  'Post Dynamics Analytics': 'Аналитика динамики постов',
+  'No sources with experimental view tracking enabled. Enable view tracking for at least one source to see analytics.': 'Нет источников с включенным экспериментальным отслеживанием просмотров. Включите отслеживание просмотров хотя бы для одного источника, чтобы увидеть аналитику.',
+  'Select Source': 'Выберите источник',
+  'All Sources (Aggregated)': 'Все источники (Агрегированные)',
+  'Time Range': 'Временной диапазон',
+  'Last 24 hours': 'Последние 24 часа',
+  'Last 3 days': 'Последние 3 дня',
+  'Last 7 days': 'Последние 7 дней',
+  'Experimental Feature': 'Экспериментальная функция',
+  'Aggregated Growth Statistics': 'Агрегированная статистика роста',
+  'Avg Growth Rate': 'Средняя скорость роста',
+  'Max Growth Rate': 'Максимальная скорость роста',
+  '90th Percentile': '90-й процентиль',
+  'Data Points': 'Точки данных',
+  'Growth Patterns': 'Паттерны роста',
+  'Average Growth': 'Средний рост',
+  'Viral Threshold': 'Порог вирусности',
+  'Posts Analyzed': 'Проанализировано постов',
+  'in last': 'за последние',
+  'days': 'дней',
+  'Individual Post Dynamics': 'Динамика отдельных постов',
+  'Post': 'Пост',
+  'Current Views': 'Текущие просмотры',
+  'Total Growth': 'Общий рост',
+  'Viral': 'Вирусный',
+  'Normal': 'Обычный'
 };
 
 export default translations; 

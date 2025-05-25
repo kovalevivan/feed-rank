@@ -25,6 +25,7 @@ import MappingForm from './components/mappings/MappingForm';
 import Settings from './components/settings/Settings';
 import SourceGroupsList from './components/sources/SourceGroupsList';
 import SourceGroupForm from './components/sources/SourceGroupForm';
+import Analytics from './components/analytics/Analytics';
 
 // Create a Material UI theme
 const theme = createTheme({
@@ -101,6 +102,9 @@ function App() {
                 
                 {/* Settings Route */}
                 <Route path="settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
+                
+                {/* Analytics Route */}
+                <Route path="analytics" element={<PrivateRoute><Analytics /></PrivateRoute>} />
                 
                 {/* Catch all - redirect to dashboard */}
                 <Route path="*" element={<Navigate to="/" replace />} />
