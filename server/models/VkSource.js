@@ -82,6 +82,10 @@ const VkSourceSchema = new mongoose.Schema({
     multiplierUsed: { type: Number, default: 1.5 },
     detailedStats: { type: DetailedStatsSchema, default: () => ({}) }
   },
+  experimentalViewTracking: {
+    type: Boolean,
+    default: false
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'

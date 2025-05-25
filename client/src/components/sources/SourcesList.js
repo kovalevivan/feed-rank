@@ -280,6 +280,15 @@ const SourcesList = () => {
                       <Typography variant="body2" color="textSecondary">
                         {source.url}
                       </Typography>
+                      {source.experimentalViewTracking && (
+                        <Chip
+                          label={translate('View Tracking')}
+                          color="secondary"
+                          size="small"
+                          sx={{ mt: 0.5 }}
+                          title={translate('Experimental view dynamics tracking is enabled')}
+                        />
+                      )}
                     </TableCell>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center' }}>

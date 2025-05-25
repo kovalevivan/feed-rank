@@ -2,6 +2,7 @@ const { VK } = require('vk-io');
 const VkSource = require('../../models/VkSource');
 const Post = require('../../models/Post');
 const Setting = require('../../models/Setting');
+const ViewHistory = require('../../models/ViewHistory');
 
 // Initialize VK API client
 let vk;
@@ -526,6 +527,11 @@ const processSourcePosts = async (sourceId) => {
           updatedCount++;
           
           if (isViral) viralCount++;
+          
+          // Track view history if experimental feature is enabled
+          if (source.experimentalViewTracking) {
+            await trackViewHistory(existingPost, source, viewCount);
+          }
         } else {
           // Create new post
           const newPost = new Post({
@@ -537,6 +543,11 @@ const processSourcePosts = async (sourceId) => {
           createdCount++;
           
           if (isViral) viralCount++;
+          
+          // Track initial view count if experimental feature is enabled
+          if (source.experimentalViewTracking) {
+            await trackViewHistory(newPost, source, viewCount);
+          }
         }
       } catch (error) {
         console.error(`Error saving post ${postId} from source ${sourceId}:`, error);
@@ -673,6 +684,102 @@ const extractBestVideoUrl = (videoData) => {
   return null;
 };
 
+/**
+ * Track view history for a post
+ * @param {Object} post - Post document
+ * @param {Object} source - VK source document
+ * @param {number} currentViewCount - Current view count
+ */
+const trackViewHistory = async (post, source, currentViewCount) => {
+  try {
+    // Get the last view history entry for this post
+    const lastHistory = await ViewHistory.findOne({
+      post: post._id,
+      vkSource: source._id,
+      postId: post.postId
+    }).sort({ timestamp: -1 });
+    
+    // Calculate deltas
+    let viewDelta = 0;
+    let timeDeltaMinutes = 0;
+    let growthRate = 0;
+    
+    if (lastHistory) {
+      viewDelta = currentViewCount - lastHistory.viewCount;
+      timeDeltaMinutes = (Date.now() - lastHistory.timestamp) / (1000 * 60); // Convert to minutes
+      
+      // Calculate growth rate (views per minute)
+      if (timeDeltaMinutes > 0) {
+        growthRate = viewDelta / timeDeltaMinutes;
+      }
+    }
+    
+    // Create new view history entry
+    const viewHistory = new ViewHistory({
+      post: post._id,
+      vkSource: source._id,
+      postId: post.postId,
+      viewCount: currentViewCount,
+      viewDelta,
+      timeDeltaMinutes,
+      growthRate
+    });
+    
+    await viewHistory.save();
+    
+    // Clean up old entries (older than 4 days)
+    await cleanupOldViewHistory();
+    
+  } catch (error) {
+    console.error(`Error tracking view history for post ${post.postId}:`, error);
+    // Don't throw - this is an experimental feature and shouldn't break main flow
+  }
+};
+
+/**
+ * Clean up view history entries older than 4 days
+ */
+const cleanupOldViewHistory = async () => {
+  try {
+    const fourDaysAgo = new Date();
+    fourDaysAgo.setDate(fourDaysAgo.getDate() - 4);
+    
+    const result = await ViewHistory.deleteMany({
+      timestamp: { $lt: fourDaysAgo }
+    });
+    
+    if (result.deletedCount > 0) {
+      console.log(`Cleaned up ${result.deletedCount} old view history entries`);
+    }
+  } catch (error) {
+    console.error('Error cleaning up old view history:', error);
+    // Don't throw - cleanup is not critical
+  }
+};
+
+/**
+ * Get view history for a post
+ * @param {string} postId - Post ID
+ * @param {string} sourceId - VK source ID
+ * @param {number} limit - Number of history entries to return
+ * @returns {Promise<Array>} - Array of view history entries
+ */
+const getViewHistory = async (postId, sourceId, limit = 10) => {
+  try {
+    const history = await ViewHistory.find({
+      postId,
+      vkSource: sourceId
+    })
+    .sort({ timestamp: -1 })
+    .limit(limit);
+    
+    return history;
+  } catch (error) {
+    console.error(`Error getting view history for post ${postId}:`, error);
+    return [];
+  }
+};
+
 module.exports = {
   fetchPosts,
   resolveGroupId,
@@ -683,5 +790,8 @@ module.exports = {
   processSourcePosts,
   extractVideoIds,
   getVideoUrls,
-  extractBestVideoUrl
+  extractBestVideoUrl,
+  trackViewHistory,
+  cleanupOldViewHistory,
+  getViewHistory
 }; 

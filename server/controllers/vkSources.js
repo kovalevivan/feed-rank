@@ -136,7 +136,8 @@ router.put(
     body('manualThreshold').if(body('thresholdType').equals('manual')).isInt({ min: 1 }).withMessage('Manual threshold must be a positive number'),
     body('checkFrequency').optional().isInt({ min: 5 }).withMessage('Check frequency must be at least 5 minutes'),
     body('postsToCheck').optional().isInt({ min: 10, max: 100 }).withMessage('Posts to check must be between 10 and 100'),
-    body('active').optional().isBoolean().withMessage('Active must be boolean')
+    body('active').optional().isBoolean().withMessage('Active must be boolean'),
+    body('experimentalViewTracking').optional().isBoolean().withMessage('Experimental view tracking must be boolean')
   ],
   async (req, res) => {
     // Validate request
@@ -152,7 +153,7 @@ router.put(
         return res.status(404).json({ message: 'VK source not found' });
       }
       
-      const { name, thresholdType, thresholdMethod, manualThreshold, checkFrequency, postsToCheck, active } = req.body;
+      const { name, thresholdType, thresholdMethod, manualThreshold, checkFrequency, postsToCheck, active, experimentalViewTracking } = req.body;
       
       // Update fields
       if (name !== undefined) {
@@ -230,6 +231,10 @@ router.put(
             delete cronJobs[sourceId];
           }
         }
+      }
+      
+      if (experimentalViewTracking !== undefined) {
+        source.experimentalViewTracking = experimentalViewTracking;
       }
       
       // Save updated source

@@ -350,7 +350,18 @@ const translations = {
   'Source not found': 'Источник не найден',
   'Channel not found': 'Канал не найден',
   'Unknown source': 'Неизвестный источник',
-  'Unknown channel': 'Неизвестный канал'
+  'Unknown channel': 'Неизвестный канал',
+  
+  // Experimental View Tracking Feature
+  'Experimental Features': 'Экспериментальные функции',
+  'Enable View Dynamics Tracking': 'Включить отслеживание динамики просмотров',
+  'Experimental': 'Экспериментально',
+  'When enabled, the system will track view count changes over time for each post. This data will be included in Telegram messages to help analyze viral growth patterns. View history older than 4 days will be automatically cleaned up.': 'При включении система будет отслеживать изменения количества просмотров со временем для каждого поста. Эти данные будут включены в сообщения Telegram для анализа паттернов вирусного роста. История просмотров старше 4 дней будет автоматически удаляться.',
+  'View Tracking': 'Отслеживание просмотров',
+  'Experimental view dynamics tracking is enabled': 'Экспериментальное отслеживание динамики просмотров включено',
+  'View Dynamics (Experimental):': 'Динамика просмотров (Экспериментально):',
+  'Avg growth': 'Средний рост',
+  'views/min': 'просмотров/мин'
 };
 
 export default translations; 

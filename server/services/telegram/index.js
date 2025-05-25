@@ -541,8 +541,54 @@ const forwardPost = async (post, channel) => {
     caption += `👁 Просмотры: <b>${post.viewCount.toLocaleString()}</b>\n`;
     caption += `👍 Лайки: <b>${post.likeCount.toLocaleString()}</b>\n`;
     caption += `🔄 Репосты: <b>${post.repostCount.toLocaleString()}</b>\n`;
-    caption += post.publishedAt ? `📅 Опубликовано: ${formatDate(post.publishedAt)}\n\n` : '\n';
-    caption += `<a href="${post.originalPostUrl}">View original post</a>`;
+    caption += post.publishedAt ? `📅 Опубликовано: ${formatDate(post.publishedAt)}\n` : '';
+    
+    // Add view history data if experimental tracking is enabled
+    if (vkSource && vkSource.experimentalViewTracking) {
+      const viewHistory = await vkService.getViewHistory(post.postId, vkSource._id, 5);
+      
+      if (viewHistory && viewHistory.length > 0) {
+        caption += '\n📊 <b>View Dynamics (Experimental):</b>\n';
+        
+        // Show last 5 view history entries
+        viewHistory.forEach((history, index) => {
+          const timestamp = new Date(history.timestamp).toLocaleString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+          });
+          
+          let historyLine = `${timestamp}: ${history.viewCount.toLocaleString()} views`;
+          
+          if (history.viewDelta > 0 && index < viewHistory.length - 1) {
+            historyLine += ` (+${history.viewDelta.toLocaleString()})`;
+            
+            if (history.growthRate > 0) {
+              historyLine += ` [${history.growthRate.toFixed(1)} views/min]`;
+            }
+          }
+          
+          caption += `${historyLine}\n`;
+        });
+        
+        // Calculate overall growth rate
+        if (viewHistory.length > 1) {
+          const firstEntry = viewHistory[viewHistory.length - 1];
+          const lastEntry = viewHistory[0];
+          const totalViews = lastEntry.viewCount - firstEntry.viewCount;
+          const totalMinutes = (lastEntry.timestamp - firstEntry.timestamp) / (1000 * 60);
+          
+          if (totalMinutes > 0) {
+            const avgGrowthRate = totalViews / totalMinutes;
+            caption += `\n📈 Avg growth: ${avgGrowthRate.toFixed(1)} views/min\n`;
+          }
+        }
+      }
+    }
+    
+    caption += `\n<a href="${post.originalPostUrl}">View original post</a>`;
     
     let sentMessage;
     

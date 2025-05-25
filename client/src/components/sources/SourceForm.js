@@ -437,7 +437,8 @@ const SourceForm = () => {
     manualThreshold: 1000,
     checkFrequency: 60,
     postsToCheck: 50,
-    active: true
+    active: true,
+    experimentalViewTracking: false
   });
   
   // Load source data if editing
@@ -468,7 +469,8 @@ const SourceForm = () => {
         manualThreshold: vkSource.manualThreshold || 1000,
         checkFrequency: vkSource.checkFrequency || 60,
         postsToCheck: vkSource.postsToCheck || 50,
-        active: vkSource.active !== undefined ? vkSource.active : true
+        active: vkSource.active !== undefined ? vkSource.active : true,
+        experimentalViewTracking: vkSource.experimentalViewTracking || false
       });
     }
   }, [vkSource, id]);
@@ -701,6 +703,32 @@ const SourceForm = () => {
               {translate('When active, this source will be checked according to the frequency setting. Inactive sources will not be checked automatically.')}
             </Typography>
           </Box>
+          
+          <Divider sx={{ my: 3 }} />
+          
+          <Typography variant="h6" gutterBottom>
+            {translate('Experimental Features')}
+          </Typography>
+          
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formData.experimentalViewTracking}
+                  onChange={handleChange}
+                  name="experimentalViewTracking"
+                  color="secondary"
+                />
+              }
+              label={translate('Enable View Dynamics Tracking')}
+            />
+          </Box>
+          
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Typography variant="body2">
+              <strong>{translate('Experimental')}</strong>: {translate('When enabled, the system will track view count changes over time for each post. This data will be included in Telegram messages to help analyze viral growth patterns. View history older than 4 days will be automatically cleaned up.')}
+            </Typography>
+          </Alert>
           
           <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
             <Button
