@@ -8,6 +8,8 @@ const Mapping = require('../../models/Mapping');
 // Store active cron jobs
 const cronJobs = {};
 
+const { getAllMappingsForSource } = require('../../utils/mappingUtils');
+
 /**
  * Initializes the scheduler service
  */
@@ -23,12 +25,13 @@ const init = () => {
     }
   });
   
-  // Schedule job to process pending posts every 10 minutes
+  // Schedule job to process manually approved posts every 10 minutes
+  // Note: Viral posts are now auto-forwarded immediately when detected
   cron.schedule('*/10 * * * *', async () => {
     try {
       await processPendingPosts();
     } catch (error) {
-      console.error('Error processing pending posts:', error);
+      console.error('Error processing approved posts:', error);
     }
   });
   
@@ -146,16 +149,16 @@ const calculateCronExpression = (frequencyMinutes) => {
 };
 
 /**
- * Processes pending posts for forwarding to Telegram
+ * Processes manually approved posts for forwarding to Telegram
  */
 const processPendingPosts = async () => {
   try {
-    console.log('Processing pending posts for forwarding...');
+    console.log('Processing manually approved posts for forwarding...');
     const result = await telegramService.processPendingPosts();
-    console.log(`Processed ${result.processed} posts, forwarded ${result.forwarded}, errors: ${result.errors}`);
+    console.log(`Processed ${result.processed} approved posts, forwarded ${result.forwarded}, errors: ${result.errors}`);
     return result;
   } catch (error) {
-    console.error('Error processing pending posts:', error);
+    console.error('Error processing approved posts:', error);
     throw error;
   }
 };
@@ -213,10 +216,7 @@ const processHighDynamicsPosts = async () => {
             console.log(`🔥 High dynamics detected for post ${post.postId} from ${source.name} (${dynamicsCheck.growthRate.toFixed(2)} views/min)`);
             
             // Get mappings for this source
-            const mappings = await Mapping.find({ 
-              vkSource: source._id, 
-              active: true 
-            }).populate('telegramChannel');
+            const mappings = await getAllMappingsForSource(source._id.toString());
             
             // Forward to all mapped channels with high dynamics marker
             for (const mapping of mappings) {

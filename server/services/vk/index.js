@@ -3,9 +3,59 @@ const VkSource = require('../../models/VkSource');
 const Post = require('../../models/Post');
 const Setting = require('../../models/Setting');
 const ViewHistory = require('../../models/ViewHistory');
+const { getAllMappingsForSource } = require('../../utils/mappingUtils');
 
 // Initialize VK API client
 let vk;
+
+/**
+ * Automatically forwards a viral post to all mapped Telegram channels
+ * @param {Object} post - Post document
+ * @param {Object} source - VK source document
+ * @returns {Promise<Object>} - Forwarding results
+ */
+const autoForwardViralPost = async (post, source) => {
+  try {
+    // Import telegramService here to avoid circular dependency
+    const telegramService = require('../telegram');
+    
+    // Get all mappings for this source (both individual and group mappings)
+    const mappings = await getAllMappingsForSource(source._id.toString());
+    
+    if (mappings.length === 0) {
+      console.log(`No mappings found for viral post ${post.postId} from source ${source.name}`);
+      return { forwarded: 0, errors: 0 };
+    }
+    
+    let forwardedCount = 0;
+    let errorCount = 0;
+    
+    // Forward to each mapped channel
+    for (const mapping of mappings) {
+      if (mapping.telegramChannel && mapping.telegramChannel.active) {
+        try {
+          await telegramService.forwardPost(post, source, mapping.telegramChannel);
+          forwardedCount++;
+          console.log(`✅ Auto-forwarded viral post ${post.postId} to channel ${mapping.telegramChannel.name}`);
+        } catch (error) {
+          console.error(`❌ Failed to auto-forward viral post ${post.postId} to channel ${mapping.telegramChannel.name}:`, error);
+          errorCount++;
+        }
+      }
+    }
+    
+    // Update post status to forwarded if at least one forward was successful
+    if (forwardedCount > 0) {
+      post.status = 'forwarded';
+      await post.save();
+    }
+    
+    return { forwarded: forwardedCount, errors: errorCount };
+  } catch (error) {
+    console.error(`Error auto-forwarding viral post ${post.postId}:`, error);
+    return { forwarded: 0, errors: 1 };
+  }
+};
 
 /**
  * Validates that VK API credentials are properly configured
@@ -426,6 +476,7 @@ const processSourcePosts = async (sourceId) => {
     let createdCount = 0;
     let skippedCount = 0;
     let errorCount = 0;
+    let autoForwardedCount = 0;
     
     // Process each post
     for (const post of filteredPosts) {
@@ -511,6 +562,11 @@ const processSourcePosts = async (sourceId) => {
         const existingPost = await Post.findOne({ vkSource: sourceId, postId: postId });
         
         if (existingPost) {
+          // Check if post became viral (wasn't viral before but is now)
+          const wasNotViral = !existingPost.isViral;
+          const isNowViral = isViral;
+          const becameViral = wasNotViral && isNowViral;
+          
           // Update existing post
           existingPost.text = postData.text;
           existingPost.viewCount = postData.viewCount;
@@ -528,6 +584,14 @@ const processSourcePosts = async (sourceId) => {
           
           if (isViral) viralCount++;
           
+          // Auto-forward if post became viral and hasn't been forwarded yet
+          if (becameViral && existingPost.status === 'pending') {
+            const forwardResult = await autoForwardViralPost(existingPost, source);
+            if (forwardResult.forwarded > 0) {
+              autoForwardedCount++;
+            }
+          }
+          
           // Track view history if experimental feature is enabled
           if (source.experimentalViewTracking) {
             await trackViewHistory(existingPost, source, viewCount);
@@ -542,7 +606,15 @@ const processSourcePosts = async (sourceId) => {
           await newPost.save();
           createdCount++;
           
-          if (isViral) viralCount++;
+          if (isViral) {
+            viralCount++;
+            
+            // Auto-forward new viral posts
+            const forwardResult = await autoForwardViralPost(newPost, source);
+            if (forwardResult.forwarded > 0) {
+              autoForwardedCount++;
+            }
+          }
           
           // Track initial view count if experimental feature is enabled
           if (source.experimentalViewTracking) {
@@ -575,6 +647,7 @@ const processSourcePosts = async (sourceId) => {
       skipped: skippedCount,
       errors: errorCount,
       viralPostsFound: viralCount,
+      autoForwarded: autoForwardedCount,
       filteredByStopWords: posts.length - filteredPosts.length
     };
   } catch (error) {

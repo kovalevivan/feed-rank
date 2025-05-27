@@ -858,22 +858,22 @@ const forwardPost = async (post, source, channel, options = {}) => {
 };
 
 /**
- * Processes pending posts for forwarding
+ * Processes approved posts for forwarding (manual approval workflow)
  * @returns {Promise<Object>} - Result of processing
  */
 const processPendingPosts = async () => {
   try {
-    // Get all pending viral posts
-    const pendingPosts = await Post.find({
+    // Get all approved viral posts that haven't been forwarded yet
+    const approvedPosts = await Post.find({
       isViral: true,
-      status: 'pending'
+      status: 'approved'
     }).populate('vkSource');
     
     // Filter out posts with deleted sources
-    const validPosts = pendingPosts.filter(post => post.vkSource);
+    const validPosts = approvedPosts.filter(post => post.vkSource);
     
-    if (validPosts.length < pendingPosts.length) {
-      console.warn(`${pendingPosts.length - validPosts.length} posts skipped due to deleted sources`);
+    if (validPosts.length < approvedPosts.length) {
+      console.warn(`${approvedPosts.length - validPosts.length} posts skipped due to deleted sources`);
     }
     
     let forwardedCount = 0;
@@ -886,14 +886,11 @@ const processPendingPosts = async () => {
     // Process each post
     for (const post of validPosts) {
       // Find mappings for this post's source
-      const mappings = await Mapping.find({
-        vkSource: post.vkSource._id,
-        active: true
-      }).populate('vkSource').populate('telegramChannel');
+      const mappings = await getAllMappingsForSource(post.vkSource._id.toString());
       
-      // Filter out mappings with deleted sources or channels
+      // Filter out mappings with deleted channels (sources/groups are already validated in getAllMappingsForSource)
       const validMappings = mappings.filter(mapping => 
-        mapping.vkSource && mapping.telegramChannel
+        mapping.telegramChannel && mapping.telegramChannel.active
       );
       
       if (validMappings.length === 0) {
@@ -906,7 +903,8 @@ const processPendingPosts = async () => {
       let postForwarded = false;
       for (const mapping of validMappings) {
         try {
-          await forwardPost(post, mapping.vkSource, mapping.telegramChannel);
+          // Use the post's vkSource for forwarding (works for both individual and group mappings)
+          await forwardPost(post, post.vkSource, mapping.telegramChannel);
           forwardedCount++;
           postForwarded = true;
         } catch (error) {
@@ -934,7 +932,7 @@ const processPendingPosts = async () => {
     }
     
     return {
-      processed: pendingPosts.length,
+      processed: approvedPosts.length,
       valid: validPosts.length,
       skipped: skippedCount,
       forwarded: forwardedCount,
@@ -945,6 +943,8 @@ const processPendingPosts = async () => {
     throw error;
   }
 };
+
+const { getAllMappingsForSource } = require('../../utils/mappingUtils');
 
 module.exports = {
   init,

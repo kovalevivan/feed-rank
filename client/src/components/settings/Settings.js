@@ -211,47 +211,47 @@ const Settings = () => {
           <CircularProgress />
         </Box>
       ) : (
-        <form onSubmit={handleSubmit}>
-          {/* System Settings */}
-          {tabValue === 0 && (
-            <Paper sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                {translate('System Settings')}
-              </Typography>
-              <Divider sx={{ mb: 3 }} />
-              
-              <Grid container spacing={3}>
-                <Grid item xs={12}>
-                  <FormControlLabel
-                    control={
-                      <Switch
+      <form onSubmit={handleSubmit}>
+        {/* System Settings */}
+        {tabValue === 0 && (
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              {translate('System Settings')}
+            </Typography>
+            <Divider sx={{ mb: 3 }} />
+            
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <FormControlLabel
+                  control={
+                    <Switch
                         checked={formData.system.autoForward}
-                        onChange={(e) => handleSettingChange('system', 'autoForward', e.target.checked)}
-                        color="primary"
-                      />
-                    }
-                    label={translate('Automatically forward viral posts without approval')}
-                  />
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                    {translate('When enabled, viral posts will be automatically forwarded to mapped Telegram channels without manual approval.')}
-                  </Typography>
-                </Grid>
+                      onChange={(e) => handleSettingChange('system', 'autoForward', e.target.checked)}
+                      color="primary"
+                    />
+                  }
+                  label={translate('Automatically forward viral posts without approval')}
+                />
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  {translate('When enabled, viral posts will be automatically forwarded to mapped Telegram channels without manual approval.')}
+                </Typography>
               </Grid>
-            </Paper>
-          )}
-          
-          {/* VK API Settings */}
-          {tabValue === 1 && (
-            <Paper sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                {translate('VK API Settings')}
-              </Typography>
-              <Divider sx={{ mb: 3 }} />
-              
-              <Grid container spacing={3}>
+            </Grid>
+          </Paper>
+        )}
+        
+        {/* VK API Settings */}
+        {tabValue === 1 && (
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              {translate('VK API Settings')}
+            </Typography>
+            <Divider sx={{ mb: 3 }} />
+            
+            <Grid container spacing={3}>
                 <Grid item xs={12}>
-                  <TextField
-                    fullWidth
+                <TextField
+                  fullWidth
                     label={translate('Stop Words')}
                     multiline
                     rows={4}
@@ -259,50 +259,50 @@ const Settings = () => {
                     value={stopWordsInput}
                     onChange={(e) => setStopWordsInput(e.target.value)}
                     helperText={translate('Enter words separated by commas, spaces, or new lines. Posts containing these words will be filtered out. Changes apply to all sources.')}
-                  />
-                </Grid>
+                />
               </Grid>
-            </Paper>
-          )}
-          
-          {/* Telegram Settings */}
-          {tabValue === 2 && (
-            <Paper sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                {translate('Telegram Settings')}
-              </Typography>
-              <Divider sx={{ mb: 3 }} />
-              
-              <Grid container spacing={3}>
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label={translate('Notification Chat ID')}
+            </Grid>
+          </Paper>
+        )}
+        
+        {/* Telegram Settings */}
+        {tabValue === 2 && (
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              {translate('Telegram Settings')}
+            </Typography>
+            <Divider sx={{ mb: 3 }} />
+            
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label={translate('Notification Chat ID')}
                     value={formData.telegram.notificationChatId}
-                    onChange={(e) => handleSettingChange('telegram', 'notificationChatId', e.target.value)}
-                    helperText={translate('Chat ID for system notifications (optional)')}
-                  />
-                </Grid>
+                  onChange={(e) => handleSettingChange('telegram', 'notificationChatId', e.target.value)}
+                  helperText={translate('Chat ID for system notifications (optional)')}
+                />
               </Grid>
-            </Paper>
-          )}
-          
-          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
-            <Button
-              type="submit"
-              variant="contained"
-              startIcon={<SaveIcon />}
-              size="large"
+            </Grid>
+          </Paper>
+        )}
+        
+        <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
+          <Button
+            type="submit"
+            variant="contained"
+            startIcon={<SaveIcon />}
+            size="large"
               disabled={loading}
-            >
+          >
               {loading ? (
                 <CircularProgress size={24} />
               ) : (
                 translate('Save Settings')
               )}
-            </Button>
-          </Box>
-        </form>
+          </Button>
+        </Box>
+      </form>
       )}
       
       <Snackbar

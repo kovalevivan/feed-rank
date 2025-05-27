@@ -4,6 +4,7 @@ const { query, param, body, validationResult } = require('express-validator');
 const Post = require('../models/Post');
 const Mapping = require('../models/Mapping');
 const telegramService = require('../services/telegram');
+const { getAllMappingsForSource } = require('../utils/mappingUtils');
 
 // Get all posts with filtering
 router.get('/', [
@@ -171,30 +172,29 @@ router.put(
       // If approved, forward the post
       if (status === 'approved') {
         try {
-          // Get mappings for this source
-          const mappings = await Mapping.find({
-            vkSource: post.vkSource,
-            active: true
-          }).populate('telegramChannel');
+          // Get mappings for this source (both individual and group mappings)
+          const mappings = await getAllMappingsForSource(post.vkSource.toString());
           
           // Forward to each channel
           const forwardResults = [];
           
           for (const mapping of mappings) {
-            try {
-              const result = await telegramService.forwardPost(post, mapping.telegramChannel);
-              forwardResults.push({
-                channel: mapping.telegramChannel._id,
-                success: true,
-                messageId: result.telegramMessageId
-              });
-            } catch (error) {
-              console.error(`Error forwarding post ${post._id} to channel ${mapping.telegramChannel._id}:`, error);
-              forwardResults.push({
-                channel: mapping.telegramChannel._id,
-                success: false,
-                error: error.message
-              });
+            if (mapping.telegramChannel && mapping.telegramChannel.active) {
+              try {
+                const result = await telegramService.forwardPost(post, post.vkSource, mapping.telegramChannel);
+                forwardResults.push({
+                  channel: mapping.telegramChannel._id,
+                  success: true,
+                  messageId: result.telegramMessageId
+                });
+              } catch (error) {
+                console.error(`Error forwarding post ${post._id} to channel ${mapping.telegramChannel._id}:`, error);
+                forwardResults.push({
+                  channel: mapping.telegramChannel._id,
+                  success: false,
+                  error: error.message
+                });
+              }
             }
           }
           
@@ -260,18 +260,17 @@ router.put(
         // Process each post asynchronously
         const forwardPromises = postsToForward.map(async (post) => {
           try {
-            // Get mappings for this source
-            const mappings = await Mapping.find({
-              vkSource: post.vkSource,
-              active: true
-            }).populate('telegramChannel');
+            // Get mappings for this source (both individual and group mappings)
+            const mappings = await getAllMappingsForSource(post.vkSource.toString());
             
             // Forward to each channel
             for (const mapping of mappings) {
-              try {
-                await telegramService.forwardPost(post, mapping.telegramChannel);
-              } catch (error) {
-                console.error(`Error forwarding post ${post._id} to channel ${mapping.telegramChannel._id}:`, error);
+              if (mapping.telegramChannel && mapping.telegramChannel.active) {
+                try {
+                  await telegramService.forwardPost(post, post.vkSource, mapping.telegramChannel);
+                } catch (error) {
+                  console.error(`Error forwarding post ${post._id} to channel ${mapping.telegramChannel._id}:`, error);
+                }
               }
             }
             
