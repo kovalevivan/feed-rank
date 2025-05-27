@@ -36,9 +36,9 @@ const autoForwardViralPost = async (post, source) => {
         try {
           await telegramService.forwardPost(post, source, mapping.telegramChannel);
           forwardedCount++;
-          console.log(`✅ Auto-forwarded viral post ${post.postId} to channel ${mapping.telegramChannel.name}`);
+          console.log(`✅ Auto-forwarded viral post ${post.postId} to ${mapping.telegramChannel.name}`);
         } catch (error) {
-          console.error(`❌ Failed to auto-forward viral post ${post.postId} to channel ${mapping.telegramChannel.name}:`, error);
+          console.error(`❌ Failed to auto-forward viral post ${post.postId} to ${mapping.telegramChannel.name}: ${error.message}`);
           errorCount++;
         }
       }
@@ -138,8 +138,7 @@ const resolveGroupId = async (groupName) => {
         return response[0].id.toString();
       }
     } catch (error) {
-      console.log(`Method 1 (getById) failed for "${groupName}": ${error.message}`);
-      // Continue to next method
+              // Continue to next method
     }
     
     // Method 2: resolveScreenName for non-numeric IDs
@@ -153,7 +152,6 @@ const resolveGroupId = async (groupName) => {
           return resolved.object_id.toString();
         }
       } catch (error) {
-        console.log(`Method 2 (resolveScreenName) failed for "${groupName}": ${error.message}`);
         // Continue to next method
       }
     }
@@ -190,7 +188,6 @@ const resolveGroupId = async (groupName) => {
         return ownerId.replace('-', '');
       }
     } catch (error) {
-      console.log(`Method 3 (wall.get) failed for "${groupName}": ${error.message}`);
       // All methods failed
     }
     
@@ -338,9 +335,7 @@ const calculateStatisticalThreshold = (posts, multiplier) => {
   // Calculate threshold as mean + multiplier * standard deviations
   const threshold = Math.round(stats.mean + (multiplier * stats.standardDeviation));
   
-  console.log(`Statistical threshold calculation: Mean = ${stats.mean}, SD = ${stats.standardDeviation}, Multiplier = ${multiplier}, Threshold = ${threshold}`);
-  console.log(`Additional stats: Median = ${stats.median}, Min = ${stats.min}, Max = ${stats.max}`);
-  console.log(`Percentiles: 75th = ${stats.percentiles.p75}, 90th = ${stats.percentiles.p90}, 95th = ${stats.percentiles.p95}, 99th = ${stats.percentiles.p99}`);
+      // Statistical threshold calculated: Mean + (multiplier * SD)
   
   return threshold;
 };
@@ -356,14 +351,8 @@ const updateSourceThreshold = async (sourceId, thresholdMethod = 'statistical', 
   try {
     validateVkCredentials();
     
-    console.log(`=== Updating threshold for source ${sourceId} ===`);
-    console.log(`Method: ${thresholdMethod}, Provided multiplier: ${multiplier}`);
-    
     const source = await VkSource.findById(sourceId);
     if (!source) throw new Error(`VK source with ID ${sourceId} not found`);
-    
-    console.log(`Found source: ${source.name}`);
-    console.log(`Current statisticalMultiplier: ${source.statisticalMultiplier || 'NOT SET'}`);
     
     // Fixed value of 200 posts for threshold calculation
     const postsForAverage = 200;
@@ -376,7 +365,6 @@ const updateSourceThreshold = async (sourceId, thresholdMethod = 'statistical', 
     // This ensures it's available if they switch methods later
     const usedMultiplier = multiplier || source.statisticalMultiplier || 1.5;
     source.statisticalMultiplier = usedMultiplier;
-    console.log(`Setting source.statisticalMultiplier = ${usedMultiplier}`);
     
     if (thresholdMethod === 'statistical') {
       calculatedThreshold = calculateStatisticalThreshold(posts, usedMultiplier);
@@ -396,11 +384,7 @@ const updateSourceThreshold = async (sourceId, thresholdMethod = 'statistical', 
       detailedStats: detailedStats // Store the detailed statistics
     };
     
-    console.log(`Saving source with statisticalMultiplier = ${source.statisticalMultiplier}`);
     await source.save();
-    
-    console.log(`Source saved successfully`);
-    console.log(`Post-save check - source.statisticalMultiplier = ${source.statisticalMultiplier}`);
     
     return source;
   } catch (error) {
@@ -456,8 +440,6 @@ const processSourcePosts = async (sourceId) => {
       }
     }
     
-    console.log(`Using ${stopWords.length} stop words: ${stopWords.join(', ')}`);
-    
     // Filter out posts containing stop words
     const filteredPosts = stopWords.length > 0 
       ? posts.filter(post => {
@@ -469,7 +451,9 @@ const processSourcePosts = async (sourceId) => {
         })
       : posts;
     
-    console.log(`Filtered out ${posts.length - filteredPosts.length} posts containing stop words`);
+    if (posts.length - filteredPosts.length > 0) {
+      console.log(`Filtered out ${posts.length - filteredPosts.length} posts containing stop words`);
+    }
     
     let viralCount = 0;
     let updatedCount = 0;
@@ -821,9 +805,7 @@ const cleanupOldViewHistory = async () => {
       timestamp: { $lt: fourDaysAgo }
     });
     
-    if (result.deletedCount > 0) {
-      console.log(`Cleaned up ${result.deletedCount} old view history entries`);
-    }
+    // Cleanup completed silently
   } catch (error) {
     console.error('Error cleaning up old view history:', error);
     // Don't throw - cleanup is not critical

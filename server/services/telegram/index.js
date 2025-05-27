@@ -438,8 +438,6 @@ const registerCommands = () => {
 const downloadVideo = async (url, filename) => {
   const outputPath = path.join(tempDir, filename);
   
-  console.log(`Downloading video from ${url} to ${outputPath}`);
-  
   try {
     const response = await axios({
       method: 'get',
@@ -465,7 +463,6 @@ const downloadVideo = async (url, filename) => {
       
       writer.on('close', () => {
         if (!error) {
-          console.log(`Video downloaded successfully to ${outputPath}`);
           resolve(outputPath);
         }
       });
@@ -484,10 +481,9 @@ const cleanupTempFiles = (filePath) => {
   try {
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
-      console.log(`Deleted temporary file: ${filePath}`);
     }
   } catch (error) {
-    console.error(`Error deleting temporary file ${filePath}:`, error);
+    // Silently ignore cleanup errors
   }
 };
 
@@ -530,6 +526,19 @@ const forwardPost = async (post, source, channel, options = {}) => {
         .replace(/>/g, '&gt;');
     };
     
+    // Truncate text to fit Telegram's message limit
+    const truncateText = (text, maxLength = 3000) => {
+      if (!text) return '';
+      if (text.length <= maxLength) return text;
+      
+      // Find a good place to cut (try to cut at word boundary)
+      const truncated = text.substring(0, maxLength);
+      const lastSpace = truncated.lastIndexOf(' ');
+      const cutPoint = lastSpace > maxLength * 0.8 ? lastSpace : maxLength;
+      
+      return text.substring(0, cutPoint) + '...';
+    };
+    
     // Format date
     const formatDate = (date) => {
       if (!date) return '';
@@ -555,7 +564,7 @@ const forwardPost = async (post, source, channel, options = {}) => {
     }
     
     caption += `<b>Из группы ВК: ${escapeHtml(sourceName)}</b>\n\n`;
-    caption += `${escapeHtml(post.text)}\n\n`;
+    caption += `${escapeHtml(truncateText(post.text))}\n\n`;
     caption += `👁 Просмотры: <b>${post.viewCount.toLocaleString()}</b>\n`;
     caption += `👍 Лайки: <b>${post.likeCount.toLocaleString()}</b>\n`;
     caption += `🔄 Репосты: <b>${post.repostCount.toLocaleString()}</b>\n`;
@@ -652,7 +661,6 @@ const forwardPost = async (post, source, channel, options = {}) => {
         const sentMessages = await bot.sendMediaGroup(channel.chatId, mediaGroup);
         sentMessage = sentMessages[0]; // Use the first message for reference
       } catch (mediaGroupError) {
-        console.error(`Error sending media group for post ${post._id}:`, mediaGroupError);
         // Fallback to sending just the first photo
         try {
           sentMessage = await bot.sendPhoto(
@@ -665,7 +673,6 @@ const forwardPost = async (post, source, channel, options = {}) => {
           );
         } catch (photoError) {
           // If that fails too, fall back to text message with links
-          console.error(`Error sending single photo for post ${post._id}:`, photoError);
           const photoLinks = photoAttachments.map((photo, idx) => 
             `<a href="${photo.url}">Фото ${idx + 1}</a>`).join('\n');
           sentMessage = await bot.sendMessage(
@@ -691,7 +698,6 @@ const forwardPost = async (post, source, channel, options = {}) => {
           }
         );
       } catch (mediaError) {
-        console.error(`Error sending photo for post ${post._id}:`, mediaError);
         // Fallback to regular message if media sending fails
         sentMessage = await bot.sendMessage(
           channel.chatId, 
@@ -708,7 +714,6 @@ const forwardPost = async (post, source, channel, options = {}) => {
       try {
         // First, try with direct URL if available
         if (videoAttachment.directUrl && videoAttachment.directUrl.match(/\.(mp4|mov|avi|mkv)$/i)) {
-          console.log(`Attempting to send video with direct URL: ${videoAttachment.directUrl}`);
           try {
             sentMessage = await bot.sendVideo(
               channel.chatId,
@@ -720,14 +725,11 @@ const forwardPost = async (post, source, channel, options = {}) => {
                 supports_streaming: true
               }
             );
-            console.log('Successfully sent video using direct URL');
           } catch (directVideoError) {
-            console.error(`Error sending video with direct URL: ${directVideoError.message}`);
             throw directVideoError; // Let the next section handle it
           }
         } else {
           // If no direct URL available, try to extract video info from VK
-          console.log(`No direct URL available, trying to extract from VK URL: ${videoAttachment.url}`);
           const videoIds = vkService.extractVideoIds(videoAttachment.url);
           
           if (videoIds) {
@@ -740,8 +742,6 @@ const forwardPost = async (post, source, channel, options = {}) => {
               
               if (videoData.directUrl) {
                 // We have a direct URL from the API, try to download and send it
-                console.log(`Got direct URL from VK API: ${videoData.directUrl}`);
-                
                 try {
                   // Download the video
                   const videoFilename = `vk_video_${videoIds.ownerId}_${videoIds.videoId}.mp4`;
@@ -760,19 +760,15 @@ const forwardPost = async (post, source, channel, options = {}) => {
                     }
                   );
                   
-                  console.log('Successfully sent downloaded video');
-                  
                   // Clean up the temporary file
                   cleanupTempFiles(videoPath);
                 } catch (downloadError) {
-                  console.error(`Error downloading/sending video: ${downloadError.message}`);
                   throw downloadError; // Let the next section handle it
                 }
               } else {
                 throw new Error('No direct video URL found in API response');
               }
             } catch (videoApiError) {
-              console.error(`Error getting video data from VK API: ${videoApiError.message}`);
               throw videoApiError; // Let the next section handle it
             }
           } else {
@@ -780,7 +776,6 @@ const forwardPost = async (post, source, channel, options = {}) => {
           }
         }
       } catch (videoError) {
-        console.error(`All video sending methods failed for post ${post._id}:`, videoError);
         
         // Fallback to regular message with video preview
         try {
@@ -796,8 +791,6 @@ const forwardPost = async (post, source, channel, options = {}) => {
             }
           );
         } catch (fallbackError) {
-          console.error(`Even fallback video handling failed: ${fallbackError.message}`);
-          
           // Last resort - plain text with link
           sentMessage = await bot.sendMessage(
             channel.chatId, 
@@ -835,6 +828,9 @@ const forwardPost = async (post, source, channel, options = {}) => {
     channel.postsForwarded += 1;
     await channel.save();
     
+    // Log successful forwarding
+    console.log(`✅ Message sent to ${channel.name || channel.chatId}`);
+    
     // Update lastChecked timestamp on the source to prevent duplicate processing
     if (post.vkSource) {
       await VkSource.updateOne(
@@ -852,7 +848,7 @@ const forwardPost = async (post, source, channel, options = {}) => {
       channelId: channel._id
     };
   } catch (error) {
-    console.error(`Error forwarding post to Telegram channel ${channel.name || channel.chatId}:`, error);
+    console.error(`❌ Failed to send message to ${channel.name || channel.chatId}: ${error.message}`);
     throw error;
   }
 };

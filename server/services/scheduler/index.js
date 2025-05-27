@@ -84,7 +84,6 @@ const updateSourceSchedules = async () => {
       // Create new cron job
       const job = cron.schedule(cronExpression, async () => {
         try {
-          console.log(`Processing posts for source ${source.name} (${sourceId})...`);
           await vkService.processSourcePosts(sourceId);
         } catch (error) {
           console.error(`Error processing source ${sourceId}:`, error);
@@ -98,13 +97,12 @@ const updateSourceSchedules = async () => {
         frequency: source.checkFrequency
       };
       
-      console.log(`Scheduled job for source ${source.name} (${sourceId}): ${cronExpression}`);
+      // Job scheduled for source
     }
     
     // Clean up removed or deactivated sources
     for (const jobId of Object.keys(cronJobs)) {
       if (!currentSourceIds.has(jobId)) {
-        console.log(`Removing job for deleted or deactivated source ${jobId}`);
         cronJobs[jobId].job.stop();
         delete cronJobs[jobId];
       }
@@ -153,9 +151,10 @@ const calculateCronExpression = (frequencyMinutes) => {
  */
 const processPendingPosts = async () => {
   try {
-    console.log('Processing manually approved posts for forwarding...');
     const result = await telegramService.processPendingPosts();
-    console.log(`Processed ${result.processed} approved posts, forwarded ${result.forwarded}, errors: ${result.errors}`);
+    if (result.forwarded > 0) {
+      console.log(`✅ Forwarded ${result.forwarded} manually approved posts`);
+    }
     return result;
   } catch (error) {
     console.error('Error processing approved posts:', error);
@@ -182,8 +181,6 @@ const processSourceNow = async (sourceId) => {
  */
 const processHighDynamicsPosts = async () => {
   try {
-    console.log('🚀 Checking for high dynamics posts...');
-    
     // Get all active sources with experimental tracking enabled
     const sources = await VkSource.find({ 
       active: true, 
@@ -192,7 +189,6 @@ const processHighDynamicsPosts = async () => {
     });
     
     if (sources.length === 0) {
-      console.log('No sources with high dynamics detection enabled');
       return;
     }
     
@@ -228,9 +224,9 @@ const processHighDynamicsPosts = async () => {
                     viewHistory: dynamicsCheck.history
                   });
                   
-                  console.log(`✅ Forwarded high dynamics post ${post.postId} to channel ${mapping.telegramChannel.name}`);
+                  console.log(`✅ Forwarded high dynamics post ${post.postId} to ${mapping.telegramChannel.name}`);
                 } catch (error) {
-                  console.error(`Failed to forward high dynamics post ${post.postId} to channel ${mapping.telegramChannel.name}:`, error);
+                  console.error(`❌ Failed to forward high dynamics post ${post.postId} to ${mapping.telegramChannel.name}: ${error.message}`);
                 }
               }
             }
