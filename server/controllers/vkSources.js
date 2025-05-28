@@ -137,7 +137,10 @@ router.put(
     body('checkFrequency').optional().isInt({ min: 5 }).withMessage('Check frequency must be at least 5 minutes'),
     body('postsToCheck').optional().isInt({ min: 10, max: 100 }).withMessage('Posts to check must be between 10 and 100'),
     body('active').optional().isBoolean().withMessage('Active must be boolean'),
-    body('experimentalViewTracking').optional().isBoolean().withMessage('Experimental view tracking must be boolean')
+    body('experimentalViewTracking').optional().isBoolean().withMessage('Experimental view tracking must be boolean'),
+    body('highDynamicsDetection.enabled').optional().isBoolean().withMessage('High dynamics detection enabled must be boolean'),
+    body('highDynamicsDetection.growthRateThreshold').optional().isInt({ min: 10, max: 100 }).withMessage('Growth rate threshold must be between 10 and 100'),
+    body('highDynamicsDetection.minDataPoints').optional().isInt({ min: 2, max: 10 }).withMessage('Minimum data points must be between 2 and 10')
   ],
   async (req, res) => {
     // Validate request
@@ -153,7 +156,17 @@ router.put(
         return res.status(404).json({ message: 'VK source not found' });
       }
       
-      const { name, thresholdType, thresholdMethod, manualThreshold, checkFrequency, postsToCheck, active, experimentalViewTracking } = req.body;
+      const { 
+        name, 
+        thresholdType, 
+        thresholdMethod, 
+        manualThreshold, 
+        checkFrequency, 
+        postsToCheck, 
+        active, 
+        experimentalViewTracking,
+        highDynamicsDetection 
+      } = req.body;
       
       // Update fields
       if (name !== undefined) {
@@ -235,6 +248,29 @@ router.put(
       
       if (experimentalViewTracking !== undefined) {
         source.experimentalViewTracking = experimentalViewTracking;
+      }
+      
+      // Handle highDynamicsDetection parameters
+      if (highDynamicsDetection !== undefined) {
+        if (!source.highDynamicsDetection) {
+          source.highDynamicsDetection = {
+            enabled: true,
+            growthRateThreshold: 30,
+            minDataPoints: 2
+          };
+        }
+        
+        if (highDynamicsDetection.enabled !== undefined) {
+          source.highDynamicsDetection.enabled = highDynamicsDetection.enabled;
+        }
+        
+        if (highDynamicsDetection.growthRateThreshold !== undefined) {
+          source.highDynamicsDetection.growthRateThreshold = highDynamicsDetection.growthRateThreshold;
+        }
+        
+        if (highDynamicsDetection.minDataPoints !== undefined) {
+          source.highDynamicsDetection.minDataPoints = highDynamicsDetection.minDataPoints;
+        }
       }
       
       // Save updated source

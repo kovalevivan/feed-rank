@@ -97,7 +97,7 @@ const VkSourceSchema = new mongoose.Schema({
     },
     minDataPoints: {
       type: Number,
-      default: 2 // minimum view history entries needed
+      default: 4 // minimum view history entries needed
     }
   },
   createdBy: {
