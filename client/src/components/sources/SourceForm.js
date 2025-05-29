@@ -442,7 +442,7 @@ const SourceForm = () => {
     highDynamicsDetection: {
       enabled: true,
       growthRateThreshold: 30,
-      minDataPoints: 2
+      minDataPoints: 4
     }
   });
   
@@ -479,7 +479,7 @@ const SourceForm = () => {
         highDynamicsDetection: vkSource.highDynamicsDetection || {
           enabled: true,
           growthRateThreshold: 30,
-          minDataPoints: 2
+          minDataPoints: 4
         }
       });
     }
@@ -771,7 +771,7 @@ const SourceForm = () => {
                     margin="normal"
                     InputProps={{
                       endAdornment: <InputAdornment position="end">{translate('views/min')}</InputAdornment>,
-                      inputProps: { min: 10, max: 100 }
+                      inputProps: { min: 10, max: 1000 }
                     }}
                     helperText={translate('Posts growing faster than this rate will be sent early')}
                   />
@@ -780,7 +780,7 @@ const SourceForm = () => {
                     fullWidth
                     label={translate('Minimum Data Points')}
                     type="number"
-                    value={formData.highDynamicsDetection?.minDataPoints ?? 2}
+                    value={formData.highDynamicsDetection?.minDataPoints ?? 4}
                     onChange={(e) => setFormData({
                       ...formData,
                       highDynamicsDetection: {
@@ -790,7 +790,7 @@ const SourceForm = () => {
                     })}
                     margin="normal"
                     InputProps={{
-                      inputProps: { min: 2, max: 10 }
+                      inputProps: { min: 2, max: 50 }
                     }}
                     helperText={translate('Minimum view history entries needed before detecting high dynamics')}
                   />

@@ -139,8 +139,8 @@ router.put(
     body('active').optional().isBoolean().withMessage('Active must be boolean'),
     body('experimentalViewTracking').optional().isBoolean().withMessage('Experimental view tracking must be boolean'),
     body('highDynamicsDetection.enabled').optional().isBoolean().withMessage('High dynamics detection enabled must be boolean'),
-    body('highDynamicsDetection.growthRateThreshold').optional().isInt({ min: 10, max: 100 }).withMessage('Growth rate threshold must be between 10 and 100'),
-    body('highDynamicsDetection.minDataPoints').optional().isInt({ min: 2, max: 10 }).withMessage('Minimum data points must be between 2 and 10')
+    body('highDynamicsDetection.growthRateThreshold').optional().isInt({ min: 10, max: 1000 }).withMessage('Growth rate threshold must be between 10 and 1000'),
+    body('highDynamicsDetection.minDataPoints').optional().isInt({ min: 2, max: 50 }).withMessage('Minimum data points must be between 2 and 50')
   ],
   async (req, res) => {
     // Validate request
