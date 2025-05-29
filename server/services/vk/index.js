@@ -850,43 +850,60 @@ const checkHighDynamics = async (post, source) => {
       return { isHighDynamics: false, growthRate: 0 };
     }
     
-    // Get recent view history
+    const minDataPoints = source.highDynamicsDetection.minDataPoints || 4;
+    const growthThreshold = source.highDynamicsDetection.growthRateThreshold || 30;
+    
+    // Get recent view history - limit to a reasonable number to check for consecutive observations
     const history = await ViewHistory.find({
       post: post._id,
       vkSource: source._id
-    }).sort({ timestamp: -1 }).limit(5);
+    }).sort({ timestamp: -1 }).limit(Math.max(minDataPoints + 2, 10));
     
-    // Need minimum data points
-    const minDataPoints = source.highDynamicsDetection.minDataPoints || 2;
+    // Need at least the minimum data points
     if (history.length < minDataPoints) {
       return { isHighDynamics: false, growthRate: 0 };
     }
     
-    // Calculate average growth rate from recent history
-    const growthRates = history
-      .filter(h => h.growthRate > 0)
-      .map(h => h.growthRate);
+    // Check for consecutive observations where growth rate exceeds threshold
+    let consecutiveHighGrowth = 0;
+    let recentHighGrowthEntries = [];
     
-    if (growthRates.length === 0) {
+    for (let i = 0; i < history.length && consecutiveHighGrowth < minDataPoints; i++) {
+      const entry = history[i];
+      
+      if (entry.growthRate > 0 && entry.growthRate >= growthThreshold) {
+        consecutiveHighGrowth++;
+        recentHighGrowthEntries.push(entry);
+      } else {
+        // Break the consecutive chain if we encounter a non-qualifying entry
+        break;
+      }
+    }
+    
+    // We need exactly minDataPoints consecutive observations above threshold
+    const hasHighDynamics = consecutiveHighGrowth >= minDataPoints;
+    
+    if (!hasHighDynamics) {
       return { isHighDynamics: false, growthRate: 0 };
     }
     
-    const avgGrowthRate = growthRates.reduce((sum, rate) => sum + rate, 0) / growthRates.length;
-    const growthThreshold = source.highDynamicsDetection.growthRateThreshold || 30;
-    
-    // Check if growth rate exceeds threshold
-    const isHighDynamics = avgGrowthRate >= growthThreshold;
+    // Calculate average growth rate from the consecutive high-growth entries
+    const avgGrowthRate = recentHighGrowthEntries.reduce((sum, entry) => sum + entry.growthRate, 0) / recentHighGrowthEntries.length;
     
     // Also check if post is not already viral and wasn't already sent as high dynamics
-    const shouldSend = isHighDynamics && 
+    const shouldSend = hasHighDynamics && 
                       !post.isViral && 
                       !post.wasHighDynamics &&
                       !post.highDynamicsForwardedAt;
     
+    // Return exactly minDataPoints entries for the telegram message
+    const historyForMessage = recentHighGrowthEntries.slice(0, minDataPoints);
+    
     return { 
       isHighDynamics: shouldSend, 
       growthRate: avgGrowthRate,
-      history: history.slice(0, 3) // Return last 3 entries for display
+      history: historyForMessage,
+      consecutiveObservations: consecutiveHighGrowth
     };
   } catch (error) {
     console.error(`Error checking high dynamics for post ${post.postId}:`, error);

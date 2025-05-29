@@ -35,8 +35,8 @@ const init = () => {
     }
   });
   
-  // Schedule job to check high dynamics posts every 5 minutes
-  cron.schedule('*/5 * * * *', async () => {
+  // Schedule job to check high dynamics posts every 15 minutes
+  cron.schedule('*/15 * * * *', async () => {
     try {
       await processHighDynamicsPosts();
     } catch (error) {
