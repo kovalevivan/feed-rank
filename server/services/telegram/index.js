@@ -574,68 +574,30 @@ const forwardPost = async (post, source, channel, options = {}) => {
     if (options.isHighDynamics && options.growthRate) {
       caption += `\n📈 <b>Скорость роста: ${options.growthRate.toFixed(1)} просмотров/мин</b>\n`;
       
-      if (options.viewHistory && options.viewHistory.length > 0) {
-        caption += '\n📊 <b>Недавняя динамика:</b>\n';
-        options.viewHistory.forEach((history) => {
-          const timestamp = new Date(history.timestamp).toLocaleString('ru-RU', {
-            day: '2-digit',
-            month: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false
-          });
-          
-          let historyLine = `${timestamp}: ${history.viewCount.toLocaleString()} просмотров`;
-          if (history.viewDelta > 0) {
-            historyLine += ` (+${history.viewDelta.toLocaleString()})`;
-          }
-          caption += `${historyLine}\n`;
+      // Add time range information if available
+      if (options.timeRange) {
+        const startTime = new Date(options.timeRange.start).toLocaleString('ru-RU', {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
         });
+        const endTime = new Date(options.timeRange.end).toLocaleString('ru-RU', {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        });
+        caption += `\n⏱ <b>Период высокой динамики:</b>\n`;
+        caption += `С ${startTime} по ${endTime}\n`;
+        caption += `Длительность: ${options.timeRange.duration.toFixed(1)} мин\n`;
       }
     }
-    // Add regular view history for non-high-dynamics posts
+    // Remove experimental view history section
     else if (vkSource && vkSource.experimentalViewTracking && !options.isHighDynamics) {
-      const viewHistory = await vkService.getViewHistory(post.postId, vkSource._id, 5);
-      
-      if (viewHistory && viewHistory.length > 0) {
-        caption += '\n📊 <b>Динамика просмотров (Экспериментально):</b>\n';
-        
-        // Show last 5 view history entries
-        viewHistory.forEach((history, index) => {
-          const timestamp = new Date(history.timestamp).toLocaleString('ru-RU', {
-            day: '2-digit',
-            month: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false
-          });
-          
-          let historyLine = `${timestamp}: ${history.viewCount.toLocaleString()} просмотров`;
-          
-          if (history.viewDelta > 0 && index < viewHistory.length - 1) {
-            historyLine += ` (+${history.viewDelta.toLocaleString()})`;
-            
-            if (history.growthRate > 0) {
-              historyLine += ` [${history.growthRate.toFixed(1)} просмотров/мин]`;
-            }
-          }
-          
-          caption += `${historyLine}\n`;
-        });
-        
-        // Calculate overall growth rate
-        if (viewHistory.length > 1) {
-          const firstEntry = viewHistory[viewHistory.length - 1];
-          const lastEntry = viewHistory[0];
-          const totalViews = lastEntry.viewCount - firstEntry.viewCount;
-          const totalMinutes = (lastEntry.timestamp - firstEntry.timestamp) / (1000 * 60);
-          
-          if (totalMinutes > 0) {
-            const avgGrowthRate = totalViews / totalMinutes;
-            caption += `\n📈 Средний рост: ${avgGrowthRate.toFixed(1)} просмотров/мин\n`;
-          }
-        }
-      }
+      // Skip view history for non-high-dynamics posts
     }
     
     caption += `\n<a href="${post.originalPostUrl}">Смотреть оригинальный пост</a>`;

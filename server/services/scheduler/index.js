@@ -221,7 +221,8 @@ const processHighDynamicsPosts = async () => {
                   await telegramService.forwardPost(post, source, mapping.telegramChannel, {
                     isHighDynamics: true,
                     growthRate: dynamicsCheck.growthRate,
-                    viewHistory: dynamicsCheck.history
+                    viewHistory: dynamicsCheck.history,
+                    timeRange: dynamicsCheck.timeRange
                   });
                   
                   console.log(`✅ Forwarded high dynamics post ${post.postId} to ${mapping.telegramChannel.name}`);

@@ -18,18 +18,18 @@ services:
     environment:
       - NODE_ENV=production
     env_file: .env
-    depends_on:
-      - mongo
+    # depends_on:
+    #   - mongo
   
-  mongo:
-    image: mongo:5.0
-    container_name: feedrank-mongo
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodb_data:/data/db
-    restart: unless-stopped
-    env_file: .env
+  # mongo:
+  #   image: mongo:5.0
+  #   container_name: feedrank-mongo
+  #   ports:
+  #     - "27017:27017"
+  #   volumes:
+  #     - mongodb_data:/data/db
+  #   restart: unless-stopped
+  #   env_file: .env
 
-volumes:
-  mongodb_data:
+# volumes:
+#   mongodb_data:

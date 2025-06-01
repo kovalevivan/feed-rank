@@ -4,3 +4,5 @@
 /.idea/
 /feedrank2.iml
 /feed-rank.iml
+/client/node_modules/
+/server/data/
