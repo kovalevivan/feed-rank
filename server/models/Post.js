@@ -29,7 +29,7 @@ const PostSchema = new mongoose.Schema({
   attachments: [{
     type: {
       type: String,
-      enum: ['photo', 'video', 'link', 'doc', 'audio', 'other']
+      enum: ['photo', 'video', 'link', 'doc', 'audio', 'poll', 'other']
     },
     url: String,
     thumbnailUrl: String
