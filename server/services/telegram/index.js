@@ -563,7 +563,6 @@ const forwardPost = async (post, source, channel, options = {}) => {
       caption += `<i>Этот пост быстро набирает просмотры!</i>\n\n`;
     }
     
-    caption += `<b>Из группы ВК: ${escapeHtml(sourceName)}</b>\n\n`;
     caption += `${escapeHtml(truncateText(post.text))}\n\n`;
     caption += `👁 Просмотры: <b>${post.viewCount.toLocaleString()}</b>\n`;
     caption += `👍 Лайки: <b>${post.likeCount.toLocaleString()}</b>\n`;
@@ -601,6 +600,13 @@ const forwardPost = async (post, source, channel, options = {}) => {
     }
     
     caption += `\n<a href="${post.originalPostUrl}">Смотреть оригинальный пост</a>`;
+
+    // Add Telegram tag for the source at the bottom
+    if (sourceName) {
+      // Convert sourceName to a valid hashtag: remove spaces, non-alphanumeric, lowercase
+      const tag = '#' + sourceName.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
+      caption += `\n\n${tag}`;
+    }
     
     let sentMessage;
     

@@ -72,6 +72,8 @@ router.get('/source-dynamics/:sourceId', async (req, res) => {
         postId: post.postId,
         text: post.text ? post.text.substring(0, 100) + '...' : '',
         isViral: post.isViral,
+        wasHighDynamics: post.wasHighDynamics,
+        highDynamicsForwardedAt: post.highDynamicsForwardedAt,
         currentViews: post.viewCount,
         publishedAt: post.publishedAt,
         historyCount: postHistory.length,

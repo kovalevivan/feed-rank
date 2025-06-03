@@ -329,12 +329,13 @@ const Analytics = () => {
                         <TableCell align="right">{translate('Max Growth Rate')}</TableCell>
                         <TableCell align="right">{translate('Total Growth')}</TableCell>
                         <TableCell align="center">{translate('Status')}</TableCell>
+                        <TableCell align="center">{translate('Forwarded As')}</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
                       {sourceDynamicsLoading ? (
                         <TableRow>
-                          <TableCell colSpan={6} align="center">
+                          <TableCell colSpan={7} align="center">
                             <CircularProgress />
                           </TableCell>
                         </TableRow>
@@ -369,6 +370,30 @@ const Analytics = () => {
                                 <Chip label={translate('Viral')} color="error" size="small" />
                               ) : (
                                 <Chip label={translate('Normal')} color="default" size="small" />
+                              )}
+                            </TableCell>
+                            <TableCell align="center">
+                              {post.wasHighDynamics ? (
+                                <Chip 
+                                  label={translate('High Dynamics')} 
+                                  color="warning" 
+                                  size="small"
+                                  title={post.highDynamicsForwardedAt ? 
+                                    translate('Forwarded at') + ': ' + new Date(post.highDynamicsForwardedAt).toLocaleString() : 
+                                    ''}
+                                />
+                              ) : post.isViral ? (
+                                <Chip 
+                                  label={translate('Viral')} 
+                                  color="error" 
+                                  size="small"
+                                />
+                              ) : (
+                                <Chip 
+                                  label={translate('Not Forwarded')} 
+                                  color="default" 
+                                  size="small"
+                                />
                               )}
                             </TableCell>
                           </TableRow>
