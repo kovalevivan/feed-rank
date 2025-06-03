@@ -43,7 +43,7 @@ router.get('/source-dynamics/:sourceId', async (req, res) => {
     const posts = await Post.find({
       vkSource: sourceId,
       createdAt: { $gte: startDate }
-    }).select('_id postId text viewCount isViral publishedAt');
+    }).select('_id postId text viewCount isViral publishedAt wasHighDynamics highDynamicsForwardedAt');
     
     // Get view history for all posts
     const postIds = posts.map(p => p._id);
