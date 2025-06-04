@@ -559,8 +559,7 @@ const forwardPost = async (post, source, channel, options = {}) => {
     
     // Add high dynamics marker if applicable
     if (options.isHighDynamics) {
-      caption += `🚀 <b>ПОСТ С ВЫСОКОЙ ДИНАМИКОЙ</b> 🚀\n`;
-      caption += `<i>Этот пост быстро набирает просмотры!</i>\n\n`;
+      caption += `#ПОСТ_С_ВЫСОКОЙ_ДИНАМИКОЙ\n`;
     }
     
     caption += `${escapeHtml(truncateText(post.text))}\n\n`;
