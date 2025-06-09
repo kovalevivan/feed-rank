@@ -4,6 +4,7 @@ const Post = require('../../models/Post');
 const Setting = require('../../models/Setting');
 const ViewHistory = require('../../models/ViewHistory');
 const { getAllMappingsForSource } = require('../../utils/mappingUtils');
+const { getCombinedStopWords } = require('../../utils/stopWordsUtils');
 
 // Initialize VK API client
 let vk;
@@ -421,24 +422,8 @@ const processSourcePosts = async (sourceId) => {
     console.log(`Processing source ${sourceId}: Fetching ${postsToFetch} posts from VK group ${source.name} (ID: ${source.groupId})`);
     const posts = await fetchPosts(source.groupId, postsToFetch);
     
-    // Get stop words from settings
-    const stopWordsSetting = await Setting.findOne({ key: 'vk.stop_words' });
-    let stopWords = [];
-    
-    if (stopWordsSetting) {
-      if (Array.isArray(stopWordsSetting.value)) {
-        // If value is already an array, use it directly
-        stopWords = stopWordsSetting.value
-          .filter(word => word && typeof word === 'string' && word.trim().length > 0)
-          .map(word => word.toLowerCase());
-      } else if (typeof stopWordsSetting.value === 'string') {
-        // If value is a string, split by commas, spaces, or newlines
-        stopWords = stopWordsSetting.value
-          .split(/[,\n\s]+/)
-          .map(word => word.trim().toLowerCase())
-          .filter(word => word.length > 0);
-      }
-    }
+    // Get combined stop words (global + group-level)
+    const stopWords = await getCombinedStopWords(sourceId);
     
     // Filter out posts containing stop words
     const filteredPosts = stopWords.length > 0 

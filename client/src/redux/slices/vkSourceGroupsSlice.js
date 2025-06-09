@@ -90,6 +90,18 @@ export const removeSourceFromGroup = createAsyncThunk(
   }
 );
 
+export const fetchGlobalStopWords = createAsyncThunk(
+  'vkSourceGroups/fetchGlobalStopWords',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await axios.get('/api/vk-source-groups/global-stop-words');
+      return response.data.stopWords;
+    } catch (error) {
+      return rejectWithValue(error.response?.data || { message: error.message });
+    }
+  }
+);
+
 // Initial state
 const initialState = {
   vkSourceGroups: [],
@@ -231,6 +243,21 @@ const vkSourceGroupsSlice = createSlice({
       .addCase(removeSourceFromGroup.rejected, (state, action) => {
         state.updating = false;
         state.error = action.payload || { message: 'Failed to remove source from group' };
+      })
+      
+      // fetchGlobalStopWords
+      .addCase(fetchGlobalStopWords.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchGlobalStopWords.fulfilled, (state, action) => {
+        state.loading = false;
+        // Assuming the response is an array of stop words
+        // You might want to store this in the state
+      })
+      .addCase(fetchGlobalStopWords.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload || { message: 'Failed to fetch global stop words' };
       });
   }
 });

@@ -14,6 +14,10 @@ const VkSourceGroupSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'VkSource'
   }],
+  stopWords: [{
+    type: String,
+    trim: true
+  }],
   active: {
     type: Boolean,
     default: true

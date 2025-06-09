@@ -401,7 +401,15 @@ const translations = {
   'HIGH DYNAMICS POST': 'ПОСТ С ВЫСОКОЙ ДИНАМИКОЙ',
   'This post is gaining views rapidly!': 'Этот пост быстро набирает просмотры!',
   'Growth Rate': 'Скорость роста',
-  'Recent Dynamics': 'Недавняя динамика'
+  'Recent Dynamics': 'Недавняя динамика',
+  
+  // Stop Words for Groups
+  'Words to filter out from posts in this group. These will be combined with global stop words.': 'Слова для фильтрации постов в этой группе. Они будут объединены с глобальными стоп-словами.',
+  'Global Stop Words': 'Глобальные стоп-слова',
+  'Group Stop Words': 'Стоп-слова группы',
+  'Enter words separated by commas or new lines': 'Введите слова через запятые или новые строки',
+  'These stop words will be added to the global stop words for sources in this group': 'Эти стоп-слова будут добавлены к глобальным стоп-словам для источников в этой группе',
+  'Optional description for this group': 'Необязательное описание для этой группы'
 };
 
 export default translations; 

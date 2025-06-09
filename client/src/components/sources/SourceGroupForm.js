@@ -42,7 +42,8 @@ import {
   removeSourceFromGroup,
   clearVkSourceGroupsError,
   clearCurrentVkSourceGroup,
-  resetSuccess
+  resetSuccess,
+  fetchGlobalStopWords
 } from '../../redux/slices/vkSourceGroupsSlice';
 import { fetchVkSources } from '../../redux/slices/vkSourcesSlice';
 import ApiErrorAlert from '../common/ApiErrorAlert';
@@ -63,16 +64,21 @@ const SourceGroupForm = () => {
     description: '',
     active: true
   });
-  
+  const [stopWordsInput, setStopWordsInput] = useState('');
+  const [globalStopWords, setGlobalStopWords] = useState([]);
   const [addSourceDialogOpen, setAddSourceDialogOpen] = useState(false);
   const [selectedSourceId, setSelectedSourceId] = useState('');
   const [availableSources, setAvailableSources] = useState([]);
+  
+  // Define isEditMode early so it can be used in useEffect dependencies
+  const isEditMode = id && id !== 'new';
+  const isSubmitting = creating || updating;
   
   // Load sources and current group if editing
   useEffect(() => {
     dispatch(fetchVkSources());
     
-    if (id && id !== 'new') {
+    if (isEditMode) {
       console.log(`🔍 Attempting to fetch group with ID: ${id}`);
       dispatch(fetchVkSourceGroupById(id))
         .unwrap()
@@ -86,24 +92,38 @@ const SourceGroupForm = () => {
       dispatch(clearCurrentVkSourceGroup());
     }
     
+    // Fetch global stop words for display
+    dispatch(fetchGlobalStopWords()).then((action) => {
+      if (action.payload) {
+        setGlobalStopWords(action.payload);
+      }
+    });
+    
     // Cleanup on unmount
     return () => {
       dispatch(clearCurrentVkSourceGroup());
       dispatch(clearVkSourceGroupsError());
       dispatch(resetSuccess());
     };
-  }, [dispatch, id]);
+  }, [dispatch, id, isEditMode]);
   
   // Update form data when currentVkSourceGroup changes
   useEffect(() => {
-    if (currentVkSourceGroup && id !== 'new') {
+    if (currentVkSourceGroup) {
       setFormData({
         name: currentVkSourceGroup.name || '',
         description: currentVkSourceGroup.description || '',
         active: currentVkSourceGroup.active !== undefined ? currentVkSourceGroup.active : true
       });
+      
+      // Set stop words input
+      if (currentVkSourceGroup.stopWords && Array.isArray(currentVkSourceGroup.stopWords)) {
+        setStopWordsInput(currentVkSourceGroup.stopWords.join('\n'));
+      } else {
+        setStopWordsInput('');
+      }
     }
-  }, [currentVkSourceGroup, id]);
+  }, [currentVkSourceGroup]);
   
   // Filter available sources when sources or currentVkSourceGroup changes
   useEffect(() => {
@@ -148,13 +168,32 @@ const SourceGroupForm = () => {
   };
   
   // Form submission handler
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (id && id !== 'new') {
-      dispatch(updateVkSourceGroup({ id, groupData: formData }));
-    } else {
-      dispatch(createVkSourceGroup(formData));
+    // Process stop words input into array
+    const stopWords = stopWordsInput
+      .split(/[\n,]/)
+      .map(word => word.trim())
+      .filter(word => word.length > 0);
+    
+    const groupData = {
+      ...formData,
+      stopWords
+    };
+    
+    try {
+      if (isEditMode) {
+        await dispatch(updateVkSourceGroup({ id, groupData })).unwrap();
+      } else {
+        await dispatch(createVkSourceGroup(groupData)).unwrap();
+      }
+      
+      // Navigate back to groups list on success
+      navigate('/source-groups');
+    } catch (error) {
+      // Error is handled by the slice
+      console.error('Error saving VK source group:', error);
     }
   };
   
@@ -209,9 +248,6 @@ const SourceGroupForm = () => {
   const handleErrorClose = () => {
     dispatch(clearVkSourceGroupsError());
   };
-  
-  const isEditMode = id && id !== 'new';
-  const isSubmitting = creating || updating;
   
   return (
     <Box>
@@ -269,6 +305,39 @@ const SourceGroupForm = () => {
             margin="normal"
             multiline
             rows={2}
+            placeholder={translate('Optional description for this group')}
+          />
+          
+          <Divider sx={{ my: 2 }} />
+          
+          <Typography variant="h6" gutterBottom>
+            {translate('Stop Words')}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            {translate('Words to filter out from posts in this group. These will be combined with global stop words.')}
+          </Typography>
+          
+          {globalStopWords.length > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" gutterBottom>
+                {translate('Global Stop Words')} ({globalStopWords.length}):
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                {globalStopWords.join(', ')}
+              </Typography>
+            </Box>
+          )}
+          
+          <TextField
+            fullWidth
+            label={translate('Group Stop Words')}
+            multiline
+            rows={4}
+            placeholder={translate('Enter words separated by commas or new lines')}
+            value={stopWordsInput}
+            onChange={(e) => setStopWordsInput(e.target.value)}
+            helperText={translate('These stop words will be added to the global stop words for sources in this group')}
+            margin="normal"
           />
           
           <Box sx={{ mt: 2 }}>

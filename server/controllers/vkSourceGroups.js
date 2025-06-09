@@ -4,6 +4,7 @@ const { validationResult, check } = require('express-validator');
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
+const { getGlobalStopWords } = require('../utils/stopWordsUtils');
 
 // @route   GET api/vk-source-groups
 // @desc    Get all VK source groups
@@ -17,6 +18,19 @@ router.get('/', auth, async (req, res) => {
     res.json(vkSourceGroups);
   } catch (err) {
     console.error('Error fetching VK source groups:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// @route   GET api/vk-source-groups/global-stop-words
+// @desc    Get global stop words for display in group forms
+// @access  Private
+router.get('/global-stop-words', auth, async (req, res) => {
+  try {
+    const globalStopWords = await getGlobalStopWords();
+    res.json({ stopWords: globalStopWords });
+  } catch (err) {
+    console.error('Error fetching global stop words:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
@@ -67,13 +81,29 @@ router.post(
     }
     
     try {
-      const { name, description, sources, active } = req.body;
+      const { name, description, sources, stopWords, active } = req.body;
+      
+      // Process stop words - ensure it's an array of strings
+      let processedStopWords = [];
+      if (stopWords) {
+        if (Array.isArray(stopWords)) {
+          processedStopWords = stopWords
+            .filter(word => word && typeof word === 'string' && word.trim().length > 0)
+            .map(word => word.trim());
+        } else if (typeof stopWords === 'string') {
+          processedStopWords = stopWords
+            .split(/[,\n\s]+/)
+            .map(word => word.trim())
+            .filter(word => word.length > 0);
+        }
+      }
       
       // Create a new VK source group
       const vkSourceGroup = new VkSourceGroup({
         name,
         description,
         sources: sources || [],
+        stopWords: processedStopWords,
         active: active !== undefined ? active : true,
         createdBy: req.user.id
       });
@@ -106,7 +136,7 @@ router.put(
     }
     
     try {
-      const { name, description, sources, active } = req.body;
+      const { name, description, sources, stopWords, active } = req.body;
       
       // Find the VK source group
       let vkSourceGroup = await VkSourceGroup.findById(req.params.id);
@@ -115,10 +145,29 @@ router.put(
         return res.status(404).json({ message: 'VK source group not found' });
       }
       
+      // Process stop words - ensure it's an array of strings
+      let processedStopWords = vkSourceGroup.stopWords || [];
+      if (stopWords !== undefined) {
+        processedStopWords = [];
+        if (stopWords) {
+          if (Array.isArray(stopWords)) {
+            processedStopWords = stopWords
+              .filter(word => word && typeof word === 'string' && word.trim().length > 0)
+              .map(word => word.trim());
+          } else if (typeof stopWords === 'string') {
+            processedStopWords = stopWords
+              .split(/[,\n\s]+/)
+              .map(word => word.trim())
+              .filter(word => word.length > 0);
+          }
+        }
+      }
+      
       // Update fields
       vkSourceGroup.name = name || vkSourceGroup.name;
       vkSourceGroup.description = description !== undefined ? description : vkSourceGroup.description;
       vkSourceGroup.sources = sources || vkSourceGroup.sources;
+      vkSourceGroup.stopWords = processedStopWords;
       vkSourceGroup.active = active !== undefined ? active : vkSourceGroup.active;
       
       await vkSourceGroup.save();
