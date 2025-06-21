@@ -4,6 +4,7 @@ const vkService = require('../vk');
 const telegramService = require('../telegram');
 const Post = require('../../models/Post');
 const Mapping = require('../../models/Mapping');
+const ViewHistory = require('../../models/ViewHistory');
 
 // Store active cron jobs
 const cronJobs = {};
@@ -41,6 +42,24 @@ const init = () => {
       await processHighDynamicsPosts();
     } catch (error) {
       console.error('Error processing high dynamics posts:', error);
+    }
+  });
+  
+  // Schedule ViewHistory cleanup every 30 minutes to prevent memory issues
+  cron.schedule('*/30 * * * *', async () => {
+    try {
+      await performViewHistoryCleanup();
+    } catch (error) {
+      console.error('Error performing ViewHistory cleanup:', error);
+    }
+  });
+  
+  // Schedule memory monitoring every 10 minutes
+  cron.schedule('*/10 * * * *', async () => {
+    try {
+      await monitorMemoryUsage();
+    } catch (error) {
+      console.error('Error monitoring memory:', error);
     }
   });
   
@@ -253,11 +272,116 @@ const processHighDynamicsPosts = async () => {
   }
 };
 
+/**
+ * Perform automated ViewHistory cleanup to prevent memory issues
+ */
+const performViewHistoryCleanup = async () => {
+  try {
+    console.log('🧹 Starting automated ViewHistory cleanup...');
+    
+    // Get initial count
+    const initialCount = await ViewHistory.countDocuments();
+    
+    // Step 1: Remove entries older than 1 day (aggressive)
+    const oneDayAgo = new Date();
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+    
+    const oldResult = await ViewHistory.deleteMany({
+      timestamp: { $lt: oneDayAgo }
+    });
+    
+    // Step 2: Limit total entries to 20,000 maximum
+    const countAfterOld = await ViewHistory.countDocuments();
+    const maxEntries = 20000;
+    
+    let excessResult = { deletedCount: 0 };
+    if (countAfterOld > maxEntries) {
+      const entriesToDelete = countAfterOld - maxEntries;
+      const oldestEntries = await ViewHistory.find({})
+        .sort({ timestamp: 1 })
+        .limit(entriesToDelete)
+        .select('_id');
+      
+      if (oldestEntries.length > 0) {
+        const idsToDelete = oldestEntries.map(entry => entry._id);
+        excessResult = await ViewHistory.deleteMany({
+          _id: { $in: idsToDelete }
+        });
+      }
+    }
+    
+    // Step 3: Remove low-value entries
+    const lowValueResult = await ViewHistory.deleteMany({
+      $or: [
+        { growthRate: { $lte: 0 } },
+        { viewDelta: { $lte: 0 } }
+      ]
+    });
+    
+    const finalCount = await ViewHistory.countDocuments();
+    const totalCleaned = initialCount - finalCount;
+    
+    if (totalCleaned > 0) {
+      console.log(`🧹 ViewHistory cleanup completed: ${totalCleaned} entries removed (${oldResult.deletedCount} old, ${excessResult.deletedCount} excess, ${lowValueResult.deletedCount} low-value)`);
+      console.log(`📊 ViewHistory entries: ${initialCount} → ${finalCount}`);
+    }
+    
+    // Force garbage collection if available
+    if (global.gc) {
+      global.gc();
+      console.log('🗑️  Forced garbage collection');
+    }
+    
+  } catch (error) {
+    console.error('Error in ViewHistory cleanup:', error);
+  }
+};
+
+/**
+ * Monitor memory usage and trigger emergency cleanup if needed
+ */
+const monitorMemoryUsage = async () => {
+  try {
+    const memUsage = process.memoryUsage();
+    const memUsageMB = {
+      rss: Math.round(memUsage.rss / 1024 / 1024),
+      heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024),
+      heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024),
+      external: Math.round(memUsage.external / 1024 / 1024)
+    };
+    
+    // Get ViewHistory count
+    const viewHistoryCount = await ViewHistory.countDocuments();
+    
+    // Log memory usage every hour (6 * 10 minutes)
+    const shouldLog = Math.floor(Date.now() / (10 * 60 * 1000)) % 6 === 0;
+    if (shouldLog) {
+      console.log(`📊 Memory: RSS=${memUsageMB.rss}MB, Heap=${memUsageMB.heapUsed}/${memUsageMB.heapTotal}MB, ViewHistory=${viewHistoryCount} entries`);
+    }
+    
+    // Warning thresholds
+    if (memUsageMB.rss > 1200) { // 1.2GB
+      console.warn(`⚠️  High memory usage detected: ${memUsageMB.rss}MB RSS, ${viewHistoryCount} ViewHistory entries`);
+    }
+    
+    // Emergency cleanup triggers
+    if (memUsageMB.rss > 1500 || viewHistoryCount > 25000) { // 1.5GB or 25k entries
+      console.warn('🚨 EMERGENCY: Critical memory usage! Triggering immediate cleanup...');
+      await performViewHistoryCleanup();
+    }
+    
+  } catch (error) {
+    console.error('Error monitoring memory:', error);
+  }
+};
+
 module.exports = {
   init,
   updateSourceSchedules,
   processPendingPosts,
   processSourceNow,
   processHighDynamicsPosts,
+  performViewHistoryCleanup,
+  monitorMemoryUsage,
   getCronJobs: () => cronJobs
 }; 

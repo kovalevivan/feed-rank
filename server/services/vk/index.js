@@ -741,6 +741,14 @@ const trackViewHistory = async (post, source, currentViewCount) => {
       postId: post.postId
     }).sort({ timestamp: -1 });
     
+    // Only track if enough time has passed (minimum 10 minutes between tracking)
+    if (lastHistory) {
+      const timeSinceLastTrack = (Date.now() - lastHistory.timestamp) / (1000 * 60);
+      if (timeSinceLastTrack < 10) {
+        return; // Skip tracking if less than 10 minutes passed
+      }
+    }
+    
     // Calculate deltas
     let viewDelta = 0;
     let timeDeltaMinutes = 0;
@@ -753,6 +761,11 @@ const trackViewHistory = async (post, source, currentViewCount) => {
       // Calculate growth rate (views per minute)
       if (timeDeltaMinutes > 0) {
         growthRate = viewDelta / timeDeltaMinutes;
+      }
+      
+      // Skip if no significant change (less than 10 views difference)
+      if (Math.abs(viewDelta) < 10) {
+        return;
       }
     }
     
@@ -769,8 +782,10 @@ const trackViewHistory = async (post, source, currentViewCount) => {
     
     await viewHistory.save();
     
-    // Clean up old entries (older than 4 days)
-    await cleanupOldViewHistory();
+    // Only run cleanup occasionally (every 50th call) to reduce performance impact
+    if (Math.random() < 0.02) { // 2% chance = roughly every 50 calls
+      await cleanupOldViewHistory();
+    }
     
   } catch (error) {
     console.error(`Error tracking view history for post ${post.postId}:`, error);
@@ -779,18 +794,56 @@ const trackViewHistory = async (post, source, currentViewCount) => {
 };
 
 /**
- * Clean up view history entries older than 4 days
+ * Clean up view history entries with aggressive memory management
  */
 const cleanupOldViewHistory = async () => {
   try {
-    const fourDaysAgo = new Date();
-    fourDaysAgo.setDate(fourDaysAgo.getDate() - 4);
+    // Step 1: Remove entries older than 2 days (more aggressive than 4 days)
+    const twoDaysAgo = new Date();
+    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
     
-    const result = await ViewHistory.deleteMany({
-      timestamp: { $lt: fourDaysAgo }
+    const oldEntriesResult = await ViewHistory.deleteMany({
+      timestamp: { $lt: twoDaysAgo }
     });
     
-    // Cleanup completed silently
+    // Step 2: Limit total entries to prevent memory issues
+    const totalCount = await ViewHistory.countDocuments();
+    const maxEntries = 15000; // Aggressive limit to prevent memory issues
+    
+    if (totalCount > maxEntries) {
+      // Keep only the most recent entries
+      const entriesToDelete = totalCount - maxEntries;
+      const oldestEntries = await ViewHistory.find({})
+        .sort({ timestamp: 1 })
+        .limit(entriesToDelete)
+        .select('_id');
+      
+      if (oldestEntries.length > 0) {
+        const idsToDelete = oldestEntries.map(entry => entry._id);
+        const excessResult = await ViewHistory.deleteMany({
+          _id: { $in: idsToDelete }
+        });
+        
+        if (excessResult.deletedCount > 0) {
+          console.log(`🧹 Cleaned up ${excessResult.deletedCount} excess ViewHistory entries`);
+        }
+      }
+    }
+    
+    // Step 3: Remove low-value entries (zero or negative growth)
+    const lowValueResult = await ViewHistory.deleteMany({
+      $or: [
+        { growthRate: { $lte: 0 } },
+        { viewDelta: { $lte: 0 } }
+      ]
+    });
+    
+    // Log cleanup results if significant
+    const totalCleaned = oldEntriesResult.deletedCount + (lowValueResult?.deletedCount || 0);
+    if (totalCleaned > 100) {
+      console.log(`🧹 ViewHistory cleanup: removed ${totalCleaned} entries (${oldEntriesResult.deletedCount} old, ${lowValueResult?.deletedCount || 0} low-value)`);
+    }
+    
   } catch (error) {
     console.error('Error cleaning up old view history:', error);
     // Don't throw - cleanup is not critical
