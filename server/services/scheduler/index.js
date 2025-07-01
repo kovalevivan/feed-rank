@@ -274,6 +274,7 @@ const processHighDynamicsPosts = async () => {
 
 /**
  * Perform automated ViewHistory cleanup to prevent memory issues
+ * Adjusted limits to support high dynamics detection
  */
 const performViewHistoryCleanup = async () => {
   try {
@@ -282,17 +283,17 @@ const performViewHistoryCleanup = async () => {
     // Get initial count
     const initialCount = await ViewHistory.countDocuments();
     
-    // Step 1: Remove entries older than 1 day (aggressive)
-    const oneDayAgo = new Date();
-    oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+    // Step 1: Remove entries older than 3 days (increased from 1 day to support dynamics)
+    const threeDaysAgo = new Date();
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
     
     const oldResult = await ViewHistory.deleteMany({
-      timestamp: { $lt: oneDayAgo }
+      timestamp: { $lt: threeDaysAgo }
     });
     
-    // Step 2: Limit total entries to 20,000 maximum
+    // Step 2: Limit total entries to 60,000 maximum (increased from 20k)
     const countAfterOld = await ViewHistory.countDocuments();
-    const maxEntries = 20000;
+    const maxEntries = 60000; // Increased limit to support dynamics tracking
     
     let excessResult = { deletedCount: 0 };
     if (countAfterOld > maxEntries) {
@@ -310,12 +311,9 @@ const performViewHistoryCleanup = async () => {
       }
     }
     
-    // Step 3: Remove low-value entries
+    // Step 3: Remove only very low-value entries (keep more data for dynamics analysis)
     const lowValueResult = await ViewHistory.deleteMany({
-      $or: [
-        { growthRate: { $lte: 0 } },
-        { viewDelta: { $lte: 0 } }
-      ]
+      growthRate: { $lt: -10 } // Only remove significantly negative growth rates
     });
     
     const finalCount = await ViewHistory.countDocuments();
@@ -359,13 +357,13 @@ const monitorMemoryUsage = async () => {
       console.log(`📊 Memory: RSS=${memUsageMB.rss}MB, Heap=${memUsageMB.heapUsed}/${memUsageMB.heapTotal}MB, ViewHistory=${viewHistoryCount} entries`);
     }
     
-    // Warning thresholds
-    if (memUsageMB.rss > 1200) { // 1.2GB
+    // Warning thresholds (adjusted for higher limits)
+    if (memUsageMB.rss > 1400) { // 1.4GB (increased from 1.2GB)
       console.warn(`⚠️  High memory usage detected: ${memUsageMB.rss}MB RSS, ${viewHistoryCount} ViewHistory entries`);
     }
     
-    // Emergency cleanup triggers
-    if (memUsageMB.rss > 1500 || viewHistoryCount > 25000) { // 1.5GB or 25k entries
+    // Emergency cleanup triggers (adjusted for higher limits)
+    if (memUsageMB.rss > 1800 || viewHistoryCount > 80000) { // 1.8GB or 80k entries
       console.warn('🚨 EMERGENCY: Critical memory usage! Triggering immediate cleanup...');
       await performViewHistoryCleanup();
     }

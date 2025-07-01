@@ -794,21 +794,22 @@ const trackViewHistory = async (post, source, currentViewCount) => {
 };
 
 /**
- * Clean up view history entries with aggressive memory management
+ * Clean up view history entries with balanced memory management
+ * Adjusted limits to support high dynamics detection while preventing memory issues
  */
 const cleanupOldViewHistory = async () => {
   try {
-    // Step 1: Remove entries older than 2 days (more aggressive than 4 days)
-    const twoDaysAgo = new Date();
-    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+    // Step 1: Remove entries older than 3 days (increased from 2 days to support dynamics)
+    const threeDaysAgo = new Date();
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
     
     const oldEntriesResult = await ViewHistory.deleteMany({
-      timestamp: { $lt: twoDaysAgo }
+      timestamp: { $lt: threeDaysAgo }
     });
     
-    // Step 2: Limit total entries to prevent memory issues
+    // Step 2: Limit total entries to prevent memory issues (increased limit)
     const totalCount = await ViewHistory.countDocuments();
-    const maxEntries = 15000; // Aggressive limit to prevent memory issues
+    const maxEntries = 50000; // Increased from 15k to 50k to support dynamics tracking
     
     if (totalCount > maxEntries) {
       // Keep only the most recent entries
@@ -830,12 +831,10 @@ const cleanupOldViewHistory = async () => {
       }
     }
     
-    // Step 3: Remove low-value entries (zero or negative growth)
+    // Step 3: Remove low-value entries (but keep some for dynamics analysis)
+    // Only remove entries with very negative growth rates, keep zero growth for analysis
     const lowValueResult = await ViewHistory.deleteMany({
-      $or: [
-        { growthRate: { $lte: 0 } },
-        { viewDelta: { $lte: 0 } }
-      ]
+      growthRate: { $lt: -10 } // Only remove significantly negative growth rates
     });
     
     // Log cleanup results if significant
