@@ -1,7 +1,9 @@
 const cron = require('node-cron');
 const VkSource = require('../../models/VkSource');
+const TelegramSource = require('../../models/TelegramSource');
 const vkService = require('../vk');
 const telegramService = require('../telegram');
+const telegramSourcesService = require('../telegram/sources');
 const Post = require('../../models/Post');
 const Mapping = require('../../models/Mapping');
 const ViewHistory = require('../../models/ViewHistory');
@@ -26,24 +28,28 @@ const init = () => {
     }
   });
   
-  // Schedule job to process manually approved posts every 10 minutes
+  // Schedule job to process manually approved posts every 10 minutes - TEMPORARILY DISABLED FOR TESTING
   // Note: Viral posts are now auto-forwarded immediately when detected
-  cron.schedule('*/10 * * * *', async () => {
-    try {
-      await processPendingPosts();
-    } catch (error) {
-      console.error('Error processing approved posts:', error);
-    }
-  });
+  if (false) {
+    cron.schedule('*/10 * * * *', async () => {
+      try {
+        await processPendingPosts();
+      } catch (error) {
+        console.error('Error processing approved posts:', error);
+      }
+    });
+  }
   
-  // Schedule job to check high dynamics posts every 15 minutes
-  cron.schedule('*/15 * * * *', async () => {
-    try {
-      await processHighDynamicsPosts();
-    } catch (error) {
-      console.error('Error processing high dynamics posts:', error);
-    }
-  });
+  // Schedule job to check high dynamics posts every 15 minutes - TEMPORARILY DISABLED FOR TESTING
+  if (false) {
+    cron.schedule('*/15 * * * *', async () => {
+      try {
+        await processHighDynamicsPosts();
+      } catch (error) {
+        console.error('Error processing high dynamics posts:', error);
+      }
+    });
+  }
   
   // Schedule ViewHistory cleanup every 30 minutes to prevent memory issues
   cron.schedule('*/30 * * * *', async () => {
@@ -72,18 +78,21 @@ const init = () => {
 };
 
 /**
- * Updates the schedules for all VK sources
+ * Updates the schedules for all VK and Telegram sources
  */
 const updateSourceSchedules = async () => {
   try {
-    // Get all active sources
-    const sources = await VkSource.find({ active: true });
+    // Get all active VK sources
+    const vkSources = await VkSource.find({ active: true });
+    
+    // Get all active Telegram sources  
+    const telegramSources = await TelegramSource.find({ active: true });
     
     const currentSourceIds = new Set();
     
-    // Set up or update cron job for each source
-    for (const source of sources) {
-      const sourceId = source._id.toString();
+    // Process VK sources
+    for (const source of vkSources) {
+      const sourceId = `vk_${source._id.toString()}`;
       currentSourceIds.add(sourceId);
       
       // Calculate cron expression based on check frequency
@@ -100,12 +109,12 @@ const updateSourceSchedules = async () => {
         }
       }
       
-      // Create new cron job
+      // Create new cron job for VK source
       const job = cron.schedule(cronExpression, async () => {
         try {
-          await vkService.processSourcePosts(sourceId);
+          await vkService.processSourcePosts(source._id.toString());
         } catch (error) {
-          console.error(`Error processing source ${sourceId}:`, error);
+          console.error(`Error processing VK source ${source._id}:`, error);
         }
       });
       
@@ -113,10 +122,48 @@ const updateSourceSchedules = async () => {
       cronJobs[sourceId] = {
         job,
         expression: cronExpression,
-        frequency: source.checkFrequency
+        frequency: source.checkFrequency,
+        type: 'vk',
+        name: source.name
       };
       
-      // Job scheduled for source
+      console.log(`📅 Scheduled VK source ${source.name} (every ${source.checkFrequency} minutes)`);
+    }
+    
+    // Process Telegram sources
+    for (const source of telegramSources) {
+      const sourceId = `tg_${source._id.toString()}`;
+      currentSourceIds.add(sourceId);
+      
+      const cronExpression = calculateCronExpression(source.checkFrequency);
+      
+      if (cronJobs[sourceId]) {
+        if (cronJobs[sourceId].expression !== cronExpression) {
+          cronJobs[sourceId].job.stop();
+          delete cronJobs[sourceId];
+        } else {
+          continue;
+        }
+      }
+      
+      // Create cron job for Telegram source
+      const job = cron.schedule(cronExpression, async () => {
+        try {
+          await telegramSourcesService.processMessagesFromSource(source);
+        } catch (error) {
+          console.error(`Error processing Telegram source ${source._id}:`, error);
+        }
+      });
+      
+      cronJobs[sourceId] = {
+        job,
+        expression: cronExpression,
+        frequency: source.checkFrequency,
+        type: 'telegram',
+        name: source.name
+      };
+      
+      console.log(`📅 Scheduled Telegram source ${source.name} (every ${source.checkFrequency} minutes)`);
     }
     
     // Clean up removed or deactivated sources
@@ -124,12 +171,14 @@ const updateSourceSchedules = async () => {
       if (!currentSourceIds.has(jobId)) {
         cronJobs[jobId].job.stop();
         delete cronJobs[jobId];
+        console.log(`🗑️ Removed scheduled job for ${jobId}`);
       }
     }
     
     return {
       activeJobs: Object.keys(cronJobs).length,
-      sources: sources.length
+      vkSources: vkSources.length,
+      telegramSources: telegramSources.length
     };
   } catch (error) {
     console.error('Error updating source schedules:', error);

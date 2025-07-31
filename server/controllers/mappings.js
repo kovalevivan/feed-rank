@@ -12,6 +12,7 @@ router.get('/', async (req, res) => {
     const mappings = await Mapping.find()
       .populate('vkSource')
       .populate('vkSourceGroup')
+      .populate('telegramSource')
       .populate('telegramChannel')
       .sort({ createdAt: -1 });
     
@@ -27,6 +28,7 @@ router.get('/vk-source/:sourceId', async (req, res) => {
   try {
     const mappings = await Mapping.find({ vkSource: req.params.sourceId })
       .populate('vkSource')
+      .populate('telegramSource')
       .populate('telegramChannel')
       .sort({ createdAt: -1 });
     
@@ -42,6 +44,7 @@ router.get('/vk-source-group/:groupId', async (req, res) => {
   try {
     const mappings = await Mapping.find({ vkSourceGroup: req.params.groupId })
       .populate('vkSourceGroup')
+      .populate('telegramSource')
       .populate('telegramChannel')
       .sort({ createdAt: -1 });
     
@@ -52,12 +55,30 @@ router.get('/vk-source-group/:groupId', async (req, res) => {
   }
 });
 
+// Get mappings for a specific Telegram source
+router.get('/telegram-source/:sourceId', async (req, res) => {
+  try {
+    const mappings = await Mapping.find({ telegramSource: req.params.sourceId })
+      .populate('vkSource')
+      .populate('vkSourceGroup')
+      .populate('telegramSource')
+      .populate('telegramChannel')
+      .sort({ createdAt: -1 });
+    
+    res.json(mappings);
+  } catch (error) {
+    console.error(`Error getting mappings for Telegram source ${req.params.sourceId}:`, error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 // Get mappings for a specific Telegram channel
 router.get('/telegram-channel/:channelId', async (req, res) => {
   try {
     const mappings = await Mapping.find({ telegramChannel: req.params.channelId })
       .populate('vkSource')
       .populate('vkSourceGroup')
+      .populate('telegramSource')
       .populate('telegramChannel')
       .sort({ createdAt: -1 });
     
@@ -74,6 +95,7 @@ router.get('/:id', async (req, res) => {
     const mapping = await Mapping.findById(req.params.id)
       .populate('vkSource')
       .populate('vkSourceGroup')
+      .populate('telegramSource')
       .populate('telegramChannel');
     
     if (!mapping) {
@@ -102,11 +124,12 @@ router.post(
     }
     
     try {
-      const { vkSource, vkSourceGroup, telegramChannel, active } = req.body;
+      const { vkSource, vkSourceGroup, telegramSource, telegramChannel, active } = req.body;
       
-      // Ensure either vkSource or vkSourceGroup is provided
-      if ((!vkSource && !vkSourceGroup) || (vkSource && vkSourceGroup)) {
-        return res.status(400).json({ message: 'Either vkSource OR vkSourceGroup must be provided, but not both' });
+      // Ensure exactly one source type is provided
+      const sources = [vkSource, vkSourceGroup, telegramSource].filter(Boolean);
+      if (sources.length !== 1) {
+        return res.status(400).json({ message: 'Exactly one source type (vkSource, vkSourceGroup, or telegramSource) must be provided' });
       }
       
       // Verify channel exists
@@ -151,10 +174,30 @@ router.post(
         }
       }
       
+      // If telegramSource is provided, verify it exists
+      if (telegramSource) {
+        const TelegramSource = require('../models/TelegramSource');
+        const source = await TelegramSource.findById(telegramSource);
+        if (!source) {
+          return res.status(404).json({ message: 'Telegram source not found' });
+        }
+        
+        // Check if mapping already exists for this Telegram source
+        const existingMapping = await Mapping.findOne({
+          telegramSource,
+          telegramChannel
+        });
+        
+        if (existingMapping) {
+          return res.status(400).json({ message: 'This mapping already exists' });
+        }
+      }
+      
       // Create new mapping
       const newMapping = new Mapping({
         vkSource: vkSource || undefined,
         vkSourceGroup: vkSourceGroup || undefined,
+        telegramSource: telegramSource || undefined,
         telegramChannel,
         active: active !== undefined ? active : true,
         createdBy: req.user?._id // If authentication is implemented
@@ -169,6 +212,9 @@ router.post(
       }
       if (vkSourceGroup) {
         await newMapping.populate('vkSourceGroup');
+      }
+      if (telegramSource) {
+        await newMapping.populate('telegramSource');
       }
       await newMapping.populate('telegramChannel');
       
@@ -210,6 +256,8 @@ router.put(
       
       // Populate response
       await mapping.populate('vkSource');
+      await mapping.populate('vkSourceGroup');
+      await mapping.populate('telegramSource');
       await mapping.populate('telegramChannel');
       
       res.json(mapping);

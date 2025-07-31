@@ -1,5 +1,6 @@
 const TelegramBot = require('node-telegram-bot-api');
 const VkSource = require('../../models/VkSource');
+const TelegramSource = require('../../models/TelegramSource');
 const TelegramChannel = require('../../models/TelegramChannel');
 const Mapping = require('../../models/Mapping');
 const Post = require('../../models/Post');
@@ -496,6 +497,9 @@ const cleanupTempFiles = (filePath) => {
  * @returns {Promise<Object>} - Result of forwarding
  */
 const forwardPost = async (post, source, channel, options = {}) => {
+  // ForwardPost function called
+  console.log('🚨 Post ID:', post._id);
+  console.log('🚨 Channel ID:', channel._id);
   if (!bot) throw new Error('Telegram bot not initialized');
   
   // Handle both old (post, channel) and new (post, source, channel, options) signatures
@@ -510,12 +514,28 @@ const forwardPost = async (post, source, channel, options = {}) => {
   if (!post) throw new Error('Post object is required');
   if (!channel) throw new Error('Channel object is required');
   if (!channel.chatId) throw new Error('Channel must have a valid chatId');
-  if (!post.vkSource) throw new Error('Post must have a valid vkSource reference');
+  
+  // Support both VK and Telegram sources
+  if (!post.vkSource && !post.telegramSource) {
+    throw new Error('Post must have either vkSource or telegramSource reference');
+  }
   
   try {
-    // Get VK source if not provided
-    const vkSource = source || await VkSource.findById(post.vkSource);
-    const sourceName = vkSource ? vkSource.name : 'Неизвестный источник';
+    // Get source based on post type
+    let sourceData;
+    let sourceName;
+    let isVkPost = false;
+    let isTelegramPost = false;
+    
+    if (post.vkSource) {
+      sourceData = source || await VkSource.findById(post.vkSource);
+      sourceName = sourceData ? sourceData.name : 'Неизвестный источник';
+      isVkPost = true;
+    } else if (post.telegramSource) {
+      sourceData = source || await TelegramSource.findById(post.telegramSource);
+      sourceName = sourceData ? sourceData.name : 'Неизвестный источник';
+      isTelegramPost = true;
+    }
     
     // Escape special HTML characters to prevent formatting issues
     const escapeHtml = (text) => {
@@ -554,19 +574,59 @@ const forwardPost = async (post, source, channel, options = {}) => {
       });
     };
     
-    // Prepare post caption with HTML formatting
+    // Prepare post caption with HTML formatting (VK-style format)
     let caption = '';
     
-    // Add high dynamics marker if applicable
-    if (options.isHighDynamics) {
-      caption += `#ПОСТ_С_ВЫСОКОЙ_ДИНАМИКОЙ\n`;
+    // Source info first (matching VK format)
+    if (isVkPost) {
+      caption += `Из группы ВК: <b>${sourceName}</b>\n\n`;
+    } else if (isTelegramPost) {
+      caption += `Из канала Telegram: <b>${sourceName}</b>\n\n`;
     }
     
-    caption += `${escapeHtml(truncateText(post.text))}\n\n`;
-    caption += `👁 Просмотры: <b>${post.viewCount.toLocaleString()}</b>\n`;
-    caption += `👍 Лайки: <b>${post.likeCount.toLocaleString()}</b>\n`;
-    caption += `🔄 Репосты: <b>${post.repostCount.toLocaleString()}</b>\n`;
-    caption += post.publishedAt ? `📅 Опубликовано: ${formatDate(post.publishedAt)}\n` : '';
+    // Post content
+    if (post.text && post.text.trim()) {
+      caption += `${escapeHtml(truncateText(post.text))}\n\n`;
+    }
+    
+    // Original post link will be added at the bottom in VK style
+    
+    // Metrics at the bottom (VK-style format)
+    if (isVkPost) {
+      caption += `👁 Просмотры: <b>${(post.viewCount || 0).toLocaleString()}</b>\n`;
+      caption += `👍 Лайки: <b>${(post.likeCount || 0).toLocaleString()}</b>\n`;
+      caption += `🔄 Репосты: <b>${(post.repostCount || 0).toLocaleString()}</b>\n`;
+    } else if (isTelegramPost) {
+      if (post.viewCount > 0) {
+        caption += `👁 Просмотры: <b>${post.viewCount.toLocaleString()}</b>\n`;
+      }
+      if (post.reactionCount > 0) {
+        caption += `❤️ Реакции: <b>${post.reactionCount.toLocaleString()}</b>\n`;
+      }
+      if (post.commentCount > 0) {
+        caption += `💬 Комментарии: <b>${post.commentCount.toLocaleString()}</b>\n`;
+      }
+      if (post.forwardCount > 0) {
+        caption += `🔄 Пересылки: <b>${post.forwardCount.toLocaleString()}</b>\n`;
+      }
+    }
+    
+    // Publication date
+    caption += post.publishedAt ? `📅 Опубликовано: <b>${formatDate(post.publishedAt)}</b>\n\n` : '\n';
+    
+    // Add plain text link at the end (VK-style - no HTML formatting)
+    if (post.originalPostUrl) {
+      caption += `${post.originalPostUrl}\n`;
+    } else if (isTelegramPost && sourceData && sourceData.username && post.originalPostId) {
+      // Construct Telegram post URL if no direct URL is available
+      const telegramUrl = `https://t.me/${sourceData.username.replace('@', '')}/${post.originalPostId}`;
+      caption += `${telegramUrl}\n`;
+    }
+    
+    // Add viral/high dynamics marker at the end if needed
+    if (options.isHighDynamics) {
+      caption += `\n<i>#ПОСТ_С_ВЫСОКОЙ_ДИНАМИКОЙ</i>\n`;
+    }
     
     // Add high dynamics info if provided
     if (options.isHighDynamics && options.growthRate) {
@@ -593,33 +653,26 @@ const forwardPost = async (post, source, channel, options = {}) => {
         caption += `Длительность: ${options.timeRange.duration.toFixed(1)} мин\n`;
       }
     }
-    // Remove experimental view history section
-    else if (vkSource && vkSource.experimentalViewTracking && !options.isHighDynamics) {
+    // Remove experimental view history section for VK sources only
+    else if (isVkPost && sourceData && sourceData.experimentalViewTracking && !options.isHighDynamics) {
       // Skip view history for non-high-dynamics posts
     }
     
-    caption += `\n<a href="${post.originalPostUrl}">Смотреть оригинальный пост</a>`;
-
-    // Add Telegram tag for the source at the bottom
-    if (sourceName) {
-      // Convert sourceName to a valid hashtag: remove spaces, non-alphanumeric, lowercase
-      const tag = '#' + sourceName.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
-      caption += `\n\n${tag}`;
-    }
+    // Original post link was already added above in VK style
     
     let sentMessage;
     
-    // Get all photo and video attachments
-    const photoAttachments = post.attachments?.filter(att => att.type === 'photo' && att.url) || [];
-    const videoAttachment = post.attachments?.find(att => att.type === 'video' && att.url);
+    // Get all photo and video attachments (handle both URL-based and buffer-based)
+    const photoAttachments = post.attachments?.filter(att => att.type === 'photo' && (att.url || att.buffer)) || [];
+    const videoAttachment = post.attachments?.find(att => (att.type === 'video' || att.type === 'animation') && (att.url || att.buffer));
     
     // If we have multiple photos, send them as a media group
     if (photoAttachments.length > 1) {
       try {
-        // Prepare media group input
+        // Prepare media group input (handle both URLs and buffers)
         const mediaGroup = photoAttachments.map((attachment, index) => ({
           type: 'photo',
-          media: attachment.url,
+          media: attachment.buffer || attachment.url,
           // Add caption only to the first media item
           ...(index === 0 ? { caption, parse_mode: 'HTML' } : {})
         }));
@@ -630,9 +683,10 @@ const forwardPost = async (post, source, channel, options = {}) => {
       } catch (mediaGroupError) {
         // Fallback to sending just the first photo
         try {
+          console.log('🔍 DEBUG PHOTO: Sending photo with caption:', caption.substring(0, 200));
           sentMessage = await bot.sendPhoto(
             channel.chatId,
-            photoAttachments[0].url,
+            photoAttachments[0].buffer || photoAttachments[0].url,
             {
               caption: caption,
               parse_mode: 'HTML'
@@ -658,7 +712,7 @@ const forwardPost = async (post, source, channel, options = {}) => {
       try {
         sentMessage = await bot.sendPhoto(
           channel.chatId,
-          photoAttachments[0].url,
+          photoAttachments[0].buffer || photoAttachments[0].url,
           {
             caption: caption,
             parse_mode: 'HTML'
@@ -679,8 +733,39 @@ const forwardPost = async (post, source, channel, options = {}) => {
     // If we have a video attachment, send a video or link to it
     else if (videoAttachment) {
       try {
-        // First, try with direct URL if available
-        if (videoAttachment.directUrl && videoAttachment.directUrl.match(/\.(mp4|mov|avi|mkv)$/i)) {
+        // For Telegram posts, try buffer first, then fallback to text with video notice
+        if (isTelegramPost && videoAttachment.buffer) {
+          try {
+            sentMessage = await bot.sendVideo(
+              channel.chatId,
+              videoAttachment.buffer,
+              {
+                caption: caption,
+                parse_mode: 'HTML',
+                duration: videoAttachment.duration,
+                width: videoAttachment.width,
+                height: videoAttachment.height,
+                supports_streaming: true
+              }
+            );
+          } catch (bufferVideoError) {
+            console.warn('Failed to send video buffer:', bufferVideoError.message);
+            throw bufferVideoError; // Let it fall through to other methods
+          }
+        } else if (isTelegramPost && !videoAttachment.buffer) {
+          // Fallback for Telegram videos without buffer - send text with video notice
+          const videoNotice = `\n\n🎬 <b>Видео:</b> ${videoAttachment.fileName || 'Видеофайл'}\n📁 Размер: ${videoAttachment.mimeType || 'video/mp4'}`;
+          sentMessage = await bot.sendMessage(
+            channel.chatId,
+            caption + videoNotice,
+            {
+              parse_mode: 'HTML',
+              disable_web_page_preview: false
+            }
+          );
+        }
+        // For VK posts or fallback, try with direct URL if available
+        else if (videoAttachment.directUrl && videoAttachment.directUrl.match(/\.(mp4|mov|avi|mkv)$/i)) {
           try {
             sentMessage = await bot.sendVideo(
               channel.chatId,
@@ -772,6 +857,7 @@ const forwardPost = async (post, source, channel, options = {}) => {
     }
     // Default case - no media or unsupported media type
     else {
+      console.log(`Sending message (caption length: ${caption.length} chars)`);
       sentMessage = await bot.sendMessage(
         channel.chatId, 
         caption, 
@@ -802,6 +888,14 @@ const forwardPost = async (post, source, channel, options = {}) => {
     if (post.vkSource) {
       await VkSource.updateOne(
         { _id: post.vkSource },
+        { $set: { 
+          lastChecked: new Date(),
+          updatedAt: new Date()
+        }}
+      );
+    } else if (post.telegramSource) {
+      await TelegramSource.updateOne(
+        { _id: post.telegramSource },
         { $set: { 
           lastChecked: new Date(),
           updatedAt: new Date()

@@ -95,6 +95,7 @@ mongoose.connect(feedrankURI, mongooseOptions)
 app.use('/api/users', require('./controllers/users'));
 app.use('/api/vk-sources', require('./controllers/vkSources'));
 app.use('/api/telegram-channels', require('./controllers/telegramChannels'));
+app.use('/api/telegram-sources', require('./controllers/telegramSources'));
 app.use('/api/mappings', require('./controllers/mappings'));
 app.use('/api/posts', require('./controllers/posts'));
 app.use('/api/settings', require('./controllers/settings'));
@@ -104,11 +105,22 @@ app.use('/api/analytics', require('./controllers/analytics'));
 // Initialize services
 const vkService = require('./services/vk');
 const telegramService = require('./services/telegram');
+const telegramSourcesService = require('./services/telegram/sources');
 const schedulerService = require('./services/scheduler');
 
 // Start services
-telegramService.init();
-schedulerService.init();
+const initializeServices = async () => {
+  try {
+    telegramService.init();
+    await telegramSourcesService.init();
+    schedulerService.init();
+    console.log('✅ All services initialized successfully');
+  } catch (error) {
+    console.error('❌ Error initializing services:', error);
+  }
+};
+
+initializeServices();
 
 // Serve static assets in production
 if (process.env.NODE_ENV === 'production') {

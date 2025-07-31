@@ -9,6 +9,7 @@ const { getAllMappingsForSource } = require('../utils/mappingUtils');
 // Get all posts with filtering
 router.get('/', [
   query('vkSource').optional().isMongoId().withMessage('Invalid VK source ID'),
+  query('telegramSource').optional().isMongoId().withMessage('Invalid Telegram source ID'),
   query('isViral').optional().isBoolean().withMessage('isViral must be a boolean'),
   query('status').optional().isIn(['pending', 'approved', 'rejected', 'forwarded']).withMessage('Invalid status'),
   query('page').optional().isInt({ min: 1 }).withMessage('Page must be a positive integer'),
@@ -21,11 +22,12 @@ router.get('/', [
   }
   
   try {
-    const { vkSource, isViral, status, page = 1, limit = 20 } = req.query;
+    const { vkSource, telegramSource, isViral, status, page = 1, limit = 20 } = req.query;
     
     // Build filter
     const filter = {};
     if (vkSource) filter.vkSource = vkSource;
+    if (telegramSource) filter.telegramSource = telegramSource;
     if (isViral !== undefined) filter.isViral = isViral === 'true';
     if (status) filter.status = status;
     
@@ -35,12 +37,13 @@ router.get('/', [
     // Get posts with pagination
     const posts = await Post.find(filter)
       .populate('vkSource')
+      .populate('telegramSource')
       .sort({ publishedAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
     
     // Filter out posts with deleted sources to prevent null reference errors
-    const validPosts = posts.filter(post => post.vkSource);
+    const validPosts = posts.filter(post => post.vkSource || post.telegramSource);
     
     // Get total count
     const total = await Post.countDocuments(filter);
@@ -78,25 +81,40 @@ router.get('/dashboard', async (req, res) => {
     // Get recent viral posts
     const recentViralPosts = await Post.find({ isViral: true })
       .populate('vkSource')
+      .populate('telegramSource')
       .sort({ publishedAt: -1 })
       .limit(5);
     
     // Filter out posts with deleted sources to prevent null reference errors
-    const validRecentViralPosts = recentViralPosts.filter(post => post.vkSource);
+    const validRecentViralPosts = recentViralPosts.filter(post => post.vkSource || post.telegramSource);
     
     // Get top VK sources by viral post count
-    const topSources = await Post.aggregate([
-      { $match: { isViral: true } },
-      { $group: { _id: '$vkSource', count: { $sum: 1 } } },
+    const topVkSources = await Post.aggregate([
+      { $match: { isViral: true, vkSource: { $ne: null } } },
+      { $group: { _id: '$vkSource', count: { $sum: 1 }, sourceType: { $first: 'vk' } } },
+      { $sort: { count: -1 } },
+      { $limit: 5 }
+    ]);
+    
+    // Get top Telegram sources by viral post count
+    const topTelegramSources = await Post.aggregate([
+      { $match: { isViral: true, telegramSource: { $ne: null } } },
+      { $group: { _id: '$telegramSource', count: { $sum: 1 }, sourceType: { $first: 'telegram' } } },
       { $sort: { count: -1 } },
       { $limit: 5 }
     ]);
     
     // Populate sources
-    await Post.populate(topSources, { path: '_id', model: 'VkSource' });
+    await Post.populate(topVkSources, { path: '_id', model: 'VkSource' });
+    await Post.populate(topTelegramSources, { path: '_id', model: 'TelegramSource' });
     
-    // Filter out null sources from topSources
-    const validTopSources = topSources.filter(item => item._id);
+    // Combine and sort all sources
+    const allTopSources = [...topVkSources, ...topTelegramSources]
+      .filter(item => item._id)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+    
+    const validTopSources = allTopSources;
     
     res.json({
       counts: {
@@ -110,7 +128,8 @@ router.get('/dashboard', async (req, res) => {
       recentViralPosts: validRecentViralPosts,
       topSources: validTopSources.map(item => ({
         source: item._id,
-        count: item.count
+        count: item.count,
+        sourceType: item.sourceType
       }))
     });
   } catch (error) {
@@ -124,6 +143,7 @@ router.get('/:id', async (req, res) => {
   try {
     const post = await Post.findById(req.params.id)
       .populate('vkSource')
+      .populate('telegramSource')
       .populate('forwardedTo.telegramChannel');
     
     if (!post) {
@@ -154,8 +174,10 @@ router.put(
     try {
       const { status } = req.body;
       
-      // Find post
-      const post = await Post.findById(req.params.id);
+      // Find post and populate sources
+      const post = await Post.findById(req.params.id)
+        .populate('vkSource')
+        .populate('telegramSource');
       if (!post) {
         return res.status(404).json({ message: 'Post not found' });
       }
@@ -172,8 +194,19 @@ router.put(
       // If approved, forward the post
       if (status === 'approved') {
         try {
-          // Get mappings for this source (both individual and group mappings)
-          const mappings = await getAllMappingsForSource(post.vkSource.toString());
+          // Determine source type and get appropriate mappings
+          let sourceId, sourceType, mappings;
+          if (post.vkSource) {
+            sourceId = post.vkSource.toString();
+            sourceType = 'vk';
+            mappings = await getAllMappingsForSource(sourceId, 'vk');
+          } else if (post.telegramSource) {
+            sourceId = post.telegramSource.toString();
+            sourceType = 'telegram';
+            mappings = await getAllMappingsForSource(sourceId, 'telegram');
+          } else {
+            throw new Error('Post has no valid source (VK or Telegram)');
+          }
           
           // Forward to each channel
           const forwardResults = [];
@@ -181,7 +214,9 @@ router.put(
           for (const mapping of mappings) {
             if (mapping.telegramChannel && mapping.telegramChannel.active) {
               try {
-                const result = await telegramService.forwardPost(post, post.vkSource, mapping.telegramChannel);
+                // Pass the populated source data directly
+                const sourceData = post.vkSource || post.telegramSource;
+                const result = await telegramService.forwardPost(post, sourceData, mapping.telegramChannel);
                 forwardResults.push({
                   channel: mapping.telegramChannel._id,
                   success: true,
@@ -201,6 +236,7 @@ router.put(
           // Reload post to get updated forwardedTo data
           const updatedPost = await Post.findById(req.params.id)
             .populate('vkSource')
+            .populate('telegramSource')
             .populate('forwardedTo.telegramChannel');
           
           res.json({
@@ -214,6 +250,7 @@ router.put(
       } else {
         // Just return the updated post for other status changes
         await post.populate('vkSource');
+        await post.populate('telegramSource');
         await post.populate('forwardedTo.telegramChannel');
         
         res.json({ post });

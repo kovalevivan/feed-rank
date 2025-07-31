@@ -1,11 +1,34 @@
 const Mapping = require('../models/Mapping');
 
 /**
- * Gets all mappings for a VK source (both individual and group mappings)
- * @param {string} sourceId - VK source ID
+ * Gets all mappings for a Telegram source
+ * @param {string} sourceId - Telegram source ID
  * @returns {Promise<Array>} - Array of mappings
  */
-const getAllMappingsForSource = async (sourceId) => {
+const getAllMappingsForTelegramSource = async (sourceId) => {
+  try {
+    const mappings = await Mapping.find({
+      telegramSource: sourceId,
+      active: true
+    }).populate('telegramSource').populate('telegramChannel');
+
+    return mappings.filter(mapping => mapping.telegramChannel);
+  } catch (error) {
+    console.error(`Error getting mappings for Telegram source ${sourceId}:`, error);
+    return [];
+  }
+};
+
+/**
+ * Gets all mappings for a VK source (both individual and group mappings)
+ * @param {string} sourceId - VK source ID
+ * @param {string} sourceType - Source type ('vk' or 'telegram')
+ * @returns {Promise<Array>} - Array of mappings
+ */
+const getAllMappingsForSource = async (sourceId, sourceType = 'vk') => {
+  if (sourceType === 'telegram') {
+    return getAllMappingsForTelegramSource(sourceId);
+  }
   try {
     // Get individual mappings for this source
     const individualMappings = await Mapping.find({
@@ -50,5 +73,6 @@ const getAllMappingsForSource = async (sourceId) => {
 };
 
 module.exports = {
-  getAllMappingsForSource
+  getAllMappingsForSource,
+  getAllMappingsForTelegramSource
 }; 

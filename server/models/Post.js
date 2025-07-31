@@ -1,12 +1,20 @@
 const mongoose = require('mongoose');
 
 const PostSchema = new mongoose.Schema({
+  // Source references - one of these should be set
   vkSource: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'VkSource',
-    required: true
+    ref: 'VkSource'
   },
+  telegramSource: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'TelegramSource'
+  },
+  // Original post identifier (VK post ID or Telegram message ID)
   postId: {
+    type: String
+  },
+  originalPostId: {
     type: String,
     required: true
   },
@@ -26,13 +34,37 @@ const PostSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  // Telegram-specific metrics
+  forwardCount: {
+    type: Number,
+    default: 0
+  },
+  reactionCount: {
+    type: Number,
+    default: 0
+  },
+  commentCount: {
+    type: Number,
+    default: 0
+  },
+  replyCount: {
+    type: Number,
+    default: 0
+  },
   attachments: [{
     type: {
       type: String,
-      enum: ['photo', 'video', 'link', 'doc', 'audio', 'poll', 'other']
+      enum: ['photo', 'video', 'link', 'doc', 'document', 'audio', 'poll', 'other']
     },
     url: String,
-    thumbnailUrl: String
+    thumbnailUrl: String,
+    // Telegram-specific fields
+    fileId: String,
+    fileName: String,
+    mimeType: String,
+    width: Number,
+    height: Number,
+    duration: Number
   }],
   isViral: {
     type: Boolean,
@@ -85,8 +117,30 @@ const PostSchema = new mongoose.Schema({
   dbName: 'feedrank'  // Use the feedrank database
 });
 
-// Compound index for post uniqueness
-PostSchema.index({ vkSource: 1, postId: 1 }, { unique: true });
+// Compound indexes for post uniqueness
+PostSchema.index({ vkSource: 1, postId: 1 }, { unique: true, sparse: true });
+PostSchema.index({ telegramSource: 1, originalPostId: 1 }, { unique: true, sparse: true });
+
+// Validation: ensure either vkSource or telegramSource is set, but not both
+PostSchema.pre('validate', function(next) {
+  const hasVkSource = !!this.vkSource;
+  const hasTelegramSource = !!this.telegramSource;
+  
+  if (!hasVkSource && !hasTelegramSource) {
+    return next(new Error('Either vkSource or telegramSource must be set'));
+  }
+  
+  if (hasVkSource && hasTelegramSource) {
+    return next(new Error('Cannot have both vkSource and telegramSource set'));
+  }
+  
+  // For VK posts, postId is required
+  if (hasVkSource && !this.postId) {
+    return next(new Error('postId is required for VK posts'));
+  }
+  
+  next();
+});
 
 // Update the updatedAt field before save
 PostSchema.pre('save', function(next) {

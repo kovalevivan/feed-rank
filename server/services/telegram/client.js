@@ -1,0 +1,753 @@
+const { TelegramClient } = require('telegram');
+const { StringSession } = require('telegram/sessions');
+const { NewMessage } = require('telegram/events');
+const TelegramSource = require('../../models/TelegramSource');
+const Post = require('../../models/Post');
+const { updateSourceThreshold } = require('./analytics');
+
+/**
+ * Automatically forwards a viral Telegram post to all mapped channels
+ * @param {Object} post - Post document
+ * @param {Object} source - Telegram source document
+ * @returns {Promise<Object>} - Forwarding results
+ */
+const autoForwardViralPost = async (post, source) => {
+  try {
+    // Import telegramService here to avoid circular dependency
+    const telegramService = require('./index');
+    const { getAllMappingsForSource } = require('../../utils/mappingUtils');
+    
+    // Get all mappings for this Telegram source
+    const mappings = await getAllMappingsForSource(source._id.toString(), 'telegram');
+    
+    if (mappings.length === 0) {
+      console.log(`No mappings found for viral Telegram post ${post.originalPostId} from source ${source.name}`);
+      return { forwarded: 0, errors: 0 };
+    }
+    
+    let forwardedCount = 0;
+    let errorCount = 0;
+    
+    // Forward to each mapped channel
+    for (const mapping of mappings) {
+      if (mapping.telegramChannel && mapping.telegramChannel.active) {
+        try {
+          await telegramService.forwardPost(post, source, mapping.telegramChannel);
+          forwardedCount++;
+          console.log(`✅ Auto-forwarded viral Telegram post ${post.originalPostId} to ${mapping.telegramChannel.name}`);
+        } catch (error) {
+          console.error(`❌ Failed to auto-forward viral Telegram post ${post.originalPostId} to ${mapping.telegramChannel.name}: ${error.message}`);
+          errorCount++;
+        }
+      }
+    }
+    
+    // Update post status if forwarded
+    if (forwardedCount > 0) {
+      post.status = 'forwarded';
+      await post.save();
+    }
+    
+    return { forwarded: forwardedCount, errors: errorCount };
+  } catch (error) {
+    console.error(`Error auto-forwarding viral Telegram post ${post.originalPostId}:`, error);
+    return { forwarded: 0, errors: 1 };
+  }
+};
+
+// Telegram Client for reading user subscriptions
+let client;
+let isConnected = false;
+
+/**
+ * Initialize Telegram Client with user credentials
+ */
+const init = async () => {
+  try {
+    if (!process.env.TELEGRAM_API_ID || !process.env.TELEGRAM_API_HASH) {
+      console.warn('Telegram API credentials not set. User channel reading will not work.');
+      console.log('To enable reading from subscribed channels, set TELEGRAM_API_ID and TELEGRAM_API_HASH');
+      return;
+    }
+    
+    const apiId = parseInt(process.env.TELEGRAM_API_ID);
+    const apiHash = process.env.TELEGRAM_API_HASH;
+    const session = new StringSession(process.env.TELEGRAM_SESSION || '');
+    
+    client = new TelegramClient(session, apiId, apiHash, {
+      connectionRetries: 10,
+      retryDelay: 2000,
+      timeout: 30000,
+      requestRetries: 3,
+      downloadRetries: 2,
+      floodSleepThreshold: 60,
+      autoReconnect: true,
+      sequentialUpdates: true
+    });
+    
+    // Start the client
+    await client.start({
+      phoneNumber: async () => {
+        if (!process.env.TELEGRAM_PHONE) {
+          throw new Error('TELEGRAM_PHONE not set. Please set your phone number in .env');
+        }
+        return process.env.TELEGRAM_PHONE;
+      },
+      password: async () => {
+        if (process.env.TELEGRAM_PASSWORD) {
+          return process.env.TELEGRAM_PASSWORD;
+        }
+        throw new Error('Two-factor authentication required. Please set TELEGRAM_PASSWORD in .env');
+      },
+      phoneCode: async () => {
+        throw new Error('Phone verification required. Please run setup script first.');
+      },
+      onError: (err) => console.error('Telegram Client Error:', err),
+    });
+    
+    // Save session for future use
+    if (client.session.save()) {
+      console.log('Telegram session saved. Add this to your .env as TELEGRAM_SESSION:');
+      console.log('TELEGRAM_SESSION=' + client.session.save());
+    }
+    
+    // Verify connection by testing it
+    try {
+      await client.getMe();
+      isConnected = true;
+      console.log('✅ Telegram Client initialized and connection verified');
+      
+      // Set up real-time message listener
+      setupMessageListener();
+    } catch (verifyError) {
+      console.error('❌ Client initialized but connection verification failed:', verifyError.message);
+      isConnected = false;
+      throw verifyError;
+    }
+    
+  } catch (error) {
+    console.error('❌ Failed to initialize Telegram Client:', error.message);
+    
+    if (error.message.includes('AUTH_KEY_UNREGISTERED')) {
+      console.log('🔧 Solution: Delete TELEGRAM_SESSION from .env and restart to re-authenticate');
+    } else if (error.message.includes('TIMEOUT')) {
+      console.log('⏳ Connection timeout - this is normal, client will auto-reconnect');
+    } else if (error.message.includes('Not connected')) {
+      console.log('🔄 Connection lost - auto-reconnection in progress');
+    }
+    
+    // Set connected to false on error
+    isConnected = false;
+  }
+};
+
+/**
+ * Check and maintain connection health
+ */
+const checkConnectionHealth = async () => {
+  if (!client) return false;
+  
+  try {
+    // Simple health check - try to get current user info
+    await client.getMe();
+    if (!isConnected) {
+      isConnected = true;
+      console.log('🔄 Telegram connection restored');
+    }
+    return true;
+  } catch (error) {
+    if (isConnected) {
+      isConnected = false;
+      console.log('⚠️ Telegram connection lost, will auto-reconnect');
+    }
+    return false;
+  }
+};
+
+// Run connection health check every 2 minutes and reinitialize if needed
+setInterval(async () => {
+  const isHealthy = await checkConnectionHealth();
+  if (!isHealthy && client) {
+    console.log('🔄 Connection unhealthy, attempting reinitialization...');
+    try {
+      await init();
+    } catch (error) {
+      console.error('❌ Reinitialization failed:', error.message);
+    }
+  }
+}, 2 * 60 * 1000);
+
+/**
+ * Setup real-time message listener for subscribed channels
+ */
+const setupMessageListener = () => {
+  if (!client || !isConnected) return;
+  
+  client.addEventHandler(async (event) => {
+    try {
+      const message = event.message;
+      if (!message) return;
+      
+      // Get chat information
+      const chat = message.chat || message.peerId;
+      if (!chat) return;
+      
+      const chatId = chat.chatId || chat.channelId || chat.userId;
+      if (!chatId) return;
+      
+      // Check if this chat is one of our monitored sources
+      const source = await TelegramSource.findOne({ 
+        chatId: `-100${chatId}`,
+        active: true 
+      });
+      
+      if (!source) return;
+      
+      // New message processed (verbose logging disabled)
+      
+      // Process the message
+      await processMessage(message, source);
+      
+    } catch (error) {
+      console.error('Error processing real-time message:', error);
+    }
+  }, new NewMessage({}));
+  
+  console.log('📻 Real-time message listener set up');
+};
+
+/**
+ * Get user's subscribed channels and groups
+ */
+const getUserSubscriptions = async () => {
+  if (!client || !isConnected) {
+    throw new Error('Telegram Client not connected');
+  }
+  
+  try {
+    console.log('🔍 Fetching user subscriptions...');
+    
+    // Get all dialogs (chats, channels, groups)
+    const dialogs = await client.getDialogs({
+      limit: 100,
+    });
+    
+    const subscriptions = [];
+    
+    for (const dialog of dialogs) {
+      const entity = dialog.entity;
+      
+      // Filter for channels and groups
+      if (entity.className === 'Channel' || entity.className === 'Chat') {
+        const isChannel = entity.broadcast === true;
+        const isGroup = entity.megagroup === true || entity.className === 'Chat';
+        
+        if (isChannel || isGroup) {
+          subscriptions.push({
+            id: entity.id.toString(),
+            chatId: entity.id < 0 ? entity.id.toString() : `-100${entity.id}`,
+            title: entity.title,
+            username: entity.username ? `@${entity.username}` : null,
+            type: isChannel ? 'channel' : (isGroup ? 'supergroup' : 'group'),
+            participantsCount: entity.participantsCount || 0,
+            description: entity.about || '',
+            isSubscribed: true
+          });
+        }
+      }
+    }
+    
+    console.log(`✅ Found ${subscriptions.length} subscribed channels/groups`);
+    return subscriptions;
+    
+  } catch (error) {
+    console.error('Error getting user subscriptions:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get chat information by username or ID
+ */
+const getChatInfo = async (identifier) => {
+  if (!client || !isConnected) {
+    throw new Error('Telegram Client not connected');
+  }
+  
+  try {
+    const entity = await client.getEntity(identifier);
+    
+    return {
+      id: entity.id.toString(),
+      chatId: entity.id < 0 ? entity.id.toString() : `-100${entity.id}`,
+      title: entity.title,
+      username: entity.username ? `@${entity.username}` : null,
+      type: entity.broadcast ? 'channel' : (entity.megagroup ? 'supergroup' : 'group'),
+      participantsCount: entity.participantsCount || 0,
+      description: entity.about || '',
+      verified: entity.verified || false
+    };
+  } catch (error) {
+    console.error(`Error getting chat info for ${identifier}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Get recent messages from a channel/group
+ */
+const getRecentMessages = async (chatId, limit = 50, offsetId = 0, username = null) => {
+  if (!client || !isConnected) {
+    throw new Error('Telegram Client not connected');
+  }
+  
+  try {
+    console.log(`📥 Fetching ${limit} messages from ${chatId} (username: ${username})...`);
+    
+    let entity;
+    
+    // Try username first (more reliable for public channels)
+    if (username && username.startsWith('@')) {
+      try {
+        console.log(`🔄 Resolving entity by username: ${username}`);
+        entity = await client.getEntity(username);
+        console.log(`✅ Resolved entity by username: ${entity.id}`);
+      } catch (usernameError) {
+        console.warn(`⚠️ Failed to resolve by username ${username}:`, usernameError.message);
+        entity = null;
+      }
+    }
+    
+    // If username resolution failed, try by chat ID
+    if (!entity) {
+      try {
+        // For supergroup/channel IDs, convert to proper format
+        let entityId;
+        if (chatId.startsWith('-100')) {
+          // Remove -100 prefix and convert to BigInt
+          const numericId = chatId.substring(4);
+          entityId = BigInt(numericId);
+        } else if (chatId.startsWith('-')) {
+          // Regular group ID
+          entityId = parseInt(chatId);
+        } else {
+          entityId = chatId;
+        }
+        
+        console.log(`🔄 Resolving entity by ID: ${entityId} (from ${chatId})`);
+        entity = await client.getEntity(entityId);
+        console.log(`✅ Resolved entity by ID: ${entity.id}`);
+      } catch (idError) {
+        console.error(`❌ Failed to resolve entity by ID ${chatId}:`, idError.message);
+        throw new Error(`Cannot resolve chat entity. Chat may be private or bot doesn't have access. ID: ${chatId}, Username: ${username}`);
+      }
+    }
+    
+    // Now get messages using the resolved entity
+    const messages = await client.getMessages(entity, {
+      limit: limit,
+      offsetId: offsetId
+    });
+    
+    console.log(`✅ Retrieved ${messages.length} messages from ${chatId}`);
+    return messages;
+    
+  } catch (error) {
+    console.error(`Error getting messages from ${chatId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Process a message and create a post if needed
+ */
+const processMessage = async (message, source) => {
+  try {
+    // Skip if message already processed
+    const existingPost = await Post.findOne({
+      telegramSource: source._id,
+      originalPostId: message.id.toString()
+    });
+    
+    if (existingPost) {
+      return null;
+    }
+    
+    // Extract message data
+    const messageData = await extractMessageData(message, source);
+    if (!messageData) {
+      return null;
+    }
+    
+    // Check if message meets viral criteria
+    const meetsViralCriteria = checkViralCriteria(messageData, source);
+    
+    // Create post in database
+    const post = new Post({
+      telegramSource: source._id,
+      originalPostId: message.id.toString(),
+      text: messageData.text,
+      attachments: messageData.attachments,
+      viewCount: messageData.viewCount || 0,
+      forwardCount: messageData.forwardCount || 0,
+      reactionCount: messageData.reactionCount || 0,
+      commentCount: messageData.commentCount || 0,
+      replyCount: messageData.replyCount || 0,
+      publishedAt: messageData.publishedAt,
+      originalPostUrl: messageData.url,
+      isViral: meetsViralCriteria,
+      status: 'pending'
+    });
+    
+    await post.save();
+    
+    // Update source statistics
+    source.totalPosts += 1;
+    if (meetsViralCriteria) {
+      source.viralPosts += 1;
+    }
+    await source.save();
+    
+    // Auto-forward viral posts immediately
+    if (meetsViralCriteria) {
+      try {
+        const forwardResult = await autoForwardViralPost(post, source);
+        if (forwardResult.forwarded > 0) {
+          console.log(`🚀 Auto-forwarded viral Telegram post ${post.originalPostId} to ${forwardResult.forwarded} channels`);
+        }
+      } catch (error) {
+        console.error(`Error auto-forwarding viral Telegram post ${post.originalPostId}:`, error);
+      }
+    }
+    
+    // Message processed (logging reduced)
+    return post;
+    
+  } catch (error) {
+    console.error(`Error processing message ${message.id}:`, error);
+    return null;
+  }
+};
+
+/**
+ * Extract relevant data from Telegram message
+ */
+const extractMessageData = async (message, source) => {
+  try {
+    // Skip empty messages
+    if (!message.message && !message.media) {
+      return null;
+    }
+    
+    const messageData = {
+      text: message.message || '',
+      publishedAt: new Date(message.date * 1000),
+      url: `https://t.me/${source.username?.replace('@', '')}/${message.id}`,
+      attachments: []
+    };
+    
+    // Extract view count
+    if (message.views) {
+      messageData.viewCount = message.views;
+    }
+    
+    // Extract forward count
+    if (message.forwards) {
+      messageData.forwardCount = message.forwards;
+    }
+    
+    // Extract reactions
+    if (message.reactions) {
+      messageData.reactionCount = message.reactions.results?.reduce(
+        (sum, reaction) => sum + reaction.count, 0
+      ) || 0;
+    }
+    
+    // Extract reply/comment count
+    if (message.replies) {
+      messageData.replyCount = message.replies.replies || 0;
+      messageData.commentCount = messageData.replyCount; // Alias for compatibility
+    }
+    
+    // Extract media attachments
+    if (message.media) {
+      const attachment = await extractMediaAttachment(message.media, message);
+      if (attachment) {
+        messageData.attachments.push(attachment);
+      }
+    }
+    
+    return messageData;
+    
+  } catch (error) {
+    console.error('Error extracting message data:', error);
+    return null;
+  }
+};
+
+/**
+ * Extract media attachment information and download media files
+ */
+const extractMediaAttachment = async (media, message) => {
+  try {
+    if (!media) return null;
+    
+    switch (media.className) {
+      case 'MessageMediaPhoto':
+        // Photo download disabled - return metadata only
+        return {
+          type: 'photo',
+          fileId: media.photo.id.toString(),
+          width: media.photo.sizes?.[media.photo.sizes.length - 1]?.w || 0,
+          height: media.photo.sizes?.[media.photo.sizes.length - 1]?.h || 0
+        };
+        
+      case 'MessageMediaDocument':
+        const document = media.document;
+        const isVideo = document.mimeType?.startsWith('video/');
+        const isAnimation = document.mimeType === 'video/mp4' && document.attributes?.some(attr => attr.className === 'DocumentAttributeAnimated');
+        
+        // Video/document download disabled - return metadata only
+        return {
+          type: isAnimation ? 'animation' : (isVideo ? 'video' : 'document'),
+          fileId: document.id.toString(),
+          fileName: document.attributes?.find(attr => attr.fileName)?.fileName,
+          mimeType: document.mimeType,
+          duration: document.attributes?.find(attr => attr.duration)?.duration,
+          width: document.attributes?.find(attr => attr.w)?.w,
+          height: document.attributes?.find(attr => attr.h)?.h
+        };
+        
+      case 'MessageMediaWebPage':
+        return {
+          type: 'link',
+          url: media.webpage.url,
+          title: media.webpage.title,
+          description: media.webpage.description
+        };
+        
+      default:
+        return {
+          type: 'other',
+          mediaType: media.className
+        };
+    }
+  } catch (error) {
+    console.error('Error extracting media attachment:', error);
+    return null;
+  }
+};
+
+/**
+ * Check if message meets viral criteria based on engagement metrics
+ */
+const checkViralCriteria = (messageData, source) => {
+  try {
+    const reactionCount = messageData.reactionCount || 0;
+    const commentCount = messageData.commentCount || 0;
+    const forwardCount = messageData.forwardCount || 0;
+    const viewCount = messageData.viewCount || 0;
+    
+    // Determine which metric to use for viral detection
+    const detectionMetric = source.viralDetectionMetric || 'reactions';
+    
+    let meetsThreshold = false;
+    
+    switch (detectionMetric) {
+      case 'reactions':
+        const minReactions = source.thresholdType === 'manual' 
+          ? source.manualThreshold 
+          : (source.calculatedThreshold || source.minReactionsForViral || 10);
+        meetsThreshold = reactionCount >= minReactions;
+        break;
+        
+      case 'comments':
+        const minComments = source.thresholdType === 'manual' 
+          ? source.manualThreshold 
+          : (source.calculatedThreshold || source.minCommentsForViral || 5);
+        meetsThreshold = commentCount >= minComments;
+        break;
+        
+      case 'views':
+        // Legacy view-based detection
+        meetsThreshold = viewCount >= (source.minViewsForViral || 1000);
+        break;
+        
+              case 'engagement_score':
+        // Calculate weighted engagement score
+        const reactionWeight = source.reactionWeight || 1.0;
+        const commentWeight = source.commentWeight || 2.0;
+        const forwardWeight = source.forwardWeight || 3.0;
+        
+        const engagementScore = (
+          (reactionCount * reactionWeight) +
+          (commentCount * commentWeight) +
+          (forwardCount * forwardWeight)
+        );
+        
+        // Use appropriate threshold based on type
+        const minEngagementScore = source.thresholdType === 'manual' 
+          ? source.manualThreshold 
+          : (source.calculatedThreshold || 30);
+          
+        meetsThreshold = engagementScore >= minEngagementScore;
+        
+        console.log(`📊 Engagement Score: ${engagementScore} (reactions: ${reactionCount}×${reactionWeight}, comments: ${commentCount}×${commentWeight}, forwards: ${forwardCount}×${forwardWeight}) - Threshold: ${minEngagementScore} - Viral: ${meetsThreshold}`);
+        break;
+        
+      default:
+        console.warn(`Unknown viral detection metric: ${detectionMetric}, falling back to reactions`);
+        meetsThreshold = reactionCount >= (source.minReactionsForViral || 10);
+    }
+    
+    // Additional check: ensure at least some basic engagement
+    const hasMinimalEngagement = (reactionCount + commentCount + forwardCount) > 0;
+    
+    const isViral = meetsThreshold && hasMinimalEngagement;
+    
+    if (isViral) {
+      console.log(`🔥 VIRAL: ${detectionMetric} - reactions: ${reactionCount}, comments: ${commentCount}, forwards: ${forwardCount}, views: ${viewCount}`);
+    }
+    
+    return isViral;
+    
+  } catch (error) {
+    console.error('Error checking viral criteria:', error);
+    return false;
+  }
+};
+
+/**
+ * Process all messages from a source
+ */
+const processMessagesFromSource = async (telegramSource) => {
+  if (!client || !isConnected) {
+    throw new Error('Telegram Client not connected');
+  }
+  
+  try {
+    console.log(`🔄 Processing messages from ${telegramSource.name}...`);
+    
+    // Check if we need to calculate threshold for auto mode
+    if (telegramSource.thresholdType === 'auto' && !telegramSource.calculatedThreshold) {
+      console.log(`📊 Auto threshold not set, calculating based on recent posts...`);
+      try {
+        await updateSourceThreshold(
+          telegramSource._id.toString(), 
+          telegramSource.thresholdMethod || 'statistical',
+          telegramSource.statisticalMultiplier || 1.5
+        );
+        // Reload the source to get updated threshold
+        telegramSource = await TelegramSource.findById(telegramSource._id);
+      } catch (thresholdError) {
+        console.warn(`⚠️ Could not calculate threshold: ${thresholdError.message}`);
+      }
+    }
+    
+    // Get recent messages
+    const messages = await getRecentMessages(
+      telegramSource.chatId,
+      50,
+      telegramSource.lastPostId || 0,
+      telegramSource.username
+    );
+    
+    if (messages.length === 0) {
+      console.log(`No new messages found for ${telegramSource.name}`);
+      return { processed: 0, created: 0 };
+    }
+    
+    let processedCount = 0;
+    let createdCount = 0;
+    let latestMessageId = telegramSource.lastPostId || 0;
+    
+    // Process messages in reverse order (oldest first)
+    for (const message of messages.reverse()) {
+      const post = await processMessage(message, telegramSource);
+      
+      if (post) {
+        createdCount++;
+      }
+      
+      processedCount++;
+      
+      // Update latest message ID
+      if (message.id > latestMessageId) {
+        latestMessageId = message.id;
+      }
+    }
+    
+    // Update source statistics
+    telegramSource.lastChecked = new Date();
+    telegramSource.lastPostId = latestMessageId;
+    await telegramSource.save();
+    
+    console.log(`✅ Processed ${processedCount} messages, created ${createdCount} posts for ${telegramSource.name}`);
+    
+    return { processed: processedCount, created: createdCount };
+    
+  } catch (error) {
+    console.error(`Error processing messages from ${telegramSource.name}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Test connection to Telegram Client
+ */
+const testConnection = async () => {
+  try {
+    if (!client || !isConnected) {
+      return {
+        success: false,
+        error: 'Telegram Client not connected'
+      };
+    }
+    
+    const me = await client.getMe();
+    
+    return {
+      success: true,
+      user: {
+        id: me.id.toString(),
+        firstName: me.firstName,
+        lastName: me.lastName,
+        username: me.username,
+        phone: me.phone
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
+/**
+ * Check if client is connected
+ */
+const isClientConnected = () => {
+  return client && isConnected;
+};
+
+/**
+ * Get the client instance
+ */
+const getClient = () => {
+  return client;
+};
+
+module.exports = {
+  init,
+  getUserSubscriptions,
+  isConnected: isClientConnected,
+  getClient,
+  getChatInfo,
+  getRecentMessages,
+  processMessagesFromSource,
+  autoForwardViralPost,
+  testConnection,
+  isConnected: () => isConnected,
+  getClient: () => client
+};

@@ -5,14 +5,21 @@ const MappingSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'VkSource',
     required: function() {
-      return !this.vkSourceGroup; // Required if no group is specified
+      return !this.vkSourceGroup && !this.telegramSource; // Required if no group or telegram source is specified
     }
   },
   vkSourceGroup: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'VkSourceGroup',
     required: function() {
-      return !this.vkSource; // Required if no source is specified
+      return !this.vkSource && !this.telegramSource; // Required if no source or telegram source is specified
+    }
+  },
+  telegramSource: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'TelegramSource',
+    required: function() {
+      return !this.vkSource && !this.vkSourceGroup; // Required if no VK source or group is specified
     }
   },
   telegramChannel: {
@@ -41,11 +48,12 @@ const MappingSchema = new mongoose.Schema({
   dbName: 'feedrank'  // Use the feedrank database
 });
 
-// Update the unique index to account for both individual sources and groups
+// Update the unique index to account for VK sources, groups, and Telegram sources
 MappingSchema.index(
   { 
     vkSource: 1, 
     vkSourceGroup: 1, 
+    telegramSource: 1,
     telegramChannel: 1 
   }, 
   { 
@@ -53,7 +61,8 @@ MappingSchema.index(
     partialFilterExpression: {
       $or: [
         { vkSource: { $exists: true, $ne: null } },
-        { vkSourceGroup: { $exists: true, $ne: null } }
+        { vkSourceGroup: { $exists: true, $ne: null } },
+        { telegramSource: { $exists: true, $ne: null } }
       ]
     }
   }
@@ -65,10 +74,11 @@ MappingSchema.pre('save', function(next) {
   next();
 });
 
-// Validation to ensure either vkSource or vkSourceGroup is provided, but not both
+// Validation to ensure exactly one source type is provided
 MappingSchema.pre('validate', function(next) {
-  if ((this.vkSource && this.vkSourceGroup) || (!this.vkSource && !this.vkSourceGroup)) {
-    this.invalidate('vkSource', 'Either vkSource OR vkSourceGroup must be provided, but not both');
+  const sources = [this.vkSource, this.vkSourceGroup, this.telegramSource].filter(Boolean);
+  if (sources.length !== 1) {
+    this.invalidate('source', 'Exactly one source type (vkSource, vkSourceGroup, or telegramSource) must be provided');
   }
   next();
 });
