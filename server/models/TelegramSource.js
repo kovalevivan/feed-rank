@@ -29,6 +29,20 @@ const TelegramSourceSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  // Access status tracking
+  accessStatus: {
+    type: String,
+    enum: ['active', 'access_denied', 'not_found', 'error'],
+    default: 'active'
+  },
+  lastAccessError: {
+    type: String,
+    trim: true
+  },
+  lastAccessAttempt: {
+    type: Date,
+    default: Date.now
+  },
   // Viral detection settings
   thresholdType: {
     type: String,

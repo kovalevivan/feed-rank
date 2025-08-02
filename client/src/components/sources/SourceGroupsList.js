@@ -31,11 +31,11 @@ import {
   WarningAmber as WarningIcon
 } from '@mui/icons-material';
 import {
-  fetchVkSourceGroups,
-  deleteVkSourceGroup,
-  clearVkSourceGroupsError,
+  fetchSourceGroups,
+  deleteSourceGroup,
+  clearSourceGroupsError,
   resetSuccess
-} from '../../redux/slices/vkSourceGroupsSlice';
+} from '../../redux/slices/sourceGroupsSlice';
 import ApiErrorAlert from '../common/ApiErrorAlert';
 import { useTranslation } from '../../translations/TranslationContext';
 
@@ -44,7 +44,7 @@ const SourceGroupsList = () => {
   const dispatch = useDispatch();
   const translate = useTranslation();
   
-  const { vkSourceGroups, loading, error, deleting } = useSelector((state) => state.vkSourceGroups);
+  const { sourceGroups, loading, error, deleting } = useSelector((state) => state.sourceGroups);
   
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [groupToDelete, setGroupToDelete] = useState(null);
@@ -57,11 +57,11 @@ const SourceGroupsList = () => {
     dispatch(resetSuccess());
     
     // Fetch the groups
-    dispatch(fetchVkSourceGroups());
+    dispatch(fetchSourceGroups());
     
     // Clean up
     return () => {
-      dispatch(clearVkSourceGroupsError());
+      dispatch(clearSourceGroupsError());
     };
   }, [dispatch]);
   
@@ -85,7 +85,7 @@ const SourceGroupsList = () => {
   // Handle delete group
   const handleDeleteGroup = async () => {
     if (groupToDelete) {
-      await dispatch(deleteVkSourceGroup(groupToDelete._id));
+      await dispatch(deleteSourceGroup(groupToDelete._id));
       handleDeleteConfirmClose();
     }
   };
@@ -97,7 +97,7 @@ const SourceGroupsList = () => {
   
   // Handle error close
   const handleErrorClose = () => {
-    dispatch(clearVkSourceGroupsError());
+    dispatch(clearSourceGroupsError());
   };
   
   // Handle pagination
@@ -111,7 +111,7 @@ const SourceGroupsList = () => {
   };
   
   // Calculate pagination
-  const paginatedGroups = vkSourceGroups.slice(
+  const paginatedGroups = sourceGroups.slice(
     page * rowsPerPage,
     page * rowsPerPage + rowsPerPage
   );
@@ -137,7 +137,7 @@ const SourceGroupsList = () => {
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
             <CircularProgress />
           </Box>
-        ) : vkSourceGroups.length === 0 ? (
+        ) : sourceGroups.length === 0 ? (
           <Box sx={{ p: 3, textAlign: 'center' }}>
             <Typography variant="body1">
               {translate('No VK source groups found. Create your first group to get started.')}
@@ -161,7 +161,6 @@ const SourceGroupsList = () => {
                     <TableCell>{translate('Name')}</TableCell>
                     <TableCell>{translate('Description')}</TableCell>
                     <TableCell>{translate('Sources')}</TableCell>
-                    <TableCell>{translate('Status')}</TableCell>
                     <TableCell align="right">{translate('Actions')}</TableCell>
                   </TableRow>
                 </TableHead>
@@ -173,36 +172,43 @@ const SourceGroupsList = () => {
                         {group.description || translate('No description')}
                       </TableCell>
                       <TableCell>
-                        {group.sources && group.sources.length > 0 ? (
-                          <Chip 
-                            label={`${group.sources.length} ${translate('sources')}`} 
-                            color="primary" 
-                            variant="outlined" 
-                          />
-                        ) : (
-                          <Chip 
-                            label={translate('No sources')} 
-                            color="default" 
-                            variant="outlined" 
-                          />
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {group.active ? (
-                          <Chip
-                            icon={<CheckIcon />}
-                            label={translate('Active')}
-                            color="success"
-                            size="small"
-                          />
-                        ) : (
-                          <Chip
-                            icon={<WarningIcon />}
-                            label={translate('Inactive')}
-                            color="default"
-                            size="small"
-                          />
-                        )}
+                        {(() => {
+                          const vkCount = group.vkSources?.length || 0;
+                          const telegramCount = group.telegramSources?.length || 0;
+                          const totalCount = vkCount + telegramCount;
+                          
+                          if (totalCount > 0) {
+                            return (
+                              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                                {vkCount > 0 && (
+                                  <Chip 
+                                    label={`VK: ${vkCount}`} 
+                                    color="primary" 
+                                    variant="outlined" 
+                                    size="small"
+                                  />
+                                )}
+                                {telegramCount > 0 && (
+                                  <Chip 
+                                    label={`Telegram: ${telegramCount}`} 
+                                    color="secondary" 
+                                    variant="outlined" 
+                                    size="small"
+                                  />
+                                )}
+                              </Box>
+                            );
+                          } else {
+                            return (
+                              <Chip 
+                                label={translate('No sources')} 
+                                color="default" 
+                                variant="outlined" 
+                                size="small"
+                              />
+                            );
+                          }
+                        })()}
                       </TableCell>
                       <TableCell align="right">
                         <Tooltip title={translate('Edit')}>
@@ -217,7 +223,7 @@ const SourceGroupsList = () => {
                           <IconButton
                             color="error"
                             onClick={() => handleDeleteConfirmOpen(group)}
-                            disabled={deleting}
+                            disabled={deleting[group._id]}
                           >
                             <DeleteIcon />
                           </IconButton>
@@ -231,7 +237,7 @@ const SourceGroupsList = () => {
             <TablePagination
               rowsPerPageOptions={[5, 10, 25]}
               component="div"
-              count={vkSourceGroups.length}
+              count={sourceGroups.length}
               rowsPerPage={rowsPerPage}
               page={page}
               onPageChange={handleChangePage}
@@ -247,7 +253,7 @@ const SourceGroupsList = () => {
         open={deleteDialogOpen}
         onClose={handleDeleteConfirmClose}
       >
-        <DialogTitle>{translate('Delete VK Source Group')}</DialogTitle>
+        <DialogTitle>{translate('Delete Source Group')}</DialogTitle>
         <DialogContent>
           <DialogContentText>
             {translate('Are you sure you want to delete the group')} "{groupToDelete?.name}"?
@@ -255,16 +261,16 @@ const SourceGroupsList = () => {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleDeleteConfirmClose} disabled={deleting}>
+          <Button onClick={handleDeleteConfirmClose} disabled={groupToDelete && deleting[groupToDelete._id]}>
             {translate('Cancel')}
           </Button>
           <Button
             onClick={handleDeleteGroup}
             color="error"
-            disabled={deleting}
-            startIcon={deleting ? <CircularProgress size={20} /> : <DeleteIcon />}
+            disabled={groupToDelete && deleting[groupToDelete._id]}
+            startIcon={groupToDelete && deleting[groupToDelete._id] ? <CircularProgress size={20} /> : <DeleteIcon />}
           >
-            {deleting ? translate('Deleting...') : translate('Delete')}
+            {groupToDelete && deleting[groupToDelete._id] ? translate('Deleting...') : translate('Delete')}
           </Button>
         </DialogActions>
       </Dialog>

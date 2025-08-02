@@ -11,6 +11,7 @@ router.get('/', async (req, res) => {
   try {
     const mappings = await Mapping.find()
       .populate('vkSource')
+      .populate('sourceGroup')
       .populate('vkSourceGroup')
       .populate('telegramSource')
       .populate('telegramChannel')
@@ -94,6 +95,7 @@ router.get('/:id', async (req, res) => {
   try {
     const mapping = await Mapping.findById(req.params.id)
       .populate('vkSource')
+      .populate('sourceGroup')
       .populate('vkSourceGroup')
       .populate('telegramSource')
       .populate('telegramChannel');
@@ -113,7 +115,8 @@ router.get('/:id', async (req, res) => {
 router.post(
   '/',
   [
-    body('telegramChannel').isMongoId().withMessage('Valid Telegram channel ID is required'),
+    body('sourceGroup').notEmpty().isMongoId().withMessage('Valid source group ID is required'),
+    body('telegramChannel').notEmpty().isMongoId().withMessage('Valid Telegram channel ID is required'),
     body('active').optional().isBoolean().withMessage('Active must be boolean')
   ],
   async (req, res) => {
@@ -124,12 +127,11 @@ router.post(
     }
     
     try {
-      const { vkSource, vkSourceGroup, telegramSource, telegramChannel, active } = req.body;
+      const { sourceGroup, telegramChannel, active } = req.body;
       
-      // Ensure exactly one source type is provided
-      const sources = [vkSource, vkSourceGroup, telegramSource].filter(Boolean);
-      if (sources.length !== 1) {
-        return res.status(400).json({ message: 'Exactly one source type (vkSource, vkSourceGroup, or telegramSource) must be provided' });
+      // Ensure sourceGroup is provided
+      if (!sourceGroup) {
+        return res.status(400).json({ message: 'Source group is required' });
       }
       
       // Verify channel exists
@@ -138,66 +140,26 @@ router.post(
         return res.status(404).json({ message: 'Telegram channel not found' });
       }
       
-      // If vkSource is provided, verify it exists
-      if (vkSource) {
-        const source = await VkSource.findById(vkSource);
-        if (!source) {
-          return res.status(404).json({ message: 'VK source not found' });
-        }
-        
-        // Check if mapping already exists for this source
-        const existingMapping = await Mapping.findOne({
-          vkSource,
-          telegramChannel
-        });
-        
-        if (existingMapping) {
-          return res.status(400).json({ message: 'This mapping already exists' });
-        }
+      // Verify source group exists
+      const SourceGroup = require('../models/SourceGroup');
+      const group = await SourceGroup.findById(sourceGroup);
+      if (!group) {
+        return res.status(404).json({ message: 'Source group not found' });
       }
       
-      // If vkSourceGroup is provided, verify it exists
-      if (vkSourceGroup) {
-        const sourceGroup = await mongoose.model('VkSourceGroup').findById(vkSourceGroup);
-        if (!sourceGroup) {
-          return res.status(404).json({ message: 'VK source group not found' });
-        }
-        
-        // Check if mapping already exists for this group
-        const existingMapping = await Mapping.findOne({
-          vkSourceGroup,
-          telegramChannel
-        });
-        
-        if (existingMapping) {
-          return res.status(400).json({ message: 'This mapping already exists' });
-        }
-      }
+      // Check if mapping already exists for this group and channel
+      const existingMapping = await Mapping.findOne({
+        sourceGroup,
+        telegramChannel
+      });
       
-      // If telegramSource is provided, verify it exists
-      if (telegramSource) {
-        const TelegramSource = require('../models/TelegramSource');
-        const source = await TelegramSource.findById(telegramSource);
-        if (!source) {
-          return res.status(404).json({ message: 'Telegram source not found' });
-        }
-        
-        // Check if mapping already exists for this Telegram source
-        const existingMapping = await Mapping.findOne({
-          telegramSource,
-          telegramChannel
-        });
-        
-        if (existingMapping) {
-          return res.status(400).json({ message: 'This mapping already exists' });
-        }
+      if (existingMapping) {
+        return res.status(400).json({ message: 'This mapping already exists' });
       }
       
       // Create new mapping
       const newMapping = new Mapping({
-        vkSource: vkSource || undefined,
-        vkSourceGroup: vkSourceGroup || undefined,
-        telegramSource: telegramSource || undefined,
+        sourceGroup,
         telegramChannel,
         active: active !== undefined ? active : true,
         createdBy: req.user?._id // If authentication is implemented
@@ -207,15 +169,7 @@ router.post(
       await newMapping.save();
       
       // Populate response
-      if (vkSource) {
-        await newMapping.populate('vkSource');
-      }
-      if (vkSourceGroup) {
-        await newMapping.populate('vkSourceGroup');
-      }
-      if (telegramSource) {
-        await newMapping.populate('telegramSource');
-      }
+      await newMapping.populate('sourceGroup');
       await newMapping.populate('telegramChannel');
       
       res.status(201).json(newMapping);

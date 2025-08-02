@@ -100,6 +100,7 @@ app.use('/api/mappings', require('./controllers/mappings'));
 app.use('/api/posts', require('./controllers/posts'));
 app.use('/api/settings', require('./controllers/settings'));
 app.use('/api/vk-source-groups', require('./controllers/vkSourceGroups'));
+app.use('/api/source-groups', require('./controllers/sourceGroups'));
 app.use('/api/analytics', require('./controllers/analytics'));
 
 // Initialize services

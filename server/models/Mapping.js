@@ -1,26 +1,26 @@
 const mongoose = require('mongoose');
 
 const MappingSchema = new mongoose.Schema({
+  sourceGroup: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SourceGroup',
+    required: false // Not required to support legacy mappings
+  },
+  // Keep legacy fields for backward compatibility with existing mappings
   vkSource: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'VkSource',
-    required: function() {
-      return !this.vkSourceGroup && !this.telegramSource; // Required if no group or telegram source is specified
-    }
+    required: false
   },
   vkSourceGroup: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'VkSourceGroup',
-    required: function() {
-      return !this.vkSource && !this.telegramSource; // Required if no source or telegram source is specified
-    }
+    required: false
   },
   telegramSource: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'TelegramSource',
-    required: function() {
-      return !this.vkSource && !this.vkSourceGroup; // Required if no VK source or group is specified
-    }
+    required: false
   },
   telegramChannel: {
     type: mongoose.Schema.Types.ObjectId,
@@ -48,7 +48,19 @@ const MappingSchema = new mongoose.Schema({
   dbName: 'feedrank'  // Use the feedrank database
 });
 
-// Update the unique index to account for VK sources, groups, and Telegram sources
+// Create unique index for sourceGroup + telegramChannel combination
+MappingSchema.index(
+  { 
+    sourceGroup: 1,
+    telegramChannel: 1 
+  }, 
+  { 
+    unique: true,
+    name: 'sourceGroup_telegramChannel_unique'
+  }
+);
+
+// Keep legacy index for backward compatibility with existing mappings
 MappingSchema.index(
   { 
     vkSource: 1, 
@@ -58,6 +70,8 @@ MappingSchema.index(
   }, 
   { 
     unique: true,
+    sparse: true, // Only apply to documents that have these fields
+    name: 'legacy_mapping_unique',
     partialFilterExpression: {
       $or: [
         { vkSource: { $exists: true, $ne: null } },
@@ -76,10 +90,22 @@ MappingSchema.pre('save', function(next) {
 
 // Validation to ensure exactly one source type is provided
 MappingSchema.pre('validate', function(next) {
-  const sources = [this.vkSource, this.vkSourceGroup, this.telegramSource].filter(Boolean);
-  if (sources.length !== 1) {
-    this.invalidate('source', 'Exactly one source type (vkSource, vkSourceGroup, or telegramSource) must be provided');
+  // Check for new unified sourceGroup format
+  const hasSourceGroup = Boolean(this.sourceGroup);
+  
+  // Check for legacy source fields
+  const legacySources = [this.vkSource, this.vkSourceGroup, this.telegramSource].filter(Boolean);
+  const hasLegacySources = legacySources.length > 0;
+  
+  // Either sourceGroup OR exactly one legacy source must be provided, but not both
+  if (hasSourceGroup && hasLegacySources) {
+    this.invalidate('source', 'Cannot use both sourceGroup and legacy source fields (vkSource, vkSourceGroup, telegramSource)');
+  } else if (!hasSourceGroup && legacySources.length !== 1) {
+    this.invalidate('source', 'Either sourceGroup must be provided, or exactly one legacy source type (vkSource, vkSourceGroup, or telegramSource) must be provided');
+  } else if (!hasSourceGroup && !hasLegacySources) {
+    this.invalidate('source', 'Either sourceGroup or one legacy source type must be provided');
   }
+  
   next();
 });
 

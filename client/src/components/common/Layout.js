@@ -34,13 +34,13 @@ import { logout } from '../../redux/slices/authSlice';
 import { useTranslation } from '../../translations/TranslationContext';
 
 // Drawer width
-const drawerWidth = 240;
+const drawerWidth = 220;
 
 // Styled components
 const Main = styled('main', { shouldForwardProp: (prop) => prop !== 'open' })(
   ({ theme, open }) => ({
     flexGrow: 1,
-    padding: theme.spacing(3),
+    padding: theme.spacing(1.5),
     transition: theme.transitions.create('margin', {
       easing: theme.transitions.easing.sharp,
       duration: theme.transitions.duration.leavingScreen,
@@ -94,13 +94,13 @@ const Layout = () => {
   
   // Navigation items
   const navItems = [
-    { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
-    { text: 'VK Sources', icon: <SourceIcon />, path: '/sources' },
-    { text: 'VK Source Groups', icon: <SourceIcon />, path: '/source-groups' },
-    { text: 'Telegram Channels', icon: <SendIcon />, path: '/channels' },
-    { text: 'Mappings', icon: <LinkIcon />, path: '/mappings' },
-    { text: 'Analytics', icon: <AnalyticsIcon />, path: '/analytics' },
-    { text: 'Settings', icon: <SettingsIcon />, path: '/settings' },
+    { text: translate('Dashboard'), icon: <DashboardIcon />, path: '/' },
+    { text: translate('Sources'), icon: <SourceIcon />, path: '/sources' },
+    { text: translate('Source Groups'), icon: <SourceIcon />, path: '/source-groups' },
+    { text: translate('Telegram Channels'), icon: <SendIcon />, path: '/channels' },
+    { text: translate('Mappings'), icon: <LinkIcon />, path: '/mappings' },
+    { text: translate('Analytics'), icon: <AnalyticsIcon />, path: '/analytics' },
+    { text: translate('Settings'), icon: <SettingsIcon />, path: '/settings' },
   ];
   
   // Toggle drawer

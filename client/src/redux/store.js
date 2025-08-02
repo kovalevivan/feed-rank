@@ -3,10 +3,12 @@ import authReducer from './slices/authSlice';
 import alertReducer from './slices/alertSlice';
 import vkSourcesReducer from './slices/vkSourcesSlice';
 import telegramChannelsReducer from './slices/telegramChannelsSlice';
+import telegramSourcesReducer from './slices/telegramSourcesSlice';
 import mappingsReducer from './slices/mappingsSlice';
 import postsReducer from './slices/postsSlice';
 import settingsReducer from './slices/settingsSlice';
 import vkSourceGroupsReducer from './slices/vkSourceGroupsSlice';
+import sourceGroupsReducer from './slices/sourceGroupsSlice';
 import analyticsReducer from './slices/analyticsSlice';
 
 const store = configureStore({
@@ -15,10 +17,12 @@ const store = configureStore({
     alerts: alertReducer,
     vkSources: vkSourcesReducer,
     telegramChannels: telegramChannelsReducer,
+    telegramSources: telegramSourcesReducer,
     mappings: mappingsReducer,
     posts: postsReducer,
     settings: settingsReducer,
     vkSourceGroups: vkSourceGroupsReducer,
+    sourceGroups: sourceGroupsReducer,
     analytics: analyticsReducer
   }
 });

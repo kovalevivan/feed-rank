@@ -33,41 +33,31 @@ const MappingForm = () => {
   const translate = useTranslation();
   
   // State for data sources
-  const [vkSources, setVkSources] = useState([]);
-  const [vkSourceGroups, setVkSourceGroups] = useState([]);
+  const [sourceGroups, setSourceGroups] = useState([]);
   const [telegramChannels, setTelegramChannels] = useState([]);
   
   // State for mapping data
   const [formData, setFormData] = useState({
-    vkSource: '',
-    vkSourceGroup: '',
+    sourceGroup: '',
     telegramChannel: '',
-    active: true,
-    sourceType: 'individual' // 'individual' or 'group'
+    active: true
   });
   
   // State for UI
   const [loading, setLoading] = useState(false);
-  const [sourcesLoading, setSourcesLoading] = useState(true);
   const [groupsLoading, setGroupsLoading] = useState(true);
   const [channelsLoading, setChannelsLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   
-  // Fetch VK sources, VK source groups, and Telegram channels on component mount
+  // Fetch source groups and Telegram channels on component mount
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch VK sources
-        setSourcesLoading(true);
-        const sourcesResponse = await axios.get('/api/vk-sources');
-        setVkSources(sourcesResponse.data);
-        setSourcesLoading(false);
-        
-        // Fetch VK source groups
+        // Fetch unified source groups
         setGroupsLoading(true);
-        const groupsResponse = await axios.get('/api/vk-source-groups');
-        setVkSourceGroups(groupsResponse.data);
+        const sourceGroupsResponse = await axios.get('/api/source-groups');
+        setSourceGroups(sourceGroupsResponse.data);
         setGroupsLoading(false);
         
         // Fetch Telegram channels
@@ -82,21 +72,22 @@ const MappingForm = () => {
           const mappingResponse = await axios.get(`/api/mappings/${id}`);
           const mapping = mappingResponse.data;
           
-          // Determine if this is an individual source or a group mapping
-          const sourceType = mapping.vkSource ? 'individual' : 'group';
+          // Only allow editing if it has a sourceGroup (new format)
+          if (!mapping.sourceGroup) {
+            setError('This mapping uses the legacy format and cannot be edited. Please create a new mapping with a source group.');
+            setLoading(false);
+            return;
+          }
           
           setFormData({
-            vkSource: mapping.vkSource?._id || '',
-            vkSourceGroup: mapping.vkSourceGroup?._id || '',
+            sourceGroup: mapping.sourceGroup._id,
             telegramChannel: mapping.telegramChannel._id,
-            active: mapping.active,
-            sourceType
+            active: mapping.active
           });
           setLoading(false);
         }
       } catch (err) {
         setError(err.response?.data?.message || translate('Failed to load data'));
-        setSourcesLoading(false);
         setGroupsLoading(false);
         setChannelsLoading(false);
         setLoading(false);
@@ -111,18 +102,27 @@ const MappingForm = () => {
     const { name, value, checked, type } = e.target;
     
     if (name === 'sourceType') {
-      // When switching source type, clear the other type's selection
+      // When switching source type, clear the other type's selections
       if (value === 'individual') {
         setFormData({
           ...formData,
           sourceType: value,
-          vkSourceGroup: ''
+          vkSourceGroup: '',
+          telegramSource: ''
         });
-      } else {
+      } else if (value === 'group') {
         setFormData({
           ...formData,
           sourceType: value,
-          vkSource: ''
+          vkSource: '',
+          telegramSource: ''
+        });
+      } else if (value === 'telegram') {
+        setFormData({
+          ...formData,
+          sourceType: value,
+          vkSource: '',
+          vkSourceGroup: ''
         });
       }
     } else {
@@ -146,14 +146,8 @@ const MappingForm = () => {
     
     try {
       // Validate form data
-      if (formData.sourceType === 'individual' && !formData.vkSource) {
-        setError(translate('Please select a VK source'));
-        setLoading(false);
-        return;
-      }
-      
-      if (formData.sourceType === 'group' && !formData.vkSourceGroup) {
-        setError(translate('Please select a VK source group'));
+      if (!formData.sourceGroup) {
+        setError(translate('Please select a source group'));
         setLoading(false);
         return;
       }
@@ -166,8 +160,7 @@ const MappingForm = () => {
       
       let response;
       const mappingData = {
-        vkSource: formData.sourceType === 'individual' ? formData.vkSource : null,
-        vkSourceGroup: formData.sourceType === 'group' ? formData.vkSourceGroup : null,
+        sourceGroup: formData.sourceGroup,
         telegramChannel: formData.telegramChannel,
         active: formData.active
       };
@@ -195,7 +188,7 @@ const MappingForm = () => {
   };
   
   // Determine if form fields should be disabled
-  const isFormDisabled = loading || sourcesLoading || channelsLoading || groupsLoading;
+  const isFormDisabled = loading || channelsLoading || groupsLoading;
   
   return (
     <Box>
@@ -227,114 +220,40 @@ const MappingForm = () => {
               {translate('Mapping Details')}
             </Typography>
             
-            {isNewMapping && (
-              <Box sx={{ mb: 3 }}>
-                <FormControl component="fieldset">
-                  <FormLabel component="legend">{translate('Select Source Type')}</FormLabel>
-                  <RadioGroup
-                    row
-                    name="sourceType"
-                    value={formData.sourceType}
-                    onChange={handleChange}
-                  >
-                    <FormControlLabel 
-                      value="individual" 
-                      control={<Radio />} 
-                      label={translate('Individual VK Source')} 
-                      disabled={isFormDisabled}
-                    />
-                    <FormControlLabel 
-                      value="group" 
-                      control={<Radio />} 
-                      label={translate('VK Source Group')} 
-                      disabled={isFormDisabled}
-                    />
-                  </RadioGroup>
-                </FormControl>
-              </Box>
-            )}
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              {translate('Create a mapping between a source group and a Telegram channel. All sources in the group will forward viral posts to the selected channel.')}
+            </Typography>
             
-            {/* Display current source type for edit mode */}
-            {!isNewMapping && (
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  {translate('Source Type')}:
-                </Typography>
-                <Chip 
-                  label={formData.sourceType === 'individual' ? 
-                    translate('Individual VK Source') : 
-                    translate('VK Source Group')}
-                  color="primary"
-                  variant="outlined"
-                />
-              </Box>
-            )}
-            
-            {formData.sourceType === 'individual' && (
-              <FormControl fullWidth margin="normal" required disabled={isFormDisabled || !isNewMapping}>
-                <InputLabel id="vk-source-label">{translate('VK Source')}</InputLabel>
-                <Select
-                  labelId="vk-source-label"
-                  id="vkSource"
-                  name="vkSource"
-                  value={formData.vkSource}
-                  onChange={handleChange}
-                  label={translate('VK Source')}
-                >
-                  <MenuItem value="" disabled>
-                    <em>{translate('Select a VK source')}</em>
+            <FormControl fullWidth margin="normal" required disabled={isFormDisabled || !isNewMapping}>
+              <InputLabel id="source-group-label">{translate('Source Group')}</InputLabel>
+              <Select
+                labelId="source-group-label"
+                id="sourceGroup"
+                name="sourceGroup"
+                value={formData.sourceGroup}
+                onChange={handleChange}
+                label={translate('Source Group')}
+              >
+                <MenuItem value="" disabled>
+                  <em>{translate('Select a source group')}</em>
+                </MenuItem>
+                {groupsLoading ? (
+                  <MenuItem disabled>
+                    <CircularProgress size={20} sx={{ mr: 1 }} /> {translate('Loading groups...')}
                   </MenuItem>
-                  {sourcesLoading ? (
-                    <MenuItem disabled>
-                      <CircularProgress size={20} sx={{ mr: 1 }} /> {translate('Loading sources...')}
-                    </MenuItem>
-                  ) : vkSources.length === 0 ? (
-                    <MenuItem disabled>
-                      {translate('No VK sources available')}
-                    </MenuItem>
-                  ) : (
-                    vkSources.map((source) => (
-                      <MenuItem key={source._id} value={source._id}>
-                        {source.name}
-                      </MenuItem>
-                    ))
-                  )}
-                </Select>
-              </FormControl>
-            )}
-            
-            {formData.sourceType === 'group' && (
-              <FormControl fullWidth margin="normal" required disabled={isFormDisabled || !isNewMapping}>
-                <InputLabel id="vk-source-group-label">{translate('VK Source Group')}</InputLabel>
-                <Select
-                  labelId="vk-source-group-label"
-                  id="vkSourceGroup"
-                  name="vkSourceGroup"
-                  value={formData.vkSourceGroup}
-                  onChange={handleChange}
-                  label={translate('VK Source Group')}
-                >
-                  <MenuItem value="" disabled>
-                    <em>{translate('Select a VK source group')}</em>
+                ) : sourceGroups.length === 0 ? (
+                  <MenuItem disabled>
+                    {translate('No source groups available')}
                   </MenuItem>
-                  {groupsLoading ? (
-                    <MenuItem disabled>
-                      <CircularProgress size={20} sx={{ mr: 1 }} /> {translate('Loading groups...')}
+                ) : (
+                  sourceGroups.map((group) => (
+                    <MenuItem key={group._id} value={group._id}>
+                      {group.name} ({(group.vkSources?.length || 0) + (group.telegramSources?.length || 0)} {translate('sources')})
                     </MenuItem>
-                  ) : vkSourceGroups.length === 0 ? (
-                    <MenuItem disabled>
-                      {translate('No VK source groups available')}
-                    </MenuItem>
-                  ) : (
-                    vkSourceGroups.map((group) => (
-                      <MenuItem key={group._id} value={group._id}>
-                        {group.name} ({group.sources?.length || 0} {translate('sources')})
-                      </MenuItem>
-                    ))
-                  )}
-                </Select>
-              </FormControl>
-            )}
+                  ))
+                )}
+              </Select>
+            </FormControl>
             
             <FormControl fullWidth margin="normal" required disabled={isFormDisabled || !isNewMapping}>
               <InputLabel id="telegram-channel-label">{translate('Telegram Channel')}</InputLabel>
@@ -403,25 +322,19 @@ const MappingForm = () => {
                 startIcon={loading ? <CircularProgress size={20} /> : <SaveIcon />}
                 disabled={isFormDisabled || 
                           (!isNewMapping && formData.active === undefined) || 
-                          (isNewMapping && (!formData.telegramChannel || 
-                            (formData.sourceType === 'individual' && !formData.vkSource) ||
-                            (formData.sourceType === 'group' && !formData.vkSourceGroup)))}
+                          (isNewMapping && (!formData.sourceGroup || !formData.telegramChannel))}
               >
                 {loading ? translate('Saving...') : translate('Save Mapping')}
               </Button>
             </Box>
             
-            {/* Show appropriate warning messages */}
-            {isNewMapping && (formData.sourceType === 'individual' ? vkSources.length === 0 : vkSourceGroups.length === 0 || telegramChannels.length === 0) && (
+            {/* Show warning message if no source groups or channels available */}
+            {isNewMapping && (sourceGroups.length === 0 || telegramChannels.length === 0) && (
               <Alert severity="info" sx={{ mt: 3 }}>
-                {formData.sourceType === 'individual' && vkSources.length === 0 && telegramChannels.length === 0 ? (
-                  translate('You need to add at least one VK source and one Telegram channel before creating a mapping.')
-                ) : formData.sourceType === 'individual' && vkSources.length === 0 ? (
-                  translate('You need to add at least one VK source before creating a mapping.')
-                ) : formData.sourceType === 'group' && vkSourceGroups.length === 0 && telegramChannels.length === 0 ? (
-                  translate('You need to add at least one VK source group and one Telegram channel before creating a mapping.')
-                ) : formData.sourceType === 'group' && vkSourceGroups.length === 0 ? (
-                  translate('You need to add at least one VK source group before creating a mapping.')
+                {sourceGroups.length === 0 && telegramChannels.length === 0 ? (
+                  translate('You need to add at least one source group and one Telegram channel before creating a mapping.')
+                ) : sourceGroups.length === 0 ? (
+                  translate('You need to add at least one source group before creating a mapping.')
                 ) : (
                   translate('You need to add at least one Telegram channel before creating a mapping.')
                 )}

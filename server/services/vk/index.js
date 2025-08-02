@@ -456,6 +456,7 @@ const processSourcePosts = async (sourceId) => {
       // Create or update post in our database
       const postData = {
         postId: postId,
+        originalPostId: postId,
         text: post.text,
         viewCount,
         likeCount: post.likes?.count || 0,

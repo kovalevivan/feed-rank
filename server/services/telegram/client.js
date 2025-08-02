@@ -324,14 +324,15 @@ const getRecentMessages = async (chatId, limit = 50, offsetId = 0, username = nu
         // For supergroup/channel IDs, convert to proper format
         let entityId;
         if (chatId.startsWith('-100')) {
-          // Remove -100 prefix and convert to BigInt
-          const numericId = chatId.substring(4);
-          entityId = BigInt(numericId);
+          // For supergroups/channels: -1001234567890 -> -1001234567890 (keep as negative number)
+          // The Telegram client expects the full negative ID for channels/supergroups
+          entityId = parseInt(chatId);
         } else if (chatId.startsWith('-')) {
-          // Regular group ID
+          // Regular group ID (negative but not -100 prefix)
           entityId = parseInt(chatId);
         } else {
-          entityId = chatId;
+          // Positive ID (user or other entity)
+          entityId = parseInt(chatId);
         }
         
         console.log(`🔄 Resolving entity by ID: ${entityId} (from ${chatId})`);
@@ -363,15 +364,11 @@ const getRecentMessages = async (chatId, limit = 50, offsetId = 0, username = nu
  */
 const processMessage = async (message, source) => {
   try {
-    // Skip if message already processed
+    // Check if message already processed
     const existingPost = await Post.findOne({
       telegramSource: source._id,
       originalPostId: message.id.toString()
     });
-    
-    if (existingPost) {
-      return null;
-    }
     
     // Extract message data
     const messageData = await extractMessageData(message, source);
@@ -382,8 +379,57 @@ const processMessage = async (message, source) => {
     // Check if message meets viral criteria
     const meetsViralCriteria = checkViralCriteria(messageData, source);
     
-    // Create post in database
+    if (existingPost) {
+      // Update existing post with current metrics
+      const hasMetricsChanged = (
+        existingPost.reactionCount !== (messageData.reactionCount || 0) ||
+        existingPost.commentCount !== (messageData.commentCount || 0) ||
+        existingPost.forwardCount !== (messageData.forwardCount || 0) ||
+        existingPost.viewCount !== (messageData.viewCount || 0)
+      );
+      
+      if (hasMetricsChanged) {
+        // Update metrics
+        existingPost.reactionCount = messageData.reactionCount || 0;
+        existingPost.commentCount = messageData.commentCount || 0;
+        existingPost.forwardCount = messageData.forwardCount || 0;
+        existingPost.viewCount = messageData.viewCount || 0;
+        existingPost.updatedAt = new Date();
+        
+        // Check if post became viral after update
+        const wasViral = existingPost.isViral;
+        existingPost.isViral = meetsViralCriteria;
+        
+        await existingPost.save();
+        
+        // If post became viral and wasn't before, auto-forward it
+        if (!wasViral && meetsViralCriteria) {
+          console.log(`🔥 Post ${existingPost.originalPostId} became viral after update! Reactions: ${existingPost.reactionCount}, Comments: ${existingPost.commentCount}, Forwards: ${existingPost.forwardCount}`);
+          
+          // Update source viral posts count
+          source.viralPosts += 1;
+          await source.save();
+          
+          try {
+            const forwardResult = await autoForwardViralPost(existingPost, source);
+            if (forwardResult.forwarded > 0) {
+              console.log(`🚀 Auto-forwarded newly viral Telegram post ${existingPost.originalPostId} to ${forwardResult.forwarded} channels`);
+            }
+          } catch (error) {
+            console.error(`Error auto-forwarding newly viral Telegram post ${existingPost.originalPostId}:`, error);
+          }
+        }
+        
+        return existingPost;
+      } else {
+        // No metrics changed, skip processing
+        return null;
+      }
+    }
+    
+    // Create new post in database
     const post = new Post({
+      sourceType: 'telegram',
       telegramSource: source._id,
       originalPostId: message.id.toString(),
       text: messageData.text,
@@ -644,13 +690,71 @@ const processMessagesFromSource = async (telegramSource) => {
       }
     }
     
-    // Get recent messages
-    const messages = await getRecentMessages(
-      telegramSource.chatId,
-      50,
-      telegramSource.lastPostId || 0,
-      telegramSource.username
-    );
+    // Get recent messages (including some older ones for re-evaluation)
+    let newMessages = [];
+    let recentMessagesForUpdate = [];
+    
+    try {
+      // Fetch new messages since lastPostId
+      newMessages = await getRecentMessages(
+        telegramSource.chatId,
+        50,
+        telegramSource.lastPostId || 0,
+        telegramSource.username
+      );
+      
+      // Update access status to active if successful
+      if (telegramSource.accessStatus !== 'active') {
+        await TelegramSource.findByIdAndUpdate(telegramSource._id, {
+          accessStatus: 'active',
+          lastAccessError: null,
+          lastAccessAttempt: new Date()
+        });
+      }
+    } catch (error) {
+      console.warn(`⚠️ Could not fetch new messages from ${telegramSource.name}: ${error.message}`);
+      
+      // Update access status based on error type
+      let accessStatus = 'error';
+      if (error.message.includes('Cannot resolve chat entity')) {
+        accessStatus = 'access_denied';
+      } else if (error.message.includes('not found')) {
+        accessStatus = 'not_found';
+      }
+      
+      await TelegramSource.findByIdAndUpdate(telegramSource._id, {
+        accessStatus,
+        lastAccessError: error.message,
+        lastAccessAttempt: new Date()
+      });
+      
+      // Continue with empty array - don't fail the entire process
+    }
+    
+    try {
+      // Also fetch some recent messages for re-evaluation (last 20 messages regardless of lastPostId)
+      recentMessagesForUpdate = await getRecentMessages(
+        telegramSource.chatId,
+        20,
+        0, // Get recent messages regardless of lastPostId
+        telegramSource.username
+      );
+    } catch (error) {
+      console.warn(`⚠️ Could not fetch recent messages for re-evaluation from ${telegramSource.name}: ${error.message}`);
+      // Continue with empty array - don't fail the entire process
+    }
+    
+    // Combine and deduplicate messages
+    const allMessagesMap = new Map();
+    
+    // Add new messages
+    newMessages.forEach(msg => allMessagesMap.set(msg.id, msg));
+    
+    // Add recent messages for re-evaluation
+    recentMessagesForUpdate.forEach(msg => allMessagesMap.set(msg.id, msg));
+    
+    // Convert back to array and sort by ID
+    const messages = Array.from(allMessagesMap.values()).sort((a, b) => a.id - b.id);
     
     if (messages.length === 0) {
       console.log(`No new messages found for ${telegramSource.name}`);
@@ -659,19 +763,27 @@ const processMessagesFromSource = async (telegramSource) => {
     
     let processedCount = 0;
     let createdCount = 0;
+    let updatedCount = 0;
     let latestMessageId = telegramSource.lastPostId || 0;
     
     // Process messages in reverse order (oldest first)
     for (const message of messages.reverse()) {
-      const post = await processMessage(message, telegramSource);
+      const result = await processMessage(message, telegramSource);
       
-      if (post) {
-        createdCount++;
+      if (result) {
+        // Check if this was a new post or an updated existing post
+        if (result.createdAt && new Date() - new Date(result.createdAt) < 1000) {
+          // Recently created (within 1 second) = new post
+          createdCount++;
+        } else {
+          // Older post = updated post
+          updatedCount++;
+        }
       }
       
       processedCount++;
       
-      // Update latest message ID
+      // Update latest message ID only for truly new messages
       if (message.id > latestMessageId) {
         latestMessageId = message.id;
       }
@@ -682,9 +794,9 @@ const processMessagesFromSource = async (telegramSource) => {
     telegramSource.lastPostId = latestMessageId;
     await telegramSource.save();
     
-    console.log(`✅ Processed ${processedCount} messages, created ${createdCount} posts for ${telegramSource.name}`);
+    console.log(`✅ Processed ${processedCount} messages, created ${createdCount} posts, updated ${updatedCount} posts for ${telegramSource.name}`);
     
-    return { processed: processedCount, created: createdCount };
+    return { processed: processedCount, created: createdCount, updated: updatedCount };
     
   } catch (error) {
     console.error(`Error processing messages from ${telegramSource.name}:`, error);
@@ -734,6 +846,68 @@ const isClientConnected = () => {
 /**
  * Get the client instance
  */
+/**
+ * Get recent messages directly from Telegram for threshold calculation (for new channels)
+ * @param {string} chatId - Telegram chatId string (e.g., "-1001234567890")
+ * @param {string} username - Telegram username (e.g., "@channelname")
+ * @param {number} limit - Maximum number of messages to fetch (default: 100)
+ * @returns {Promise<Array>} - Array of message data with engagement metrics
+ */
+const getMessagesForThresholdCalculation = async (chatId, username = null, limit = 100) => {
+  try {
+    console.log(`📊 Fetching ${limit} messages directly from Telegram for threshold calculation: ${chatId}`);
+    
+    // Fetch messages directly from Telegram
+    const messages = await getRecentMessages(chatId, limit, 0, username);
+    
+    if (!messages || messages.length === 0) {
+      console.log(`📊 No messages found in channel ${chatId}`);
+      return [];
+    }
+    
+    // Extract engagement data from each message
+    const messagesWithEngagement = [];
+    
+    for (const message of messages) {
+      try {
+        // Skip deleted messages or messages without content
+        if (!message || message.deleted || (!message.message && !message.media)) {
+          continue;
+        }
+        
+        // Extract engagement metrics
+        const reactionCount = message.reactions?.results?.reduce((sum, reaction) => sum + reaction.count, 0) || 0;
+        const commentCount = message.replies?.replies || 0;
+        const forwardCount = message.forwards || 0;
+        const viewCount = message.views || 0;
+        
+        // Only include messages with some engagement
+        if (reactionCount > 0 || commentCount > 0 || forwardCount > 0) {
+          messagesWithEngagement.push({
+            originalPostId: message.id.toString(),
+            text: message.message || '[Media]',
+            reactionCount,
+            commentCount,
+            forwardCount,
+            viewCount,
+            publishedAt: message.date ? new Date(message.date * 1000) : new Date()
+          });
+        }
+      } catch (messageError) {
+        console.warn(`⚠️ Error processing message ${message.id}:`, messageError.message);
+        continue;
+      }
+    }
+    
+    console.log(`📊 Found ${messagesWithEngagement.length} messages with engagement data out of ${messages.length} total messages`);
+    
+    return messagesWithEngagement;
+  } catch (error) {
+    console.error(`Error fetching messages for threshold calculation from ${chatId}:`, error);
+    throw error;
+  }
+};
+
 const getClient = () => {
   return client;
 };
@@ -745,6 +919,7 @@ module.exports = {
   getClient,
   getChatInfo,
   getRecentMessages,
+  getMessagesForThresholdCalculation,
   processMessagesFromSource,
   autoForwardViralPost,
   testConnection,

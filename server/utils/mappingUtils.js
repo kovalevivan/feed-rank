@@ -7,12 +7,41 @@ const Mapping = require('../models/Mapping');
  */
 const getAllMappingsForTelegramSource = async (sourceId) => {
   try {
-    const mappings = await Mapping.find({
+    // Get individual mappings for this source
+    const individualMappings = await Mapping.find({
       telegramSource: sourceId,
       active: true
     }).populate('telegramSource').populate('telegramChannel');
 
-    return mappings.filter(mapping => mapping.telegramChannel);
+    // Get group mappings - find all groups that contain this source
+    const SourceGroup = require('../models/SourceGroup');
+    const groupsContainingSource = await SourceGroup.find({
+      telegramSources: sourceId
+    });
+
+    // Get mappings for all groups that contain this source
+    let groupMappings = [];
+    if (groupsContainingSource.length > 0) {
+      const groupIds = groupsContainingSource.map(group => group._id);
+      groupMappings = await Mapping.find({
+        sourceGroup: { $in: groupIds },
+        active: true
+      }).populate('sourceGroup').populate('telegramChannel');
+    }
+
+    // Combine and deduplicate by telegram channel ID
+    const allMappings = [...individualMappings, ...groupMappings];
+    const uniqueMappings = [];
+    const seenChannelIds = new Set();
+
+    for (const mapping of allMappings) {
+      if (mapping.telegramChannel && !seenChannelIds.has(mapping.telegramChannel._id.toString())) {
+        seenChannelIds.add(mapping.telegramChannel._id.toString());
+        uniqueMappings.push(mapping);
+      }
+    }
+
+    return uniqueMappings;
   } catch (error) {
     console.error(`Error getting mappings for Telegram source ${sourceId}:`, error);
     return [];
@@ -37,10 +66,9 @@ const getAllMappingsForSource = async (sourceId, sourceType = 'vk') => {
     }).populate('vkSource').populate('telegramChannel');
 
     // Get group mappings - find all groups that contain this source
-    const VkSourceGroup = require('../models/VkSourceGroup');
-    const groupsContainingSource = await VkSourceGroup.find({
-      sources: sourceId,
-      active: true
+    const SourceGroup = require('../models/SourceGroup');
+    const groupsContainingSource = await SourceGroup.find({
+      vkSources: sourceId
     });
 
     // Get mappings for all groups that contain this source
@@ -48,9 +76,9 @@ const getAllMappingsForSource = async (sourceId, sourceType = 'vk') => {
     if (groupsContainingSource.length > 0) {
       const groupIds = groupsContainingSource.map(group => group._id);
       groupMappings = await Mapping.find({
-        vkSourceGroup: { $in: groupIds },
+        sourceGroup: { $in: groupIds },
         active: true
-      }).populate('vkSourceGroup').populate('telegramChannel');
+      }).populate('sourceGroup').populate('telegramChannel');
     }
 
     // Combine and deduplicate by telegram channel ID

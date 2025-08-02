@@ -18,6 +18,8 @@ import Login from './components/auth/Login';
 import Register from './components/auth/Register';
 import SourcesList from './components/sources/SourcesList';
 import SourceForm from './components/sources/SourceForm';
+import UnifiedSourcesList from './components/sources/UnifiedSourcesList';
+import UnifiedSourceForm from './components/sources/UnifiedSourceForm';
 import ChannelsList from './components/destinations/ChannelsList';
 import ChannelForm from './components/destinations/ChannelForm';
 import MappingsList from './components/mappings/MappingsList';
@@ -26,6 +28,7 @@ import Settings from './components/settings/Settings';
 import SourceGroupsList from './components/sources/SourceGroupsList';
 import SourceGroupForm from './components/sources/SourceGroupForm';
 import Analytics from './components/analytics/Analytics';
+import { TelegramSourcesList, TelegramSourceForm } from './components/telegramSources';
 
 // Create a Material UI theme
 const theme = createTheme({
@@ -80,10 +83,14 @@ function App() {
               <Route path="/" element={<Layout />}>
                 <Route index element={<PrivateRoute><Dashboard /></PrivateRoute>} />
                 
-                {/* Sources Routes */}
-                <Route path="sources" element={<PrivateRoute><SourcesList /></PrivateRoute>} />
-                <Route path="sources/new" element={<PrivateRoute><SourceForm /></PrivateRoute>} />
-                <Route path="sources/:id" element={<PrivateRoute><SourceForm /></PrivateRoute>} />
+                {/* Unified Sources Routes */}
+                <Route path="sources" element={<PrivateRoute><UnifiedSourcesList /></PrivateRoute>} />
+                <Route path="sources/new" element={<PrivateRoute><UnifiedSourceForm /></PrivateRoute>} />
+                <Route path="sources/:id" element={<PrivateRoute><UnifiedSourceForm /></PrivateRoute>} />
+                
+                {/* VK Sources Routes (internal use only - no separate pages) */}
+                <Route path="vk-sources/new" element={<PrivateRoute><SourceForm /></PrivateRoute>} />
+                <Route path="vk-sources/:id" element={<PrivateRoute><SourceForm /></PrivateRoute>} />
                 
                 {/* Source Groups Routes */}
                 <Route path="source-groups" element={<PrivateRoute><SourceGroupsList /></PrivateRoute>} />
@@ -94,6 +101,11 @@ function App() {
                 <Route path="channels" element={<PrivateRoute><ChannelsList /></PrivateRoute>} />
                 <Route path="channels/new" element={<PrivateRoute><ChannelForm /></PrivateRoute>} />
                 <Route path="channels/:id" element={<PrivateRoute><ChannelForm /></PrivateRoute>} />
+                
+                {/* Telegram Sources Routes */}
+                <Route path="telegram-sources" element={<PrivateRoute><TelegramSourcesList /></PrivateRoute>} />
+                <Route path="telegram-sources/new" element={<PrivateRoute><TelegramSourceForm /></PrivateRoute>} />
+                <Route path="telegram-sources/:id" element={<PrivateRoute><TelegramSourceForm /></PrivateRoute>} />
                 
                 {/* Mappings Routes */}
                 <Route path="mappings" element={<PrivateRoute><MappingsList /></PrivateRoute>} />

@@ -3,7 +3,7 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const TelegramSource = require('../models/TelegramSource');
 const telegramSourcesService = require('../services/telegram/sources');
-const { updateSourceThreshold, getRecentPostsForAnalysis } = require('../services/telegram/analytics');
+const { updateSourceThreshold, getRecentPostsForAnalysis, calculateStatisticalThreshold, calculatePercentileThreshold } = require('../services/telegram/analytics');
 const mongoose = require('mongoose');
 
 // Get all Telegram sources
@@ -421,6 +421,106 @@ router.get('/subscriptions/list', async (req, res) => {
       message: 'Failed to get subscriptions', 
       error: error.message,
       help: 'Make sure Telegram Client API is properly configured. Run: node scripts/setup-telegram-client.js'
+    });
+  }
+});
+
+// Calculate threshold for a source (new or existing)
+router.post('/calculate-threshold', async (req, res) => {
+  try {
+    const { chatId, username, thresholdMethod = 'statistical', statisticalMultiplier = 1.5, postsCount = 100, saveToSource = false } = req.body;
+    
+    if (!chatId) {
+      return res.status(400).json({ message: 'Chat ID is required' });
+    }
+    
+    // Validate method
+    if (!['statistical', 'percentile'].includes(thresholdMethod)) {
+      return res.status(400).json({ 
+        message: 'Invalid threshold method. Must be "statistical" or "percentile"' 
+      });
+    }
+    
+    // Validate multiplier
+    if (typeof statisticalMultiplier !== 'number' || statisticalMultiplier < 0.1 || statisticalMultiplier > 5) {
+      return res.status(400).json({ 
+        message: 'Invalid multiplier. Must be between 0.1 and 5.0' 
+      });
+    }
+    
+    console.log(`📊 Calculating threshold for chatId: ${chatId}${username ? ` (username: ${username})` : ''}`);
+    
+    // Get recent posts for analysis (now fetches directly from Telegram for new channels)
+    const recentPosts = await getRecentPostsForAnalysis(chatId, postsCount);
+    
+    if (recentPosts.length === 0) {
+      return res.status(400).json({ 
+        message: 'No posts found for analysis. Make sure the channel has recent posts and is accessible.' 
+      });
+    }
+    
+    // Calculate threshold based on method
+    let threshold;
+    if (thresholdMethod === 'statistical') {
+      threshold = calculateStatisticalThreshold(recentPosts, statisticalMultiplier);
+    } else if (thresholdMethod === 'percentile') {
+      // Use statisticalMultiplier as percentile value (e.g., 1.5 = 85th percentile, 2.0 = 90th percentile)
+      // Convert multiplier to percentile: 1.0 = 80%, 1.5 = 85%, 2.0 = 90%, 2.5 = 95%, 3.0 = 97%
+      const percentile = Math.min(97, Math.max(80, 75 + (statisticalMultiplier * 10)));
+      threshold = calculatePercentileThreshold(recentPosts, percentile);
+    } else {
+      throw new Error(`Unknown threshold method: ${thresholdMethod}`);
+    }
+    
+    // If saveToSource is true, try to find and update existing source
+    if (saveToSource) {
+      try {
+        const existingSource = await TelegramSource.findOne({ chatId });
+        if (existingSource) {
+          console.log(`💾 Saving calculated threshold (${threshold}) to existing source: ${existingSource.name}`);
+          
+          // Update the source with calculated threshold and related data
+          existingSource.calculatedThreshold = threshold;
+          existingSource.thresholdMethod = thresholdMethod;
+          existingSource.statisticalMultiplier = statisticalMultiplier;
+          existingSource.lastPostsData = {
+            postsAnalyzed: recentPosts.length,
+            lastAnalysisDate: new Date(),
+            thresholdMethod: thresholdMethod,
+            multiplierUsed: thresholdMethod === 'statistical' ? statisticalMultiplier : null
+          };
+          
+          await existingSource.save();
+          console.log(`✅ Successfully updated threshold for source: ${existingSource.name}`);
+        }
+      } catch (saveError) {
+        console.warn(`⚠️ Could not save threshold to existing source: ${saveError.message}`);
+        // Continue with response even if save fails
+      }
+    }
+    
+    const responseData = {
+      threshold,
+      postsAnalyzed: recentPosts.length,
+      method: thresholdMethod,
+      multiplier: statisticalMultiplier,
+      message: `Threshold calculated based on ${recentPosts.length} recent posts`
+    };
+    
+    // Add percentile info for percentile method
+    if (thresholdMethod === 'percentile') {
+      const percentile = Math.min(97, Math.max(80, 75 + (statisticalMultiplier * 10)));
+      responseData.percentile = percentile;
+      responseData.message = `Threshold calculated using ${percentile}th percentile of ${recentPosts.length} recent posts`;
+    }
+    
+    res.json(responseData);
+    
+  } catch (error) {
+    console.error('Error calculating threshold:', error);
+    res.status(500).json({ 
+      message: 'Failed to calculate threshold', 
+      error: error.message 
     });
   }
 });

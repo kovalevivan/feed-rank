@@ -61,12 +61,12 @@ const MappingsList = () => {
         
         // Filter out any mappings with missing sources/groups and channels
         const validMappings = response.data.filter(
-          mapping => (mapping.vkSource || mapping.vkSourceGroup) && mapping.telegramChannel
+          mapping => (mapping.sourceGroup || mapping.vkSource || mapping.vkSourceGroup || mapping.telegramSource) && mapping.telegramChannel
         );
         
         // If there are invalid mappings, clean them up on the server (don't wait)
         const invalidMappings = response.data.filter(
-          mapping => (!mapping.vkSource && !mapping.vkSourceGroup) || !mapping.telegramChannel
+          mapping => (!mapping.sourceGroup && !mapping.vkSource && !mapping.vkSourceGroup && !mapping.telegramSource) || !mapping.telegramChannel
         );
         
         if (invalidMappings.length > 0) {
@@ -100,8 +100,10 @@ const MappingsList = () => {
     
     const lowercaseSearch = searchTerm.toLowerCase();
     const filtered = mappings.filter(mapping => 
+      (mapping.sourceGroup?.name?.toLowerCase().includes(lowercaseSearch)) ||
       (mapping.vkSource?.name?.toLowerCase().includes(lowercaseSearch)) ||
       (mapping.vkSourceGroup?.name?.toLowerCase().includes(lowercaseSearch)) ||
+      (mapping.telegramSource?.name?.toLowerCase().includes(lowercaseSearch)) ||
       (mapping.telegramChannel?.name?.toLowerCase().includes(lowercaseSearch))
     );
     
@@ -194,22 +196,47 @@ const MappingsList = () => {
     }
   };
   
-  // Helper to get source name for display
-  const getSourceDisplayInfo = (mapping) => {
-    if (mapping.vkSource) {
+  // Helper to get source group display info
+  const getSourceGroupDisplayInfo = (mapping) => {
+    if (mapping.sourceGroup) {
+      const vkCount = mapping.sourceGroup.vkSources?.length || 0;
+      const telegramCount = mapping.sourceGroup.telegramSources?.length || 0;
+      const totalCount = vkCount + telegramCount;
+      
       return {
-        name: mapping.vkSource.name,
-        id: mapping.vkSource._id,
-        type: 'individual',
-        icon: <SourceIcon fontSize="small" sx={{ mr: 1, color: 'primary.main' }} />
+        name: mapping.sourceGroup.name,
+        id: mapping.sourceGroup._id,
+        type: 'sourceGroup',
+        vkCount,
+        telegramCount,
+        totalCount,
+        icon: <FolderIcon fontSize="small" sx={{ mr: 1, color: 'success.main' }} />
       };
     } else if (mapping.vkSourceGroup) {
+      // Legacy VK source group
       return {
         name: mapping.vkSourceGroup.name,
         id: mapping.vkSourceGroup._id,
-        type: 'group',
+        type: 'legacyVkGroup',
         sourcesCount: mapping.vkSourceGroup.sources?.length || 0,
-        icon: <FolderIcon fontSize="small" sx={{ mr: 1, color: 'success.main' }} />
+        icon: <FolderIcon fontSize="small" sx={{ mr: 1, color: 'warning.main' }} />
+      };
+    } else if (mapping.vkSource) {
+      // Legacy individual VK source
+      return {
+        name: mapping.vkSource.name,
+        id: mapping.vkSource._id,
+        type: 'legacyVkSource',
+        icon: <SourceIcon fontSize="small" sx={{ mr: 1, color: 'warning.main' }} />
+      };
+    } else if (mapping.telegramSource) {
+      // Legacy individual Telegram source
+      return {
+        name: mapping.telegramSource.name,
+        id: mapping.telegramSource._id,
+        type: 'legacyTelegramSource',
+        username: mapping.telegramSource.username,
+        icon: <SourceIcon fontSize="small" sx={{ mr: 1, color: 'warning.main' }} />
       };
     } else {
       return {
@@ -255,36 +282,36 @@ const MappingsList = () => {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>{translate('VK Source')}</TableCell>
-                <TableCell>{translate('Type')}</TableCell>
+                <TableCell>{translate('Source Group')}</TableCell>
+                <TableCell>{translate('Sources')}</TableCell>
                 <TableCell>{translate('Telegram Channel')}</TableCell>
-                <TableCell>{translate('Status')}</TableCell>
                 <TableCell align="right">{translate('Actions')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={5} align="center">
+                  <TableCell colSpan={4} align="center">
                     <CircularProgress size={24} sx={{ my: 2 }} />
                   </TableCell>
                 </TableRow>
               ) : filteredMappings.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} align="center">
+                  <TableCell colSpan={4} align="center">
                     <Typography variant="body1">
                       {mappings.length === 0
-                        ? translate("No mappings configured yet. Create a mapping to connect VK sources to Telegram channels.")
+                        ? translate("No mappings configured yet. Create a mapping to connect source groups to Telegram channels.")
                         : translate("No mappings match your search.")}
                     </Typography>
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredMappings.map(mapping => {
-                  const sourceInfo = getSourceDisplayInfo(mapping);
+                  const sourceInfo = getSourceGroupDisplayInfo(mapping);
                   
                   return (
                     <TableRow key={mapping._id}>
+                      {/* Source Group Column */}
                       <TableCell>
                         <Tooltip title={sourceInfo.id ? `ID: ${sourceInfo.id}` : translate('Source not found')}>
                           <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -292,26 +319,69 @@ const MappingsList = () => {
                             <Typography variant="body2">
                               {sourceInfo.name}
                             </Typography>
+                            {sourceInfo.type.startsWith('legacy') && (
+                              <Chip 
+                                label={translate('Legacy')} 
+                                size="small" 
+                                color="warning" 
+                                variant="outlined" 
+                                sx={{ ml: 1 }} 
+                              />
+                            )}
                           </Box>
                         </Tooltip>
                       </TableCell>
+                      
+                      {/* Sources Column */}
                       <TableCell>
-                        {sourceInfo.type === 'individual' ? (
+                        {sourceInfo.type === 'sourceGroup' ? (
+                          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                            {sourceInfo.vkCount > 0 && (
+                              <Chip 
+                                label={`VK: ${sourceInfo.vkCount}`} 
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                              />
+                            )}
+                            {sourceInfo.telegramCount > 0 && (
+                              <Chip 
+                                label={`Telegram: ${sourceInfo.telegramCount}`} 
+                                size="small"
+                                color="secondary"
+                                variant="outlined"
+                              />
+                            )}
+                            {sourceInfo.totalCount === 0 && (
+                              <Chip 
+                                label={translate('No sources')} 
+                                size="small"
+                                color="default"
+                                variant="outlined"
+                              />
+                            )}
+                          </Box>
+                        ) : sourceInfo.type === 'legacyVkGroup' ? (
                           <Chip 
-                            label={translate('Individual')} 
+                            label={`VK: ${sourceInfo.sourcesCount}`} 
                             size="small"
-                            color="primary"
+                            color="warning"
                             variant="outlined"
                           />
-                        ) : sourceInfo.type === 'group' ? (
-                          <Tooltip title={`${sourceInfo.sourcesCount} ${translate('sources')}`}>
-                            <Chip 
-                              label={translate('Group')} 
-                              size="small"
-                              color="success"
-                              variant="outlined"
-                            />
-                          </Tooltip>
+                        ) : sourceInfo.type === 'legacyVkSource' ? (
+                          <Chip 
+                            label={translate('VK Individual')} 
+                            size="small"
+                            color="warning"
+                            variant="outlined"
+                          />
+                        ) : sourceInfo.type === 'legacyTelegramSource' ? (
+                          <Chip 
+                            label={translate('Telegram Individual')} 
+                            size="small"
+                            color="warning"
+                            variant="outlined"
+                          />
                         ) : (
                           <Chip 
                             label={translate('Unknown')} 
@@ -321,6 +391,8 @@ const MappingsList = () => {
                           />
                         )}
                       </TableCell>
+                      
+                      {/* Telegram Channel Column */}
                       <TableCell>
                         {mapping.telegramChannel ? (
                           <Tooltip title={`ID: ${mapping.telegramChannel._id}`}>
@@ -335,16 +407,8 @@ const MappingsList = () => {
                           </Box>
                         )}
                       </TableCell>
-                      <TableCell>
-                        <Tooltip title={mapping.active ? translate("Active - posts will be forwarded") : translate("Inactive - posts will not be forwarded")}>
-                          <Switch
-                            checked={mapping.active}
-                            onChange={() => handleToggleActive(mapping)}
-                            color="primary"
-                            size="small"
-                          />
-                        </Tooltip>
-                      </TableCell>
+                      
+                      {/* Actions Column */}
                       <TableCell align="right">
                         <Tooltip title={translate("Delete Mapping")}>
                           <IconButton 

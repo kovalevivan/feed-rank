@@ -160,22 +160,20 @@ const ChannelsList = () => {
               <TableRow>
                 <TableCell>{translate('Channel Name')}</TableCell>
                 <TableCell>{translate('Channel ID')}</TableCell>
-                <TableCell>{translate('Username')}</TableCell>
                 <TableCell>{translate('Posts Received')}</TableCell>
-                <TableCell>{translate('Status')}</TableCell>
                 <TableCell align="right">{translate('Actions')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} align="center">
+                  <TableCell colSpan={4} align="center">
                     <CircularProgress size={24} sx={{ my: 2 }} />
                   </TableCell>
                 </TableRow>
               ) : filteredChannels.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} align="center">
+                  <TableCell colSpan={4} align="center">
                     <Typography variant="body1">
                       {telegramChannels.length === 0 
                         ? translate("No Telegram channels configured yet. Add your first channel to get started.")
@@ -188,15 +186,7 @@ const ChannelsList = () => {
                   <TableRow key={channel._id}>
                     <TableCell>{channel.name}</TableCell>
                     <TableCell>{channel.chatId}</TableCell>
-                    <TableCell>{channel.username || '-'}</TableCell>
                     <TableCell>{channel.postsForwarded}</TableCell>
-                    <TableCell>
-                      <Chip 
-                        color={channel.active ? "success" : "default"}
-                        label={channel.active ? translate("Active") : translate("Inactive")}
-                        size="small"
-                      />
-                    </TableCell>
                     <TableCell align="right">
                       <Tooltip title={translate('Send test message')}>
                         <IconButton 
