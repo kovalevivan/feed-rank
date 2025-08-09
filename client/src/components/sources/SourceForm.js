@@ -46,6 +46,7 @@ import {
   createVkSource,
   updateVkSource,
   clearVkSourcesError,
+    clearVkSourceSuccess,
   clearCurrentVkSource,
   calculateThresholdAdvanced,
   getThresholdStats
@@ -448,6 +449,9 @@ const SourceForm = () => {
   
   // Load source data if editing
   useEffect(() => {
+    // Ensure stale success state from previous operations does not cause redirect
+    dispatch(clearVkSourceSuccess());
+
     if (id && id !== 'new') {
       dispatch(fetchVkSourceById(id));
       
@@ -461,6 +465,7 @@ const SourceForm = () => {
     return () => {
       dispatch(clearCurrentVkSource());
       dispatch(clearVkSourcesError());
+      dispatch(clearVkSourceSuccess());
     };
   }, [id, dispatch]);
   

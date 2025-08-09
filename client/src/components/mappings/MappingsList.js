@@ -219,7 +219,7 @@ const MappingsList = () => {
         id: mapping.vkSourceGroup._id,
         type: 'legacyVkGroup',
         sourcesCount: mapping.vkSourceGroup.sources?.length || 0,
-        icon: <FolderIcon fontSize="small" sx={{ mr: 1, color: 'warning.main' }} />
+        icon: <FolderIcon fontSize="small" sx={{ mr: 1, color: 'success.main' }} />
       };
     } else if (mapping.vkSource) {
       // Legacy individual VK source
@@ -319,15 +319,7 @@ const MappingsList = () => {
                             <Typography variant="body2">
                               {sourceInfo.name}
                             </Typography>
-                            {sourceInfo.type.startsWith('legacy') && (
-                              <Chip 
-                                label={translate('Legacy')} 
-                                size="small" 
-                                color="warning" 
-                                variant="outlined" 
-                                sx={{ ml: 1 }} 
-                              />
-                            )}
+                            {/* No legacy label shown */}
                           </Box>
                         </Tooltip>
                       </TableCell>
@@ -365,7 +357,7 @@ const MappingsList = () => {
                           <Chip 
                             label={`VK: ${sourceInfo.sourcesCount}`} 
                             size="small"
-                            color="warning"
+                            color="primary"
                             variant="outlined"
                           />
                         ) : sourceInfo.type === 'legacyVkSource' ? (
