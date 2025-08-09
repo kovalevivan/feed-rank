@@ -230,6 +230,8 @@ const getUserSubscriptions = async () => {
     // Get all dialogs (chats, channels, groups)
     const dialogs = await client.getDialogs({
       limit: 100,
+      // Don't use archived dialogs
+      archived: false
     });
     
     const subscriptions = [];
@@ -243,11 +245,23 @@ const getUserSubscriptions = async () => {
         const isGroup = entity.megagroup === true || entity.className === 'Chat';
         
         if (isChannel || isGroup) {
+          let extractedUsername = entity.username || (entity.usernames && entity.usernames.length > 0 ? entity.usernames[0].username : null);
+          
+          // For channels without username, try to get full entity info (entities from getDialogs() might be minimal)
+          if (!extractedUsername && isChannel) {
+            try {
+              const fullEntity = await client.getEntity(entity.id);
+              extractedUsername = fullEntity.username || (fullEntity.usernames && fullEntity.usernames.length > 0 ? fullEntity.usernames[0].username : null);
+            } catch (fetchError) {
+              // Silently continue if we can't fetch full entity
+            }
+          }
+          
           subscriptions.push({
             id: entity.id.toString(),
             chatId: entity.id < 0 ? entity.id.toString() : `-100${entity.id}`,
             title: entity.title,
-            username: entity.username ? `@${entity.username}` : null,
+            username: extractedUsername,
             type: isChannel ? 'channel' : (isGroup ? 'supergroup' : 'group'),
             participantsCount: entity.participantsCount || 0,
             description: entity.about || '',
@@ -258,6 +272,27 @@ const getUserSubscriptions = async () => {
     }
     
     console.log(`✅ Found ${subscriptions.length} subscribed channels/groups`);
+    
+    // Enhance subscriptions with usernames from our database (for channels we've already processed)
+    try {
+      const TelegramSource = require('../../models/TelegramSource');
+      const dbSources = await TelegramSource.find({}, 'chatId username').lean();
+      
+      let enhancedCount = 0;
+      for (const subscription of subscriptions) {
+        if (!subscription.username) {
+          const dbSource = dbSources.find(source => source.chatId === subscription.chatId);
+          if (dbSource && dbSource.username) {
+            // Add @ prefix if not already present
+            subscription.username = dbSource.username.startsWith('@') ? dbSource.username : `@${dbSource.username}`;
+            enhancedCount++;
+          }
+        }
+      }
+    } catch (dbError) {
+      console.warn('Could not enhance subscriptions with database usernames:', dbError.message);
+    }
+    
     return subscriptions;
     
   } catch (error) {
@@ -281,7 +316,7 @@ const getChatInfo = async (identifier) => {
       id: entity.id.toString(),
       chatId: entity.id < 0 ? entity.id.toString() : `-100${entity.id}`,
       title: entity.title,
-      username: entity.username ? `@${entity.username}` : null,
+      username: entity.username || (entity.usernames && entity.usernames.length > 0 ? entity.usernames[0].username : null),
       type: entity.broadcast ? 'channel' : (entity.megagroup ? 'supergroup' : 'group'),
       participantsCount: entity.participantsCount || 0,
       description: entity.about || '',
@@ -681,7 +716,7 @@ const processMessagesFromSource = async (telegramSource) => {
         await updateSourceThreshold(
           telegramSource._id.toString(), 
           telegramSource.thresholdMethod || 'statistical',
-          telegramSource.statisticalMultiplier || 1.5
+          telegramSource.statisticalMultiplier || 0.5
         );
         // Reload the source to get updated threshold
         telegramSource = await TelegramSource.findById(telegramSource._id);

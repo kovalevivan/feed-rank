@@ -42,7 +42,7 @@ const TelegramSourceForm = () => {
     manualThreshold: 50,
     calculatedThreshold: null,
     thresholdMethod: 'statistical',
-    statisticalMultiplier: 1.5,
+    statisticalMultiplier: 0.5,
     viralDetectionMetric: 'reactions',
     active: true,
     reactionWeight: 1,
@@ -226,7 +226,7 @@ const TelegramSourceForm = () => {
         ...formData,
         // Ensure numeric fields are properly converted
         manualThreshold: parseInt(formData.manualThreshold) || 50,
-        statisticalMultiplier: parseFloat(formData.statisticalMultiplier.toString().replace(',', '.')) || 1.5,
+        statisticalMultiplier: parseFloat(formData.statisticalMultiplier.toString().replace(',', '.')) || 0.5,
         reactionWeight: parseFloat(formData.reactionWeight.toString().replace(',', '.')) || 1,
         commentWeight: parseFloat(formData.commentWeight.toString().replace(',', '.')) || 2,
         forwardWeight: parseFloat(formData.forwardWeight.toString().replace(',', '.')) || 3,

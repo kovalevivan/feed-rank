@@ -22,10 +22,10 @@ const calculateAverageEngagement = (posts) => {
 /**
  * Calculate statistical threshold using standard deviation
  * @param {Array} posts - Array of post objects
- * @param {Number} multiplier - Multiplier for statistical threshold (default: 1.5)
+ * @param {Number} multiplier - Multiplier for statistical threshold (default: 1.0)
  * @returns {Number} - Statistical threshold
  */
-const calculateStatisticalThreshold = (posts, multiplier = 1.5, viralDetectionMetric = 'reactions') => {
+const calculateStatisticalThreshold = (posts, multiplier = 1.0, viralDetectionMetric = 'reactions') => {
   if (posts.length === 0) return 0;
   
   // Calculate metric values based on the viral detection metric
@@ -142,10 +142,10 @@ const calculateDetailedStats = (posts) => {
  * Updates the calculated threshold for a Telegram source
  * @param {string} sourceId - Telegram source ID in our database
  * @param {string} thresholdMethod - Method to use for threshold calculation ('average' or 'statistical')
- * @param {number} multiplier - Multiplier for statistical threshold (default: 1.5)
+ * @param {number} multiplier - Multiplier for statistical threshold (default: 1.0)
  * @returns {Promise<Object>} - Updated Telegram source
  */
-const updateSourceThreshold = async (sourceId, thresholdMethod = 'statistical', multiplier = 1.5) => {
+const updateSourceThreshold = async (sourceId, thresholdMethod = 'statistical', multiplier = 1.0) => {
   try {
     const source = await TelegramSource.findById(sourceId);
     if (!source) throw new Error(`Telegram source with ID ${sourceId} not found`);
@@ -165,7 +165,7 @@ const updateSourceThreshold = async (sourceId, thresholdMethod = 'statistical', 
     let detailedStats = calculateDetailedStats(recentPosts);
     
     // Always update the statisticalMultiplier
-    const usedMultiplier = multiplier || source.statisticalMultiplier || 1.5;
+    const usedMultiplier = multiplier || source.statisticalMultiplier || 1.0;
     source.statisticalMultiplier = usedMultiplier;
     
     if (thresholdMethod === 'statistical') {

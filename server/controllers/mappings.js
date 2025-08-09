@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const Mapping = require('../models/Mapping');
+const VkSourceGroup = require('../models/VkSourceGroup');
 const VkSource = require('../models/VkSource');
 const TelegramChannel = require('../models/TelegramChannel');
 const mongoose = require('mongoose');
@@ -115,7 +116,7 @@ router.get('/:id', async (req, res) => {
 router.post(
   '/',
   [
-    body('sourceGroup').notEmpty().isMongoId().withMessage('Valid source group ID is required'),
+    body('sourceGroup').notEmpty().isMongoId().withMessage('Valid group ID is required'),
     body('telegramChannel').notEmpty().isMongoId().withMessage('Valid Telegram channel ID is required'),
     body('active').optional().isBoolean().withMessage('Active must be boolean')
   ],
@@ -140,39 +141,59 @@ router.post(
         return res.status(404).json({ message: 'Telegram channel not found' });
       }
       
-      // Verify source group exists
+      // Verify source group exists (new unified or legacy VK group)
       const SourceGroup = require('../models/SourceGroup');
-      const group = await SourceGroup.findById(sourceGroup);
-      if (!group) {
-        return res.status(404).json({ message: 'Source group not found' });
+      const unifiedGroup = await SourceGroup.findById(sourceGroup);
+
+      if (unifiedGroup) {
+        // Check if mapping already exists for this unified group and channel
+        const existingMapping = await Mapping.findOne({
+          sourceGroup,
+          telegramChannel
+        });
+        if (existingMapping) {
+          return res.status(400).json({ message: 'This mapping already exists' });
+        }
+
+        // Create new mapping with unified group
+        const newMapping = new Mapping({
+          sourceGroup,
+          telegramChannel,
+          active: active !== undefined ? active : true,
+          createdBy: req.user?._id
+        });
+        await newMapping.save();
+        await newMapping.populate('sourceGroup');
+        await newMapping.populate('telegramChannel');
+        return res.status(201).json(newMapping);
       }
-      
-      // Check if mapping already exists for this group and channel
-      const existingMapping = await Mapping.findOne({
-        sourceGroup,
+
+      // Try legacy VK source group
+      const legacyGroup = await VkSourceGroup.findById(sourceGroup);
+      if (!legacyGroup) {
+        return res.status(404).json({ message: 'Group not found' });
+      }
+
+      // Check if mapping already exists for this legacy group and channel
+      const existingLegacyMapping = await Mapping.findOne({
+        vkSourceGroup: sourceGroup,
         telegramChannel
       });
-      
-      if (existingMapping) {
+      if (existingLegacyMapping) {
         return res.status(400).json({ message: 'This mapping already exists' });
       }
-      
-      // Create new mapping
-      const newMapping = new Mapping({
-        sourceGroup,
+
+      // Create mapping using legacy field
+      const legacyMapping = new Mapping({
+        vkSourceGroup: sourceGroup,
         telegramChannel,
         active: active !== undefined ? active : true,
-        createdBy: req.user?._id // If authentication is implemented
+        createdBy: req.user?._id
       });
-      
-      // Save new mapping
-      await newMapping.save();
-      
-      // Populate response
-      await newMapping.populate('sourceGroup');
-      await newMapping.populate('telegramChannel');
-      
-      res.status(201).json(newMapping);
+      await legacyMapping.save();
+      await legacyMapping.populate('vkSourceGroup');
+      await legacyMapping.populate('telegramChannel');
+      return res.status(201).json(legacyMapping);
     } catch (error) {
       console.error('Error creating mapping:', error);
       res.status(500).json({ message: 'Server error', error: error.message });

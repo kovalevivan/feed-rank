@@ -300,7 +300,10 @@ const UnifiedSourcesList = () => {
                           </Typography>
                         ) : (
                           <Typography variant="body2" color="text.secondary">
-                            {source.username ? `@${source.username}` : 'No username'}
+                            {source.username && source.username !== '@null' 
+                              ? (source.username.startsWith('@') ? source.username : `@${source.username}`)
+                              : 'No username'
+                            }
                           </Typography>
                         )}
                       </TableCell>

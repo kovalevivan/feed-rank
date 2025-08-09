@@ -65,7 +65,7 @@ const TelegramSourceSchema = new mongoose.Schema({
   },
   statisticalMultiplier: {
     type: Number,
-    default: 1.5,
+    default: 0.5,
     min: 0.1
   },
   // Analysis data from last threshold calculation

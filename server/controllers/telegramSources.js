@@ -167,7 +167,7 @@ router.post(
         commentWeight: commentWeight || 2.0,
         forwardWeight: forwardWeight || 3.0,
         thresholdMethod: thresholdMethod || 'statistical',
-        statisticalMultiplier: statisticalMultiplier || 1.5,
+        statisticalMultiplier: statisticalMultiplier || 0.5,
         // Only add createdBy if req.user exists and has an _id
         ...(req.user && req.user._id ? { createdBy: req.user._id } : {})
       });
@@ -428,7 +428,7 @@ router.get('/subscriptions/list', async (req, res) => {
 // Calculate threshold for a source (new or existing)
 router.post('/calculate-threshold', async (req, res) => {
   try {
-    const { chatId, username, thresholdMethod = 'statistical', statisticalMultiplier = 1.5, postsCount = 100, saveToSource = false } = req.body;
+    const { chatId, username, thresholdMethod = 'statistical', statisticalMultiplier = 0.5, postsCount = 100, saveToSource = false } = req.body;
     
     if (!chatId) {
       return res.status(400).json({ message: 'Chat ID is required' });
@@ -533,7 +533,7 @@ router.post('/:id/update-threshold', async (req, res) => {
       return res.status(400).json({ message: 'Invalid source ID format' });
     }
     
-    const { thresholdMethod = 'statistical', multiplier = 1.5 } = req.body;
+    const { thresholdMethod = 'statistical', multiplier = 0.5 } = req.body;
     
     // Validate method
     if (!['statistical', 'percentile'].includes(thresholdMethod)) {
