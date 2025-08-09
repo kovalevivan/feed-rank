@@ -614,13 +614,14 @@ const forwardPost = async (post, source, channel, options = {}) => {
     // Publication date
     caption += post.publishedAt ? `📅 Опубликовано: <b>${formatDate(post.publishedAt)}</b>\n\n` : '\n';
     
-    // Add plain text link at the end (VK-style - no HTML formatting)
-    if (post.originalPostUrl) {
-      caption += `${post.originalPostUrl}\n`;
-    } else if (isTelegramPost && sourceData && sourceData.username && post.originalPostId) {
-      // Construct Telegram post URL if no direct URL is available
-      const telegramUrl = `https://t.me/${sourceData.username.replace('@', '')}/${post.originalPostId}`;
-      caption += `${telegramUrl}\n`;
+    // Add original post link as a labeled hyperlink without preview
+    let originalUrl = post.originalPostUrl;
+    if (!originalUrl && isTelegramPost && sourceData && sourceData.username && post.originalPostId) {
+      originalUrl = `https://t.me/${sourceData.username.replace('@', '')}/${post.originalPostId}`;
+    }
+    if (originalUrl) {
+      const safeUrl = originalUrl;
+      caption += `\n<a href="${safeUrl}">Смотреть оригинальный пост</a>\n`;
     }
     
     // Add viral/high dynamics marker at the end if needed
@@ -659,7 +660,26 @@ const forwardPost = async (post, source, channel, options = {}) => {
     }
     
     // Original post link was already added above in VK style
-    
+
+    // Add source tags at the bottom: first #vk or #tg, second with source name
+    try {
+      const sourceTag = isVkPost ? '#vk' : '#tg';
+      let nameForTag = (sourceName || '').trim();
+      let sourceNameTag = '';
+      if (nameForTag.length > 0) {
+        // Replace spaces with underscores and remove unsupported characters (keep latin and cyrillic letters, digits, underscore)
+        const sanitized = nameForTag
+          .replace(/\s+/g, '_')
+          .replace(/[^A-Za-z0-9_А-Яа-яЁё]/g, '');
+        if (sanitized.length > 0) {
+          sourceNameTag = `#${sanitized}`;
+        }
+      }
+      caption += `\n\n${sourceTag}${sourceNameTag ? ' ' + sourceNameTag : ''}`;
+    } catch (tagError) {
+      // Do not fail on tag generation
+    }
+
     let sentMessage;
     
     // Get all photo and video attachments (handle both URL-based and buffer-based)
@@ -701,7 +721,7 @@ const forwardPost = async (post, source, channel, options = {}) => {
             `${caption}\n\n${photoLinks}`,
             {
               parse_mode: 'HTML',
-              disable_web_page_preview: false
+              disable_web_page_preview: true
             }
           );
         }
@@ -760,7 +780,7 @@ const forwardPost = async (post, source, channel, options = {}) => {
             caption + videoNotice,
             {
               parse_mode: 'HTML',
-              disable_web_page_preview: false
+              disable_web_page_preview: true
             }
           );
         }
@@ -839,14 +859,14 @@ const forwardPost = async (post, source, channel, options = {}) => {
             videoMessage, 
             { 
               parse_mode: 'HTML',
-              disable_web_page_preview: false // Enable preview for the video
+              disable_web_page_preview: true
             }
           );
         } catch (fallbackError) {
           // Last resort - plain text with link
           sentMessage = await bot.sendMessage(
             channel.chatId, 
-            `${caption}\n\n🎬 Видео: ${videoAttachment.url}`, 
+            `${caption}\n\n🎬 <a href="${videoAttachment.url}">Смотреть видео</a>`, 
             { 
               parse_mode: 'HTML',
               disable_web_page_preview: true
@@ -863,7 +883,7 @@ const forwardPost = async (post, source, channel, options = {}) => {
         caption, 
         { 
           parse_mode: 'HTML',
-          disable_web_page_preview: false // Enable preview for the original post link
+          disable_web_page_preview: true
         }
       );
     }
