@@ -82,6 +82,37 @@ mongoose.connect(feedrankURI, mongooseOptions)
       .catch(err => {
         console.error('Error listing databases:', err.message);
       });
+
+    // Ensure critical indexes exist with proper options (sparse, unique) to avoid duplicate key issues
+    (async () => {
+      try {
+        const Post = require('./models/Post');
+        const indexes = await Post.collection.indexes();
+        const byName = Object.fromEntries(indexes.map(i => [i.name, i]));
+
+        // Helper to recreate an index with desired options if mismatch
+        const ensureIndex = async (keySpec, options) => {
+          const name = options.name;
+          const existing = byName[name];
+          const needsRecreate = !existing || existing.unique !== !!options.unique || existing.sparse !== !!options.sparse;
+          if (needsRecreate) {
+            if (existing) {
+              console.warn(`Recreating index ${name} with correct options (unique=${options.unique}, sparse=${options.sparse})`);
+              await Post.collection.dropIndex(name).catch(() => {});
+            } else {
+              console.log(`Creating missing index ${name}`);
+            }
+            await Post.collection.createIndex(keySpec, options);
+          }
+        };
+
+        await ensureIndex({ vkSource: 1, postId: 1 }, { unique: true, sparse: true, name: 'vkSource_1_postId_1' });
+        await ensureIndex({ telegramSource: 1, originalPostId: 1 }, { unique: true, sparse: true, name: 'telegramSource_1_originalPostId_1' });
+        console.log('✅ Post indexes verified');
+      } catch (idxErr) {
+        console.warn('Could not verify/create indexes:', idxErr.message);
+      }
+    })();
   })
   .catch(err => {
     console.error('MongoDB connection error:', err);

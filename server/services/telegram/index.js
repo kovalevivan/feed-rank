@@ -577,12 +577,7 @@ const forwardPost = async (post, source, channel, options = {}) => {
     // Prepare post caption with HTML formatting (VK-style format)
     let caption = '';
     
-    // Source info first (matching VK format)
-    if (isVkPost) {
-      caption += `Из группы ВК: <b>${sourceName}</b>\n\n`;
-    } else if (isTelegramPost) {
-      caption += `Из канала Telegram: <b>${sourceName}</b>\n\n`;
-    }
+    // Removed header with source name per requirements
     
     // Post content
     if (post.text && post.text.trim()) {

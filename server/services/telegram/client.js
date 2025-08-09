@@ -464,7 +464,6 @@ const processMessage = async (message, source) => {
     
     // Create new post in database
     const post = new Post({
-      sourceType: 'telegram',
       telegramSource: source._id,
       originalPostId: message.id.toString(),
       text: messageData.text,
