@@ -677,15 +677,18 @@ const forwardPost = async (post, source, channel, options = {}) => {
 
     let sentMessage;
     
-    // Get all photo and video attachments (handle both URL-based and buffer-based)
-    const photoAttachments = post.attachments?.filter(att => att.type === 'photo' && (att.url || att.buffer)) || [];
-    const videoAttachment = post.attachments?.find(att => (att.type === 'video' || att.type === 'animation') && (att.url || att.buffer));
+    // Get all media attachments (handle both URL-based and buffer-based)
+    const isImageDoc = (att) => att.type === 'document' && att.mimeType && att.mimeType.startsWith('image/');
+    const isAnimation = (att) => att.type === 'animation';
+    const imageAttachments = (post.attachments || []).filter(att => (att.type === 'photo' || isImageDoc(att)) && (att.url || att.buffer));
+    const animationAttachment = (post.attachments || []).find(att => isAnimation(att) && (att.url || att.buffer));
+    const videoAttachment = (post.attachments || []).find(att => att.type === 'video' && (att.url || att.buffer));
     
     // If we have multiple photos, send them as a media group
-    if (photoAttachments.length > 1) {
+    if (imageAttachments.length > 1) {
       try {
         // Prepare media group input (handle both URLs and buffers)
-        const mediaGroup = photoAttachments.map((attachment, index) => ({
+        const mediaGroup = imageAttachments.map((attachment, index) => ({
           type: 'photo',
           media: attachment.buffer || attachment.url,
           // Add caption only to the first media item
@@ -701,7 +704,7 @@ const forwardPost = async (post, source, channel, options = {}) => {
           console.log('🔍 DEBUG PHOTO: Sending photo with caption:', caption.substring(0, 200));
           sentMessage = await bot.sendPhoto(
             channel.chatId,
-            photoAttachments[0].buffer || photoAttachments[0].url,
+            imageAttachments[0].buffer || imageAttachments[0].url,
             {
               caption: caption,
               parse_mode: 'HTML'
@@ -709,7 +712,7 @@ const forwardPost = async (post, source, channel, options = {}) => {
           );
         } catch (photoError) {
           // If that fails too, fall back to text message with links
-          const photoLinks = photoAttachments.map((photo, idx) => 
+          const photoLinks = imageAttachments.map((photo, idx) => 
             `<a href="${photo.url}">Фото ${idx + 1}</a>`).join('\n');
           sentMessage = await bot.sendMessage(
             channel.chatId,
@@ -723,11 +726,11 @@ const forwardPost = async (post, source, channel, options = {}) => {
       }
     }
     // If we have a single photo attachment, send it as a photo with caption
-    else if (photoAttachments.length === 1) {
+    else if (imageAttachments.length === 1) {
       try {
         sentMessage = await bot.sendPhoto(
           channel.chatId,
-          photoAttachments[0].buffer || photoAttachments[0].url,
+          imageAttachments[0].buffer || imageAttachments[0].url,
           {
             caption: caption,
             parse_mode: 'HTML'
@@ -737,10 +740,33 @@ const forwardPost = async (post, source, channel, options = {}) => {
         // Fallback to regular message if media sending fails
         sentMessage = await bot.sendMessage(
           channel.chatId, 
-          `${caption}\n\n<a href="${photoAttachments[0].url}">Смотреть фото</a>`, 
+          `${caption}\n\n<a href="${imageAttachments[0].url}">Смотреть фото</a>`, 
           { 
             parse_mode: 'HTML',
-            disable_web_page_preview: false
+            disable_web_page_preview: true
+          }
+        );
+      }
+    }
+    // If we have an animation (GIF), send it as animation with caption
+    else if (animationAttachment) {
+      try {
+        sentMessage = await bot.sendAnimation(
+          channel.chatId,
+          animationAttachment.buffer || animationAttachment.url,
+          {
+            caption: caption,
+            parse_mode: 'HTML'
+          }
+        );
+      } catch (animError) {
+        // Fallback to a message with link
+        sentMessage = await bot.sendMessage(
+          channel.chatId,
+          `${caption}\n\n<a href="${animationAttachment.url}">Смотреть анимацию</a>`,
+          {
+            parse_mode: 'HTML',
+            disable_web_page_preview: true
           }
         );
       }
