@@ -1,4 +1,5 @@
 const Mapping = require('../models/Mapping');
+const VkSourceGroup = require('../models/VkSourceGroup');
 
 /**
  * Gets all mappings for a Telegram source
@@ -59,30 +60,49 @@ const getAllMappingsForSource = async (sourceId, sourceType = 'vk') => {
     return getAllMappingsForTelegramSource(sourceId);
   }
   try {
-    // Get individual mappings for this source
+    // Get individual mappings for this source (legacy individual)
     const individualMappings = await Mapping.find({
       vkSource: sourceId,
       active: true
-    }).populate('vkSource').populate('telegramChannel');
+    })
+      .populate('vkSource')
+      .populate('telegramChannel');
 
-    // Get group mappings - find all groups that contain this source
+    // Get mappings via NEW unified SourceGroup - find all groups that contain this source
     const SourceGroup = require('../models/SourceGroup');
-    const groupsContainingSource = await SourceGroup.find({
-      vkSources: sourceId
-    });
+    const groupsContainingSource = await SourceGroup.find({ vkSources: sourceId });
 
-    // Get mappings for all groups that contain this source
-    let groupMappings = [];
+    let unifiedGroupMappings = [];
     if (groupsContainingSource.length > 0) {
       const groupIds = groupsContainingSource.map(group => group._id);
-      groupMappings = await Mapping.find({
+      unifiedGroupMappings = await Mapping.find({
         sourceGroup: { $in: groupIds },
         active: true
-      }).populate('sourceGroup').populate('telegramChannel');
+      })
+        .populate('sourceGroup')
+        .populate('telegramChannel');
+    }
+
+    // Get mappings via LEGACY VkSourceGroup - find all legacy groups that contain this source
+    const legacyGroupsContainingSource = await VkSourceGroup.find({ sources: sourceId });
+
+    let legacyGroupMappings = [];
+    if (legacyGroupsContainingSource.length > 0) {
+      const legacyGroupIds = legacyGroupsContainingSource.map(group => group._id);
+      legacyGroupMappings = await Mapping.find({
+        vkSourceGroup: { $in: legacyGroupIds },
+        active: true
+      })
+        .populate('vkSourceGroup')
+        .populate('telegramChannel');
     }
 
     // Combine and deduplicate by telegram channel ID
-    const allMappings = [...individualMappings, ...groupMappings];
+    const allMappings = [
+      ...individualMappings,
+      ...unifiedGroupMappings,
+      ...legacyGroupMappings
+    ];
     const uniqueMappings = [];
     const seenChannelIds = new Set();
 

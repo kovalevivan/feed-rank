@@ -538,6 +538,10 @@ const processSourcePosts = async (sourceId) => {
           const becameViral = wasNotViral && isNowViral;
           
           // Update existing post
+          // Backfill missing originalPostId for legacy records (required by schema)
+          if (!existingPost.originalPostId) {
+            existingPost.originalPostId = existingPost.postId || postId;
+          }
           existingPost.text = postData.text;
           existingPost.viewCount = postData.viewCount;
           existingPost.likeCount = postData.likeCount;
@@ -570,6 +574,7 @@ const processSourcePosts = async (sourceId) => {
           // Create new post
           const newPost = new Post({
             vkSource: sourceId,
+            originalPostId: postId,
             ...postData
           });
           
