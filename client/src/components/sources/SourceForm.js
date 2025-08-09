@@ -429,6 +429,7 @@ const SourceForm = () => {
     calculatingThreshold, 
     thresholdStatsLoading 
   } = useSelector((state) => state.vkSources);
+  const [submitted, setSubmitted] = useState(false);
   
   // Local state for form
   const [formData, setFormData] = useState({
@@ -490,12 +491,15 @@ const SourceForm = () => {
     }
   }, [vkSource, id]);
   
-  // Redirect after successful submission
+  // Redirect after successful submission (only if this form submitted)
   useEffect(() => {
-    if (success) {
+    if (success && submitted) {
       navigate('/sources');
+      // Clear success to avoid redirect loops next time
+      dispatch(clearVkSourceSuccess());
+      setSubmitted(false);
     }
-  }, [success, navigate]);
+  }, [success, submitted, navigate, dispatch]);
   
   // Handle form input changes
   const handleChange = (e) => {
@@ -534,6 +538,7 @@ const SourceForm = () => {
       postsToCheck: parseInt(formData.postsToCheck)
     };
     
+    setSubmitted(true);
     if (id && id !== 'new') {
       dispatch(updateVkSource({ id, sourceData }));
     } else {

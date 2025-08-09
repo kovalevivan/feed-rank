@@ -1,5 +1,6 @@
 const SourceGroup = require('../models/SourceGroup');
 const VkSourceGroup = require('../models/VkSourceGroup');
+const Mapping = require('../models/Mapping');
 const VkSource = require('../models/VkSource');
 const TelegramSource = require('../models/TelegramSource');
 const mongoose = require('mongoose');
@@ -231,34 +232,50 @@ router.put('/:id', [
         }
       }
 
-      // Update legacy VK group fields (telegramSources ignored for legacy)
-      if (name !== undefined) legacyGroup.name = name;
-      if (description !== undefined) legacyGroup.description = description;
-      if (vkSources !== undefined) legacyGroup.sources = vkSources;
-      if (stopWords !== undefined) legacyGroup.stopWords = stopWords;
-      if (active !== undefined) legacyGroup.active = active;
+      // MIGRATION: convert legacy VK group to unified SourceGroup in-place (same _id)
+      const targetVkSources = vkSources !== undefined ? vkSources : (legacyGroup.sources || []).map(id => id.toString());
+      const targetStopWords = stopWords !== undefined ? stopWords : (legacyGroup.stopWords || []);
+      const targetName = name !== undefined ? name : legacyGroup.name;
+      const targetDescription = description !== undefined ? description : legacyGroup.description;
+      const targetActive = active !== undefined ? active : legacyGroup.active;
 
-      const saved = await legacyGroup.save();
-
-      const populatedLegacy = await VkSourceGroup.findById(saved._id)
-        .populate('sources', 'name url active groupId');
-
-      // Map to unified shape in response
-      const response = {
-        _id: populatedLegacy._id,
-        name: populatedLegacy.name,
-        description: populatedLegacy.description,
-        stopWords: populatedLegacy.stopWords || [],
-        active: populatedLegacy.active,
-        createdBy: populatedLegacy.createdBy,
-        createdAt: populatedLegacy.createdAt,
-        updatedAt: populatedLegacy.updatedAt,
-        vkSources: populatedLegacy.sources || [],
-        telegramSources: [],
-        legacyType: 'vk'
+      // Upsert unified SourceGroup with the same _id as legacy
+      const upsertData = {
+        _id: legacyGroup._id,
+        name: targetName,
+        description: targetDescription,
+        vkSources: targetVkSources,
+        telegramSources: telegramSources !== undefined ? telegramSources : [],
+        stopWords: targetStopWords,
+        active: targetActive,
+        createdBy: legacyGroup.createdBy,
+        // Preserve createdAt if possible
+        createdAt: legacyGroup.createdAt || Date.now(),
+        updatedAt: Date.now()
       };
 
-      return res.json(response);
+      // Use findOneAndUpdate to upsert with same _id
+      await SourceGroup.findOneAndUpdate({ _id: legacyGroup._id }, upsertData, {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true
+      });
+
+      // Migrate mappings: vkSourceGroup -> sourceGroup
+      await Mapping.updateMany(
+        { vkSourceGroup: legacyGroup._id },
+        { $set: { sourceGroup: legacyGroup._id }, $unset: { vkSourceGroup: '' } }
+      );
+
+      // Remove legacy group document
+      await VkSourceGroup.deleteOne({ _id: legacyGroup._id });
+
+      // Return the unified group populated
+      const populatedUnified = await SourceGroup.findById(legacyGroup._id)
+        .populate('vkSources', 'name url active groupId')
+        .populate('telegramSources', 'name username active chatId');
+
+      return res.json(populatedUnified);
     }
 
     // Unified group update path
