@@ -574,29 +574,56 @@ const extractMediaAttachment = async (media, message) => {
     
     switch (media.className) {
       case 'MessageMediaPhoto':
-        // Photo download disabled - return metadata only
-        return {
-          type: 'photo',
-          fileId: media.photo.id.toString(),
-          width: media.photo.sizes?.[media.photo.sizes.length - 1]?.w || 0,
-          height: media.photo.sizes?.[media.photo.sizes.length - 1]?.h || 0
-        };
+        try {
+          // Download photo buffer via Client API so Bot API can send it as attachment
+          const photoBuffer = await client.downloadMedia(message, { workers: 1 });
+          return {
+            type: 'photo',
+            fileId: media.photo.id.toString(),
+            width: media.photo.sizes?.[media.photo.sizes.length - 1]?.w || 0,
+            height: media.photo.sizes?.[media.photo.sizes.length - 1]?.h || 0,
+            buffer: photoBuffer
+          };
+        } catch (downloadErr) {
+          console.warn('Failed to download Telegram photo, will fallback to metadata only:', downloadErr.message);
+          return {
+            type: 'photo',
+            fileId: media.photo.id.toString(),
+            width: media.photo.sizes?.[media.photo.sizes.length - 1]?.w || 0,
+            height: media.photo.sizes?.[media.photo.sizes.length - 1]?.h || 0
+          };
+        }
         
       case 'MessageMediaDocument':
         const document = media.document;
         const isVideo = document.mimeType?.startsWith('video/');
         const isAnimation = document.mimeType === 'video/mp4' && document.attributes?.some(attr => attr.className === 'DocumentAttributeAnimated');
         
-        // Video/document download disabled - return metadata only
-        return {
-          type: isAnimation ? 'animation' : (isVideo ? 'video' : 'document'),
-          fileId: document.id.toString(),
-          fileName: document.attributes?.find(attr => attr.fileName)?.fileName,
-          mimeType: document.mimeType,
-          duration: document.attributes?.find(attr => attr.duration)?.duration,
-          width: document.attributes?.find(attr => attr.w)?.w,
-          height: document.attributes?.find(attr => attr.h)?.h
-        };
+        try {
+          // For photos sent as documents or animations, try to download a buffer as well
+          const docBuffer = await client.downloadMedia(message, { workers: 1 });
+          return {
+            type: isAnimation ? 'animation' : (isVideo ? 'video' : 'document'),
+            fileId: document.id.toString(),
+            fileName: document.attributes?.find(attr => attr.fileName)?.fileName,
+            mimeType: document.mimeType,
+            duration: document.attributes?.find(attr => attr.duration)?.duration,
+            width: document.attributes?.find(attr => attr.w)?.w,
+            height: document.attributes?.find(attr => attr.h)?.h,
+            buffer: isVideo ? undefined : docBuffer // avoid huge video buffers; keep for images/animations
+          };
+        } catch (downloadErr) {
+          console.warn('Failed to download Telegram document buffer:', downloadErr.message);
+          return {
+            type: isAnimation ? 'animation' : (isVideo ? 'video' : 'document'),
+            fileId: document.id.toString(),
+            fileName: document.attributes?.find(attr => attr.fileName)?.fileName,
+            mimeType: document.mimeType,
+            duration: document.attributes?.find(attr => attr.duration)?.duration,
+            width: document.attributes?.find(attr => attr.w)?.w,
+            height: document.attributes?.find(attr => attr.h)?.h
+          };
+        }
         
       case 'MessageMediaWebPage':
         return {
