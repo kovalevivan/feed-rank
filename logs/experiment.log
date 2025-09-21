@@ -1,0 +1,43 @@
+🔬 VK Views Experiment Launcher
+📁 Working directory: /Users/ivankovalev/Documents/sandbox/feedrank2
+🔑 Using token: ✅ Configured
+📊 Groups: chp_nn
+🧪 Test mode enabled: 5 min intervals, 30 min duration
+
+🚀 Запуск эксперимента VK Views (ТЕСТОВЫЙ РЕЖИМ)...
+🧪 Включен тестовый режим: интервалы 5 минут, общее время 30 минут
+🔬 VK Experiment service initialized
+🚀 Starting VK Views Experiment...
+🔬 Mode: TEST
+📊 Groups to track: chp_nn
+⏱️  Short-term: 30 minutes (every 5 min)
+📈 Long-term checks: 24h and 48h after session start
+✅ Эксперимент запущен успешно!
+📊 Данные будут сохраняться в папку: server/services/vk-experiment/data/
+⏹️  Для остановки нажмите Ctrl+C
+🔍 Starting new data collection session...
+📊 Collecting initial data for group: chp_nn
+✅ Collected data for 10 posts from chp_nn
+📝 Recorded data for session 20250921_1507 (0 min)
+🚀 Started tracking session 20250921_1507 for 1 groups
+✅ VK Views Experiment is running!
+⏰ Starting scheduled new tracking session...
+🔍 Starting new data collection session...
+📊 Collecting initial data for group: chp_nn
+✅ Collected data for 10 posts from chp_nn
+📝 Recorded data for session 20250921_1510 (0 min)
+🚀 Started tracking session 20250921_1510 for 1 groups
+🔍 Performing short-term check 1/6 for session 20250921_1507 (5 min)
+📝 Recorded data for session 20250921_1507 (5 min)
+🔍 Performing short-term check 1/6 for session 20250921_1510 (5 min)
+📝 Recorded data for session 20250921_1510 (5 min)
+🔍 Performing short-term check 2/6 for session 20250921_1507 (10 min)
+📝 Recorded data for session 20250921_1507 (10 min)
+⏰ Starting scheduled new tracking session...
+🔍 Starting new data collection session...
+📊 Collecting initial data for group: chp_nn
+✅ Collected data for 10 posts from chp_nn
+📝 Recorded data for session 20250921_1520 (0 min)
+🚀 Started tracking session 20250921_1520 for 1 groups
+🔍 Performing short-term check 2/6 for session 20250921_1510 (10 min)
+📝 Recorded data for session 20250921_1510 (10 min)
