@@ -153,7 +153,7 @@ class VKExperimentCLI {
       if (posts.length > 0) {
         console.log('\n📄 Примеры постов:');
         posts.slice(0, 3).forEach((post, index) => {
-          console.log(`   ${index + 1}. ID: ${post.id}, Просмотры: ${post.views?.count || 0}, Лайки: ${post.likes?.count || 0}`);
+          console.log(`   ${index + 1}. ID: ${post.id}, Просмотры: ${post.views && post.views.count || 0}, Лайки: ${post.likes && post.likes.count || 0}`);
           if (post.text) {
             console.log(`      Текст: ${post.text.substring(0, 80)}...`);
           }

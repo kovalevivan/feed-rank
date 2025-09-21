@@ -201,9 +201,9 @@ class VKExperiment {
         for (const post of posts) {
           const postData = {
             postId: post.id.toString(),
-            initialViews: post.views?.count || 0,
-            initialLikes: post.likes?.count || 0,
-            initialReposts: post.reposts?.count || 0,
+            initialViews: post.views && post.views.count || 0,
+            initialLikes: post.likes && post.likes.count || 0,
+            initialReposts: post.reposts && post.reposts.count || 0,
             publishedAt: new Date(post.date * 1000),
             textPreview: (post.text || '').substring(0, 100).replace(/\n/g, ' ').replace(/"/g, '""')
           };
@@ -247,9 +247,9 @@ class VKExperiment {
           const currentPost = currentPosts.find(p => p.id.toString() === postId);
           
           if (currentPost) {
-            const currentViews = currentPost.views?.count || 0;
-            const currentLikes = currentPost.likes?.count || 0;
-            const currentReposts = currentPost.reposts?.count || 0;
+            const currentViews = currentPost.views && currentPost.views.count || 0;
+            const currentLikes = currentPost.likes && currentPost.likes.count || 0;
+            const currentReposts = currentPost.reposts && currentPost.reposts.count || 0;
             
             csvContent += `"${sessionData.sessionId}","${groupName}","${groupData.groupId}","${postId}","${new Date().toISOString()}",${elapsedMinutes},${currentViews},${currentLikes},${currentReposts},"${postData.publishedAt.toISOString()}","${postData.textPreview}"\n`;
           }
@@ -285,7 +285,7 @@ class VKExperiment {
           const currentPost = currentPosts.find(p => p.id.toString() === postId);
           
           if (currentPost) {
-            const currentViews = currentPost.views?.count || 0;
+            const currentViews = currentPost.views && currentPost.views.count || 0;
             const growth = currentViews - postData.initialViews;
             
             // Добавляем данные в зависимости от периода (24h или 48h)
