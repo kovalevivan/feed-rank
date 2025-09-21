@@ -1,0 +1,37 @@
+{
+  "name": "vk-views-experiment",
+  "version": "1.0.0",
+  "description": "Experimental service for collecting VK post views data",
+  "main": "index.js",
+  "scripts": {
+    "start": "node cli.js start",
+    "test": "node cli.js test",
+    "status": "node cli.js status",
+    "stop": "node cli.js stop",
+    "help": "node cli.js help"
+  },
+  "keywords": [
+    "vk",
+    "vkontakte", 
+    "analytics",
+    "views",
+    "experiment",
+    "csv",
+    "data-collection"
+  ],
+  "author": "FeedRank Team",
+  "license": "MIT",
+  "dependencies": {
+    "vk-io": "^4.7.0",
+    "node-cron": "^3.0.3",
+    "dotenv": "^16.0.0"
+  },
+  "peerDependencies": {
+    "vk-io": "^4.7.0",
+    "node-cron": "^3.0.0",
+    "dotenv": "^16.0.0"
+  },
+  "bin": {
+    "vk-experiment": "./cli.js"
+  }
+}
