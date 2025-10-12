@@ -69,12 +69,24 @@ const init = () => {
     }
   });
   
+  // Schedule weekly threshold recalculation for all VK sources
+  // Runs every Sunday at 3:00 AM
+  cron.schedule('0 3 * * 0', async () => {
+    try {
+      console.log('📊 Starting weekly threshold recalculation...');
+      await recalculateAllVkThresholds();
+    } catch (error) {
+      console.error('Error in weekly threshold recalculation:', error);
+    }
+  });
+  
   // Initial setup of schedules
   updateSourceSchedules().catch(err => {
     console.error('Error in initial source schedule setup:', err);
   });
   
   console.log('Scheduler service initialized');
+  console.log('📅 Weekly threshold recalculation scheduled: Every Sunday at 3:00 AM');
 };
 
 /**
@@ -422,6 +434,110 @@ const monitorMemoryUsage = async () => {
   }
 };
 
+/**
+ * Recalculate thresholds for all active VK sources
+ * Runs weekly to keep thresholds up to date with current posting patterns
+ */
+const recalculateAllVkThresholds = async () => {
+  const startTime = Date.now();
+  
+  try {
+    console.log('═══════════════════════════════════════════════════');
+    console.log('🔄 WEEKLY THRESHOLD RECALCULATION');
+    console.log('═══════════════════════════════════════════════════');
+    
+    // Get all active VK sources
+    const sources = await VkSource.find({ active: { $ne: false } });
+    console.log(`📊 Found ${sources.length} active VK sources\n`);
+    
+    let updated = 0;
+    let failed = 0;
+    let skipped = 0;
+    const results = [];
+    
+    for (let i = 0; i < sources.length; i++) {
+      const source = sources[i];
+      const progress = `[${i + 1}/${sources.length}]`;
+      
+      try {
+        // Skip sources with manual threshold
+        if (source.thresholdType === 'manual') {
+          console.log(`${progress} Skipped ${source.name} (manual threshold)`);
+          skipped++;
+          continue;
+        }
+        
+        const oldThreshold = source.calculatedThreshold;
+        
+        // Recalculate using current method (defaults to percentile p90)
+        await vkService.updateSourceThreshold(source._id, source.thresholdMethod || 'percentile');
+        
+        // Reload to get updated values
+        const updatedSource = await VkSource.findById(source._id);
+        const newThreshold = updatedSource.calculatedThreshold;
+        
+        const change = newThreshold - oldThreshold;
+        const changePercent = oldThreshold > 0 
+          ? ((change / oldThreshold) * 100).toFixed(1) 
+          : 'N/A';
+        
+        console.log(`${progress} ${source.name}: ${oldThreshold.toLocaleString()} → ${newThreshold.toLocaleString()} (${changePercent}%)`);
+        
+        results.push({
+          name: source.name,
+          old: oldThreshold,
+          new: newThreshold,
+          change,
+          changePercent
+        });
+        
+        updated++;
+        
+        // Add small delay to avoid overwhelming the VK API
+        if (i % 10 === 0 && i > 0) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      } catch (error) {
+        console.error(`${progress} ❌ ${source.name}: ${error.message}`);
+        failed++;
+      }
+    }
+    
+    const duration = ((Date.now() - startTime) / 1000 / 60).toFixed(1);
+    
+    console.log('\n═══════════════════════════════════════════════════');
+    console.log('📊 WEEKLY RECALCULATION COMPLETED');
+    console.log(`  ✅ Updated: ${updated}`);
+    console.log(`  ⏭️  Skipped: ${skipped} (manual thresholds)`);
+    console.log(`  ❌ Failed: ${failed}`);
+    console.log(`  ⏱️  Duration: ${duration} minutes`);
+    console.log('═══════════════════════════════════════════════════');
+    
+    // Log top 5 biggest changes
+    if (results.length > 0) {
+      results.sort((a, b) => Math.abs(b.change) - Math.abs(a.change));
+      console.log('\n🔝 TOP-5 BIGGEST CHANGES:');
+      results.slice(0, 5).forEach((r, i) => {
+        const sign = r.change > 0 ? '+' : '';
+        console.log(`  ${i + 1}. ${r.name}: ${sign}${r.change.toLocaleString()} (${sign}${r.changePercent}%)`);
+      });
+    }
+    
+    console.log('\n✅ Weekly threshold recalculation completed successfully\n');
+    
+    return {
+      updated,
+      failed,
+      skipped,
+      duration,
+      timestamp: new Date()
+    };
+  } catch (error) {
+    console.error('❌ Error in weekly threshold recalculation:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   init,
   updateSourceSchedules,
@@ -430,5 +546,6 @@ module.exports = {
   processHighDynamicsPosts,
   performViewHistoryCleanup,
   monitorMemoryUsage,
+  recalculateAllVkThresholds,
   getCronJobs: () => cronJobs
 }; 
