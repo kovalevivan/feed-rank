@@ -80,7 +80,7 @@ const VkSourceSchema = new mongoose.Schema({
     lastAnalysisDate: { type: Date, default: null },
     thresholdMethod: { type: String, default: 'percentile' },
     multiplierUsed: { type: Number, default: null },
-    percentileUsed: { type: Number, default: 85 },
+    percentileUsed: { type: Number, default: 90 },
     detailedStats: { type: DetailedStatsSchema, default: () => ({}) }
   },
   experimentalViewTracking: {

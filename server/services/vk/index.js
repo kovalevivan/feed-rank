@@ -428,10 +428,10 @@ const calculateStatisticalThreshold = (posts, multiplier) => {
  * Calculates the threshold using percentile method (more robust to outliers)
  * This method is preferred for groups with highly variable view counts
  * @param {Array} posts - Array of VK posts
- * @param {number} percentile - Percentile to use (default: 85, meaning top 15% are viral)
+ * @param {number} percentile - Percentile to use (default: 90, meaning top 10% are viral)
  * @returns {number} - Calculated threshold
  */
-const calculatePercentileThreshold = (posts, percentile = 85) => {
+const calculatePercentileThreshold = (posts, percentile = 90) => {
   if (!posts || posts.length === 0) return 0;
   
   // Get detailed statistics (includes percentiles)
@@ -462,10 +462,10 @@ const calculatePercentileThreshold = (posts, percentile = 85) => {
  * Uses percentile-based method with 7-day window for more stable and accurate thresholds
  * @param {string} sourceId - VK source ID in our database
  * @param {string} thresholdMethod - Method to use: 'average', 'statistical', or 'percentile' (default)
- * @param {number} param - For 'statistical': multiplier (default 1.5), for 'percentile': percentile value (default 85)
+ * @param {number} param - For 'statistical': multiplier (default 1.5), for 'percentile': percentile value (default 90)
  * @returns {Promise<Object>} - Updated VK source
  */
-const updateSourceThreshold = async (sourceId, thresholdMethod = 'percentile', param = 85) => {
+const updateSourceThreshold = async (sourceId, thresholdMethod = 'percentile', param = 90) => {
   try {
     validateVkCredentials();
     
@@ -497,8 +497,8 @@ const updateSourceThreshold = async (sourceId, thresholdMethod = 'percentile', p
     
     // Select calculation method
     if (thresholdMethod === 'percentile') {
-      // Percentile method: top 15% by default (p85)
-      const percentile = param || 85;
+      // Percentile method: top 10% by default (p90)
+      const percentile = param || 90;
       calculatedThreshold = calculatePercentileThreshold(posts, percentile);
       source.statisticalMultiplier = null; // Not applicable
       console.log(`📊 Using percentile method: p${percentile}`);
