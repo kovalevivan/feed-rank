@@ -102,7 +102,8 @@ const fetchPosts = async (groupId, count = 100) => {
     const response = await vk.api.wall.get({
       owner_id: `-${formattedGroupId}`, // Negative ID for communities
       count: count,
-      extended: 1 // Get extended info
+      extended: 1, // Get extended info
+      filter: 'owner' // Only posts from the group owner, exclude pinned posts
     });
     
     return response.items;
@@ -114,6 +115,88 @@ const fetchPosts = async (groupId, count = 100) => {
     }
     
     console.error(`Error fetching posts from VK group ${groupId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Fetches posts from a VK group within a time window
+ * This helps avoid threshold inflation for groups that post infrequently
+ * @param {string} groupId - VK group ID or name
+ * @param {number} daysWindow - Number of days to look back (default: 30)
+ * @param {number} minPosts - Minimum number of posts to collect (default: 50)
+ * @param {number} maxPosts - Maximum number of posts to collect (default: 200)
+ * @returns {Promise<Array>} - Array of posts within the time window
+ */
+const fetchPostsInTimeWindow = async (groupId, daysWindow = 30, minPosts = 50, maxPosts = 200) => {
+  try {
+    validateVkCredentials();
+    
+    const formattedGroupId = groupId.startsWith('-') ? groupId.substring(1) : groupId;
+    const now = Math.floor(Date.now() / 1000); // Current time in seconds
+    const windowStart = now - (daysWindow * 24 * 60 * 60); // daysWindow ago in seconds
+    
+    let allPosts = [];
+    let offset = 0;
+    const batchSize = 100; // VK API limit per request
+    let consecutiveOldPosts = 0;
+    
+    console.log(`📅 Fetching posts from last ${daysWindow} days for threshold calculation...`);
+    
+    // Fetch posts in batches until we have enough recent posts or reach the limit
+    while (allPosts.length < maxPosts && offset < 500) { // Safety limit: max 500 posts checked
+      const response = await vk.api.wall.get({
+        owner_id: `-${formattedGroupId}`,
+        count: batchSize,
+        offset: offset,
+        extended: 1,
+        filter: 'owner' // Only posts from the group owner
+      });
+      
+      if (!response.items || response.items.length === 0) {
+        break; // No more posts available
+      }
+      
+      // Filter posts by time window
+      for (const post of response.items) {
+        // Skip pinned posts (they have is_pinned flag)
+        if (post.is_pinned) continue;
+        
+        if (post.date >= windowStart) {
+          allPosts.push(post);
+          consecutiveOldPosts = 0;
+        } else {
+          consecutiveOldPosts++;
+          // If we've seen 10 consecutive old posts, we've gone past our window
+          if (consecutiveOldPosts >= 10) {
+            console.log(`⏭️  Reached posts older than ${daysWindow} days, stopping...`);
+            break;
+          }
+        }
+        
+        if (allPosts.length >= maxPosts) break;
+      }
+      
+      // Break if we've gone past our time window
+      if (consecutiveOldPosts >= 10) break;
+      
+      offset += batchSize;
+      
+      // Small delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    console.log(`📊 Found ${allPosts.length} posts in last ${daysWindow} days`);
+    
+    // If we don't have enough posts, try expanding the window
+    if (allPosts.length < minPosts && daysWindow < 90) {
+      console.log(`⚠️  Only ${allPosts.length} posts found, expanding window to ${daysWindow * 2} days...`);
+      return await fetchPostsInTimeWindow(groupId, daysWindow * 2, minPosts, maxPosts);
+    }
+    
+    return allPosts;
+  } catch (error) {
+    console.error(`Error fetching posts in time window from VK group ${groupId}:`, error);
     throw error;
   }
 };
@@ -342,36 +425,100 @@ const calculateStatisticalThreshold = (posts, multiplier) => {
 };
 
 /**
+ * Calculates the threshold using percentile method (more robust to outliers)
+ * This method is preferred for groups with highly variable view counts
+ * @param {Array} posts - Array of VK posts
+ * @param {number} percentile - Percentile to use (default: 85, meaning top 15% are viral)
+ * @returns {number} - Calculated threshold
+ */
+const calculatePercentileThreshold = (posts, percentile = 85) => {
+  if (!posts || posts.length === 0) return 0;
+  
+  // Get detailed statistics (includes percentiles)
+  const stats = calculateDetailedStats(posts);
+  
+  // Use pre-calculated percentiles or interpolate
+  if (percentile === 75) return stats.percentiles.p75;
+  if (percentile === 90) return stats.percentiles.p90;
+  if (percentile === 95) return stats.percentiles.p95;
+  if (percentile === 99) return stats.percentiles.p99;
+  
+  // Interpolate for other percentiles (e.g., 80, 85)
+  if (percentile >= 75 && percentile < 90) {
+    const ratio = (percentile - 75) / (90 - 75);
+    return Math.round(stats.percentiles.p75 + (stats.percentiles.p90 - stats.percentiles.p75) * ratio);
+  }
+  if (percentile >= 90 && percentile < 95) {
+    const ratio = (percentile - 90) / (95 - 90);
+    return Math.round(stats.percentiles.p90 + (stats.percentiles.p95 - stats.percentiles.p90) * ratio);
+  }
+  
+  // Default to p85
+  return Math.round(stats.percentiles.p75 + (stats.percentiles.p90 - stats.percentiles.p75) * 0.625);
+};
+
+/**
  * Updates the calculated threshold for a VK source
+ * Uses percentile-based method with 7-day window for more stable and accurate thresholds
  * @param {string} sourceId - VK source ID in our database
- * @param {string} thresholdMethod - Method to use for threshold calculation ('average' or 'statistical')
- * @param {number} multiplier - Multiplier for statistical threshold (default: 1.5)
+ * @param {string} thresholdMethod - Method to use: 'average', 'statistical', or 'percentile' (default)
+ * @param {number} param - For 'statistical': multiplier (default 1.5), for 'percentile': percentile value (default 85)
  * @returns {Promise<Object>} - Updated VK source
  */
-const updateSourceThreshold = async (sourceId, thresholdMethod = 'statistical', multiplier = 1.5) => {
+const updateSourceThreshold = async (sourceId, thresholdMethod = 'percentile', param = 85) => {
   try {
     validateVkCredentials();
     
     const source = await VkSource.findById(sourceId);
     if (!source) throw new Error(`VK source with ID ${sourceId} not found`);
     
-    // Fixed value of 200 posts for threshold calculation
-    const postsForAverage = 200;
-    const posts = await fetchPosts(source.groupId, postsForAverage);
+    // Use 7-day window for fresher, more relevant data (min 30 posts, max 200 posts)
+    // If not enough posts in 7 days, window auto-expands to 14, then 30 days
+    console.log(`🔄 Calculating threshold for ${source.name}...`);
+    const posts = await fetchPostsInTimeWindow(source.groupId, 7, 30, 200);
+    
+    if (posts.length === 0) {
+      console.warn(`⚠️  No posts found for ${source.name}, using fallback threshold`);
+      source.calculatedThreshold = 1000; // Fallback threshold
+      source.lastPostsData = {
+        averageViews: 0,
+        postsAnalyzed: 0,
+        lastAnalysisDate: new Date(),
+        thresholdMethod: thresholdMethod,
+        multiplierUsed: null,
+        percentileUsed: null
+      };
+      await source.save();
+      return source;
+    }
     
     let calculatedThreshold;
     let detailedStats = calculateDetailedStats(posts);
     
-    // Always update the statisticalMultiplier, even if not using statistical method
-    // This ensures it's available if they switch methods later
-    const usedMultiplier = multiplier || source.statisticalMultiplier || 1.5;
-    source.statisticalMultiplier = usedMultiplier;
-    
-    if (thresholdMethod === 'statistical') {
-      calculatedThreshold = calculateStatisticalThreshold(posts, usedMultiplier);
+    // Select calculation method
+    if (thresholdMethod === 'percentile') {
+      // Percentile method: top 15% by default (p85)
+      const percentile = param || 85;
+      calculatedThreshold = calculatePercentileThreshold(posts, percentile);
+      source.statisticalMultiplier = null; // Not applicable
+      console.log(`📊 Using percentile method: p${percentile}`);
+    } else if (thresholdMethod === 'statistical') {
+      // Statistical method: mean + multiplier * SD
+      const multiplier = param || source.statisticalMultiplier || 1.5;
+      calculatedThreshold = calculateStatisticalThreshold(posts, multiplier);
+      source.statisticalMultiplier = multiplier;
+      console.log(`📊 Using statistical method: mean + ${multiplier}×σ`);
     } else {
+      // Average method: simple mean
       calculatedThreshold = calculateAverageViews(posts);
+      source.statisticalMultiplier = null;
+      console.log(`📊 Using average method`);
     }
+    
+    const viralCount = posts.filter(p => (p.views?.count || 0) > calculatedThreshold).length;
+    const viralPercent = ((viralCount / posts.length) * 100).toFixed(1);
+    
+    console.log(`✅ Threshold: ${calculatedThreshold.toLocaleString()} views (${posts.length} posts, ${viralPercent}% viral)`);
     
     // Store the threshold and additional data
     source.calculatedThreshold = calculatedThreshold;
@@ -381,7 +528,8 @@ const updateSourceThreshold = async (sourceId, thresholdMethod = 'statistical', 
       postsAnalyzed: posts.length,
       lastAnalysisDate: new Date(),
       thresholdMethod: thresholdMethod,
-      multiplierUsed: thresholdMethod === 'statistical' ? usedMultiplier : null,
+      multiplierUsed: thresholdMethod === 'statistical' ? param : null,
+      percentileUsed: thresholdMethod === 'percentile' ? param : null,
       detailedStats: detailedStats // Store the detailed statistics
     };
     
@@ -412,8 +560,8 @@ const processSourcePosts = async (sourceId) => {
       : source.calculatedThreshold;
     
     if (threshold <= 0 && source.thresholdType === 'auto') {
-      // Calculate threshold if not set, using statistical method by default
-      const thresholdMethod = source.thresholdMethod || 'statistical';
+      // Calculate threshold if not set, using percentile method by default (more robust)
+      const thresholdMethod = source.thresholdMethod || 'percentile';
       await updateSourceThreshold(sourceId, thresholdMethod);
     }
     
@@ -947,9 +1095,11 @@ const checkHighDynamics = async (post, source) => {
 
 module.exports = {
   fetchPosts,
+  fetchPostsInTimeWindow,
   resolveGroupId,
   calculateAverageViews,
   calculateStatisticalThreshold,
+  calculatePercentileThreshold,
   calculateDetailedStats,
   updateSourceThreshold,
   processSourcePosts,

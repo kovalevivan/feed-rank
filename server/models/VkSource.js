@@ -41,8 +41,8 @@ const VkSourceSchema = new mongoose.Schema({
   },
   thresholdMethod: {
     type: String,
-    enum: ['average', 'statistical'],
-    default: 'statistical'
+    enum: ['average', 'statistical', 'percentile'],
+    default: 'percentile'
   },
   statisticalMultiplier: {
     type: Number,
@@ -78,8 +78,9 @@ const VkSourceSchema = new mongoose.Schema({
     averageViews: { type: Number, default: 0 },
     postsAnalyzed: { type: Number, default: 0 },
     lastAnalysisDate: { type: Date, default: null },
-    thresholdMethod: { type: String, default: 'statistical' },
-    multiplierUsed: { type: Number, default: 1.5 },
+    thresholdMethod: { type: String, default: 'percentile' },
+    multiplierUsed: { type: Number, default: null },
+    percentileUsed: { type: Number, default: 85 },
     detailedStats: { type: DetailedStatsSchema, default: () => ({}) }
   },
   experimentalViewTracking: {
