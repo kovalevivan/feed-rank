@@ -19,7 +19,7 @@ const PercentileSlider = ({ sourceId, value, onChange, disabled = false }) => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [selectedValue, setSelectedValue] = useState(value || 90);
+  const [selectedValue, setSelectedValue] = useState(90);
 
   // Load percentile statistics
   useEffect(() => {
@@ -45,9 +45,10 @@ const PercentileSlider = ({ sourceId, value, onChange, disabled = false }) => {
     loadStats();
   }, [sourceId]);
 
-  // Update selected value when prop changes
+  // Update selected value when prop changes (including initial load)
   useEffect(() => {
-    if (value !== undefined) {
+    if (value !== undefined && value !== null) {
+      console.log(`PercentileSlider: setting value to ${value}`);
       setSelectedValue(value);
     }
   }, [value]);
