@@ -1,0 +1,137 @@
+{
+  "timestamp": "2025-10-12T15:48:09.001Z",
+  "mode": "real",
+  "phase": 2,
+  "stats": {
+    "total": 17,
+    "found": 17,
+    "alreadyInactive": 0,
+    "deactivated": 17,
+    "notFound": 0,
+    "errors": 0,
+    "totalSubscribers": 0
+  },
+  "results": [
+    {
+      "url": "https://vk.com/vkazani",
+      "name": "vkazani",
+      "id": "6839a7f31fbc443a05ef41bf",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/rostov_na_donu",
+      "name": "rostov_na_donu",
+      "id": "683ef89dc77442e505e44374",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/w_skromno_w",
+      "name": "w_skromno_w",
+      "id": "683eeb7ac77442e505e386db",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/novosibmy",
+      "name": "novosibmy",
+      "id": "683882e5accf0953b2ea7f17",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/region_kazan116",
+      "name": "region_kazan116",
+      "id": "6839a97f1fbc443a05ef4496",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/perm.glav",
+      "name": "perm.glav",
+      "id": "683d9a04c77442e505c53e2f",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/overhearnn",
+      "name": "overhearnn",
+      "id": "682aeb15e35d6a04c5ddc65b",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/kazan__news",
+      "name": "kazan__news",
+      "id": "6839ae201fbc443a05efd1d1",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/overhearkazan",
+      "name": "overhearkazan",
+      "id": "6839ad841fbc443a05efd1bc",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/tatmdk",
+      "name": "tatmdk",
+      "id": "6839aeba1fbc443a05efd1fd",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/perm_motoviliha",
+      "name": "perm_motoviliha",
+      "id": "683d9c78c77442e505c53f04",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/tmn999",
+      "name": "tmn999",
+      "id": "6835e9d998e52c063f7fa0dd",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/rostov_rnd",
+      "name": "rostov_rnd",
+      "id": "683ef9e4c77442e505e505cb",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/permlife59",
+      "name": "permlife59",
+      "id": "683d9d95c77442e505c541ae",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/topsmi16",
+      "name": "topsmi16",
+      "id": "6839afaa1fbc443a05efd4b0",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/efirtv",
+      "name": "efirtv",
+      "id": "6839b0021fbc443a05efd4c5",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/rostovtypical",
+      "name": "rostovtypical",
+      "id": "683efa5ac77442e505e505f6",
+      "action": "deactivated",
+      "previousState": true
+    }
+  ],
+  "notFound": [],
+  "errors": []
+}

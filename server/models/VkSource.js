@@ -58,7 +58,7 @@ const VkSourceSchema = new mongoose.Schema({
   },
   checkFrequency: {
     type: Number,   // In minutes
-    default: 60     // Default: hourly
+    default: 30     // Default: every 30 minutes
   },
   postsToCheck: {
     type: Number,

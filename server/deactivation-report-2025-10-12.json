@@ -1,0 +1,394 @@
+{
+  "timestamp": "2025-10-12T15:46:13.052Z",
+  "mode": "real",
+  "stats": {
+    "total": 54,
+    "found": 54,
+    "alreadyInactive": 0,
+    "deactivated": 54,
+    "notFound": 0,
+    "errors": 0
+  },
+  "results": [
+    {
+      "url": "https://vk.com/ekaterinburg_news24",
+      "name": "ekaterinburg_news24",
+      "id": "683869c8accf0953b2e929be",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/podslushanovrostove",
+      "name": "podslushanovrostove",
+      "id": "683ef8cbc77442e505e44389",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/ninogorod",
+      "name": "ninogorod",
+      "id": "682af808e35d6a04c5ddd12b",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/mesto_nn_ph",
+      "name": "mesto_nn_ph",
+      "id": "682af7efe35d6a04c5ddd0f9",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/exclusive_tyumen",
+      "name": "exclusive_tyumen",
+      "id": "6835aa0e72bb3dea4af3c362",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/rbc.tyumen",
+      "name": "rbc.tyumen",
+      "id": "6835aa3e72bb3dea4af3c387",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/aifzapsib",
+      "name": "aifzapsib",
+      "id": "6835aa2e72bb3dea4af3c37e",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/zhestnn",
+      "name": "zhestnn",
+      "id": "682af7dde35d6a04c5ddd0e6",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/tyumenactiv",
+      "name": "tyumenactiv",
+      "id": "6835aa2272bb3dea4af3c370",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/vgoroden",
+      "name": "vgoroden",
+      "id": "682af767e35d6a04c5ddd03b",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/verkhniyepecherynn",
+      "name": "verkhniyepecherynn",
+      "id": "682aed98e35d6a04c5ddc6d0",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/vremyan",
+      "name": "vremyan",
+      "id": "682af75fe35d6a04c5ddd034",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/vsluh_ru",
+      "name": "vsluh_ru",
+      "id": "6835aa0372bb3dea4af3c35b",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/agt72",
+      "name": "agt72",
+      "id": "6835aa1972bb3dea4af3c369",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/publicnewsnn",
+      "name": "publicnewsnn",
+      "id": "682af754e35d6a04c5ddd02b",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/zhest_rostov_61",
+      "name": "zhest_rostov_61",
+      "id": "683efc63c77442e505e50917",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/temutyumeni",
+      "name": "temutyumeni",
+      "id": "6835a9e172bb3dea4af3c34d",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/rayontyumenskiy",
+      "name": "rayontyumenskiy",
+      "id": "6835a9eb72bb3dea4af3c354",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/mash.iptash",
+      "name": "mash.iptash",
+      "id": "6839b4431fbc443a05f0582e",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/tyumentimes",
+      "name": "tyumentimes",
+      "id": "6835a9d272bb3dea4af3c346",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/eveningkazan",
+      "name": "eveningkazan",
+      "id": "6839b46d1fbc443a05f05843",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/rostovonline61",
+      "name": "rostovonline61",
+      "id": "683efbe9c77442e505e50661",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/vkyrse_nn",
+      "name": "vkyrse_nn",
+      "id": "682af6efe35d6a04c5ddcfe3",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/don_mash",
+      "name": "don_mash",
+      "id": "683efbc7c77442e505e5064c",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/rostov_zoo_official",
+      "name": "rostov_zoo_official",
+      "id": "683efba7c77442e505e50637",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/rnd_in_todays",
+      "name": "rnd_in_todays",
+      "id": "683efb40c77442e505e5060d",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/permliv",
+      "name": "permliv",
+      "id": "683da652c77442e505c5e2d4",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/novosibirsk_novostnoy",
+      "name": "novosibirsk_novostnoy",
+      "id": "68388a8daccf0953b2eafde0",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/nsk24",
+      "name": "nsk24",
+      "id": "68388a60accf0953b2eafdcb",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/tmnourhome",
+      "name": "tmnourhome",
+      "id": "6835ec5898e52c063f7fa5c4",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/perm.phone.barter",
+      "name": "perm.phone.barter",
+      "id": "683da5fdc77442e505c5e2be",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/incident63",
+      "name": "incident63",
+      "id": "683ef645c77442e505e442ca",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/nskpubl",
+      "name": "nskpubl",
+      "id": "68388955accf0953b2eafb7d",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/66ekbnews",
+      "name": "66ekbnews",
+      "id": "68386c16accf0953b2e92ddb",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/rus_crime_yekaterinburg",
+      "name": "rus_crime_yekaterinburg",
+      "id": "68386a97accf0953b2e929fd",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/news_nnov",
+      "name": "news_nnov",
+      "id": "682af6b4e35d6a04c5ddcfcb",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/nsktv_ru",
+      "name": "nsktv_ru",
+      "id": "68388a00accf0953b2eafbbc",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/perehvat_kazan",
+      "name": "perehvat_kazan",
+      "id": "6839b3451fbc443a05f05803",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/nijniy_novgorod",
+      "name": "nijniy_novgorod",
+      "id": "682af5c0e35d6a04c5ddcda2",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/tyumenskie_ru",
+      "name": "tyumenskie_ru",
+      "id": "6835a9b872bb3dea4af3c338",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/kzn_express",
+      "name": "kzn_express",
+      "id": "6839b2ba1fbc443a05efd531",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/kudagokzn",
+      "name": "kudagokzn",
+      "id": "6839b2461fbc443a05efd507",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/zloy__ekb",
+      "name": "zloy__ekb",
+      "id": "68386a61accf0953b2e929e8",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/moygorodkazan",
+      "name": "moygorodkazan",
+      "id": "6839b1a81fbc443a05efd4f1",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/v_gorode_ekb",
+      "name": "v_gorode_ekb",
+      "id": "6838691baccf0953b2e92714",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/chp_159perm",
+      "name": "chp_159perm",
+      "id": "683da3fac77442e505c5e268",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/sverdlovskekb",
+      "name": "sverdlovskekb",
+      "id": "683868e9accf0953b2e926ff",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/ekb_real",
+      "name": "ekb_real",
+      "id": "68386856accf0953b2e8cb17",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/chs_tmn",
+      "name": "chs_tmn",
+      "id": "6835a9a872bb3dea4af3c331",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/otyumen",
+      "name": "otyumen",
+      "id": "6835eb2d98e52c063f7fa35c",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/perminfovk",
+      "name": "perminfovk",
+      "id": "683da31bc77442e505c5dfcf",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/tperm",
+      "name": "tperm",
+      "id": "683da2adc77442e505c5dfba",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/tyumenonline_72",
+      "name": "tyumenonline_72",
+      "id": "6835a99472bb3dea4af3c327",
+      "action": "deactivated",
+      "previousState": true
+    },
+    {
+      "url": "https://vk.com/podsluh_tumen",
+      "name": "podsluh_tumen",
+      "id": "6835e94b98e52c063f7f9e26",
+      "action": "deactivated",
+      "previousState": true
+    }
+  ],
+  "notFound": [],
+  "errors": []
+}
