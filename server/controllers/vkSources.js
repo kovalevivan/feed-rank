@@ -10,7 +10,12 @@ const Post = require('../models/Post');
 // Get all VK sources
 router.get('/', async (req, res) => {
   try {
-    const sources = await VkSource.find()
+    // По умолчанию показываем только активные группы
+    // Можно запросить все группы с параметром ?includeInactive=true
+    const includeInactive = req.query.includeInactive === 'true';
+    const filter = includeInactive ? {} : { active: { $ne: false } };
+    
+    const sources = await VkSource.find(filter)
       .sort({ name: 1 });
     
     res.json(sources);

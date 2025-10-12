@@ -29,3 +29,16 @@
 /server/*THRESHOLD*.md
 /server/*THRESHOLD*.txt
 /server/check-*.js
+/server/analyze-vk-groups.js
+/server/show-groups-to-remove.js
+/server/create-detailed-removal-report.js
+/server/create-phased-removal.js
+/server/groups-to-remove*.txt
+/server/groups-to-remove*.csv
+/server/GROUPS_TO_REMOVE.md
+/server/DETAILED_REMOVAL_REPORT.md
+/server/PHASE*.csv
+/server/PHASE*.txt
+/server/PHASED_REMOVAL_SUMMARY.txt
+/server/vk-groups-analysis.json
+/server/vk-*-analysis*.txt
