@@ -27,13 +27,16 @@ File: `client/src/components/sources/SourceForm.js`
 - ❌ Posts to Check - now fixed at 50 posts
 - ❌ Experimental View Tracking toggle
 - ❌ All experimental features section
+- ❌ Threshold Statistics display
+- ❌ Advanced Threshold Calculator
+- ❌ Statistical charts and detailed analytics
 
 **Kept in UI:**
 - ✅ Source Name (VK group)
 - ✅ Threshold Type (Auto/Manual)
-- ✅ Manual Threshold value
+- ✅ Manual Threshold value (for manual mode)
+- ✅ Current Threshold display (for auto mode)
 - ✅ Active toggle
-- ✅ Advanced Threshold Calculator
 
 ### 4. Threshold Recalculation ✅
 Recalculated thresholds for all 156 active VK groups:
@@ -66,4 +69,17 @@ All VK sources now automatically use:
 - Threshold calculation: **statistical (mean + 1.5×SD)** for auto mode
 
 No manual configuration needed - the system uses optimal defaults.
+
+## Code Cleanup
+**Removed from frontend:**
+- `ThresholdStats` component (127 lines)
+- `AdvancedThresholdCalculator` component (230 lines)
+- `formatNumber` helper function
+- Unused MUI imports: Accordion, AccordionSummary, AccordionDetails, Card, CardContent, Grid, Slider, Alert, Tooltip, Table components
+- Unused icons: ExpandMoreIcon, RefreshIcon, ShowChartIcon, SettingsIcon
+- Unused Redux actions: calculateThresholdAdvanced, getThresholdStats
+- Handler functions: handleCalculateThreshold, handleThresholdMethodChange
+
+**Total code reduction:** ~480 lines removed from SourceForm.js
+**Bundle size reduction:** ~10.6 KB (243 KB → 232 KB gzipped)
 
