@@ -233,18 +233,6 @@ const SourcesList = () => {
                   {translate('Threshold')}{renderSortIndicator('calculatedThreshold')}
                 </TableCell>
                 <TableCell 
-                  onClick={() => handleSort('checkFrequency')} 
-                  style={{ cursor: 'pointer' }}
-                >
-                  {translate('Check Frequency')}{renderSortIndicator('checkFrequency')}
-                </TableCell>
-                <TableCell 
-                  onClick={() => handleSort('postsToCheck')} 
-                  style={{ cursor: 'pointer' }}
-                >
-                  {translate('Posts to Check')}{renderSortIndicator('postsToCheck')}
-                </TableCell>
-                <TableCell 
                   onClick={() => handleSort('lastChecked')} 
                   style={{ cursor: 'pointer' }}
                 >
@@ -262,13 +250,13 @@ const SourcesList = () => {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} align="center">
+                  <TableCell colSpan={5} align="center">
                     <CircularProgress />
                   </TableCell>
                 </TableRow>
               ) : filteredSources.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} align="center">
+                  <TableCell colSpan={5} align="center">
                     {translate('No VK sources found')}
                   </TableCell>
                 </TableRow>
@@ -304,14 +292,6 @@ const SourcesList = () => {
                         {translate('views')}
                       </Box>
                     </TableCell>
-                    <TableCell>
-                      {source.checkFrequency === 60
-                        ? translate('Hourly')
-                        : source.checkFrequency < 60
-                        ? `${translate('Every')} ${source.checkFrequency} ${translate('minutes')}`
-                        : `${translate('Every')} ${source.checkFrequency / 60} ${translate('hours')}`}
-                    </TableCell>
-                    <TableCell>{source.postsToCheck}</TableCell>
                     <TableCell>{formatDate(source.lastChecked)}</TableCell>
                     <TableCell>
                       <Chip
