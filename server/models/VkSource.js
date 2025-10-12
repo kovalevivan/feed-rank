@@ -44,6 +44,12 @@ const VkSourceSchema = new mongoose.Schema({
     enum: ['average', 'statistical', 'percentile'],
     default: 'percentile'
   },
+  customPercentile: {
+    type: Number,
+    default: 90,        // Default: 90th percentile (top 10%)
+    min: 50,            // Minimum: 50th percentile (top 50%)
+    max: 99             // Maximum: 99th percentile (top 1%)
+  },
   statisticalMultiplier: {
     type: Number,
     default: 1.5

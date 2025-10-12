@@ -497,8 +497,8 @@ const updateSourceThreshold = async (sourceId, thresholdMethod = 'percentile', p
     
     // Select calculation method
     if (thresholdMethod === 'percentile') {
-      // Percentile method: top 10% by default (p90)
-      const percentile = param || 90;
+      // Percentile method: use customPercentile if set, otherwise use param or default (90)
+      const percentile = param || source.customPercentile || 90;
       calculatedThreshold = calculatePercentileThreshold(posts, percentile);
       source.statisticalMultiplier = null; // Not applicable
       console.log(`📊 Using percentile method: p${percentile}`);

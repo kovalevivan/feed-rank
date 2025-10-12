@@ -7,12 +7,7 @@ import {
   Typography,
   TextField,
   Button,
-  FormControl,
-  FormLabel,
-  RadioGroup,
   FormControlLabel,
-  Radio,
-  InputAdornment,
   CircularProgress,
   Divider,
   Switch,
@@ -27,11 +22,12 @@ import {
   createVkSource,
   updateVkSource,
   clearVkSourcesError,
-  clearVkSourceSuccess,
+    clearVkSourceSuccess,
   clearCurrentVkSource
 } from '../../redux/slices/vkSourcesSlice';
 import ApiErrorAlert from '../common/ApiErrorAlert';
 import { useTranslation } from '../../translations/TranslationContext';
+import PercentileSlider from './PercentileSlider';
 
 const SourceForm = () => {
   const { id } = useParams();
@@ -51,7 +47,8 @@ const SourceForm = () => {
   const [formData, setFormData] = useState({
     name: '',
     thresholdType: 'auto',
-    thresholdMethod: 'statistical',
+    thresholdMethod: 'percentile',
+    customPercentile: 90,
     manualThreshold: 1000,
     checkFrequency: 60,
     postsToCheck: 50,
@@ -89,7 +86,8 @@ const SourceForm = () => {
       setFormData({
         name: vkSource.name || '',
         thresholdType: vkSource.thresholdType || 'auto',
-        thresholdMethod: vkSource.thresholdMethod || 'statistical',
+        thresholdMethod: vkSource.thresholdMethod || 'percentile',
+        customPercentile: vkSource.customPercentile || 90,
         manualThreshold: vkSource.manualThreshold || 1000,
         checkFrequency: vkSource.checkFrequency || 60,
         postsToCheck: vkSource.postsToCheck || 50,
@@ -138,6 +136,7 @@ const SourceForm = () => {
     
     const sourceData = {
       ...formData,
+      customPercentile: parseInt(formData.customPercentile),
       manualThreshold: parseInt(formData.manualThreshold),
       checkFrequency: parseInt(formData.checkFrequency),
       postsToCheck: parseInt(formData.postsToCheck)
@@ -194,67 +193,17 @@ const SourceForm = () => {
           
           <Divider sx={{ my: 3 }} />
           
-          <Typography variant="h6" gutterBottom>
-            {translate('Viral Threshold Settings')}
-          </Typography>
-          
-          <FormControl component="fieldset" sx={{ mb: 2 }}>
-            <FormLabel component="legend">{translate('Threshold Type')}</FormLabel>
-            <RadioGroup
-              name="thresholdType"
-              value={formData.thresholdType}
-              onChange={handleRadioChange}
-              row
-            >
-              <FormControlLabel 
-                value="auto" 
-                control={<Radio />} 
-                label={translate('Auto (calculated from data)')}
-              />
-              <FormControlLabel 
-                value="manual" 
-                control={<Radio />} 
-                label={translate('Manual (set specific threshold)')}
-              />
-            </RadioGroup>
-          </FormControl>
-          
-          {formData.thresholdType === 'manual' && (
-            <TextField
-              fullWidth
-              label={translate('Viral Threshold')}
-              name="manualThreshold"
-              type="number"
-              value={formData.manualThreshold}
-              onChange={handleChange}
-              margin="normal"
-              required
-              InputProps={{
-                endAdornment: <InputAdornment position="end">{translate('views')}</InputAdornment>,
-                inputProps: { min: 1 }
-              }}
-              helperText={translate('Posts with more views than this threshold will be considered viral')}
-            />
-          )}
-          
-          {isEditMode && formData.thresholdType === 'auto' && (
-            <Box mt={2}>
-              <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
-                <Chip 
-                  label={`${translate('Current Threshold')}: ${(vkSource?.calculatedThreshold || 0).toLocaleString()} ${translate('views')}`}
-                  color="primary"
-                  variant="outlined"
-                  size="medium"
-                />
-              </Box>
-              
-              {vkSource?.lastPostsData?.lastAnalysisDate && (
-                <Typography variant="caption" display="block" mt={1} color="text.secondary">
-                  {translate('Last calculated')}: {new Date(vkSource.lastPostsData.lastAnalysisDate).toLocaleString()}
-                </Typography>
-              )}
-            </Box>
-          )}
+          <PercentileSlider
+            sourceId={id}
+            value={formData.customPercentile}
+            onChange={(newValue) => {
+              setFormData({
+                ...formData,
+                customPercentile: newValue
+              });
+            }}
+            disabled={loading}
+          />
           
           <Divider sx={{ my: 3 }} />
           

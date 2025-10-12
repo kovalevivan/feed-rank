@@ -47,7 +47,8 @@ router.post(
   [
     body('name').not().isEmpty().withMessage('Name is required'),
     body('thresholdType').isIn(['auto', 'manual']).withMessage('Invalid threshold type'),
-    body('thresholdMethod').optional().isIn(['average', 'statistical']).withMessage('Invalid threshold method'),
+    body('thresholdMethod').optional().isIn(['average', 'statistical', 'percentile']).withMessage('Invalid threshold method'),
+    body('customPercentile').optional().isInt({ min: 50, max: 99 }).withMessage('Custom percentile must be between 50 and 99'),
     body('manualThreshold').if(body('thresholdType').equals('manual')).isInt({ min: 1 }).withMessage('Manual threshold must be a positive number'),
     body('checkFrequency').isInt({ min: 5 }).withMessage('Check frequency must be at least 5 minutes'),
     body('postsToCheck').optional().isInt({ min: 10, max: 100 }).withMessage('Posts to check must be between 10 and 100')
@@ -137,7 +138,8 @@ router.put(
   [
     body('name').optional(),
     body('thresholdType').optional().isIn(['auto', 'manual']).withMessage('Invalid threshold type'),
-    body('thresholdMethod').optional().isIn(['average', 'statistical']).withMessage('Invalid threshold method'),
+    body('thresholdMethod').optional().isIn(['average', 'statistical', 'percentile']).withMessage('Invalid threshold method'),
+    body('customPercentile').optional().isInt({ min: 50, max: 99 }).withMessage('Custom percentile must be between 50 and 99'),
     body('manualThreshold').if(body('thresholdType').equals('manual')).isInt({ min: 1 }).withMessage('Manual threshold must be a positive number'),
     body('checkFrequency').optional().isInt({ min: 5 }).withMessage('Check frequency must be at least 5 minutes'),
     body('postsToCheck').optional().isInt({ min: 10, max: 100 }).withMessage('Posts to check must be between 10 and 100'),
@@ -164,7 +166,8 @@ router.put(
       const { 
         name, 
         thresholdType, 
-        thresholdMethod, 
+        thresholdMethod,
+        customPercentile,
         manualThreshold, 
         checkFrequency, 
         postsToCheck, 
@@ -226,6 +229,20 @@ router.put(
         }
       } else if (source.thresholdType === 'manual' && manualThreshold !== undefined) {
         source.manualThreshold = manualThreshold;
+      }
+      
+      // Update customPercentile and recalculate threshold if changed
+      if (customPercentile !== undefined && customPercentile !== source.customPercentile) {
+        source.customPercentile = customPercentile;
+        
+        // If auto threshold with percentile method, recalculate with new percentile
+        if (source.thresholdType === 'auto' && source.thresholdMethod === 'percentile') {
+          console.log(`Custom percentile changed to ${customPercentile} for source ${source.name}, recalculating threshold...`);
+          // Schedule recalculation (don't await) - it will use source.customPercentile
+          vkService.updateSourceThreshold(source._id, 'percentile').catch(err => {
+            console.error(`Error recalculating threshold for source ${source._id}:`, err);
+          });
+        }
       }
       
       if (checkFrequency !== undefined) {
@@ -581,6 +598,66 @@ router.get('/:id/threshold-stats', async (req, res) => {
     res.json(stats);
   } catch (error) {
     console.error(`Error getting threshold stats for VK source ${req.params.id}:`, error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get percentile statistics for a VK source (for UI slider)
+router.get('/:id/percentile-stats', async (req, res) => {
+  try {
+    const source = await VkSource.findById(req.params.id);
+    
+    if (!source) {
+      return res.status(404).json({ message: 'VK source not found' });
+    }
+    
+    // Fetch posts from last 7 days
+    const posts = await vkService.fetchPostsInTimeWindow(source.groupId, 7, 30, 200);
+    
+    if (posts.length === 0) {
+      return res.status(200).json({
+        available: false,
+        message: 'Not enough data to calculate percentile statistics',
+        postsCount: 0
+      });
+    }
+    
+    // Calculate detailed stats
+    const detailedStats = vkService.calculateDetailedStats(posts);
+    
+    // Calculate thresholds and viral post counts for different percentiles
+    const percentiles = [50, 60, 70, 75, 80, 85, 90, 92, 94, 95, 97];
+    const percentileData = percentiles.map(p => {
+      const threshold = vkService.calculatePercentileThreshold(posts, p);
+      const viralCount = posts.filter(post => (post.views?.count || 0) > threshold).length;
+      const viralPercent = ((viralCount / posts.length) * 100).toFixed(1);
+      
+      // Estimate posts per week (based on current activity)
+      const daysAnalyzed = 7; // We analyze 7 days of data
+      const postsPerWeek = Math.round((viralCount / daysAnalyzed) * 7);
+      
+      return {
+        percentile: p,
+        threshold,
+        viralCount,
+        viralPercent: parseFloat(viralPercent),
+        postsPerWeek
+      };
+    });
+    
+    res.json({
+      available: true,
+      groupName: source.name,
+      postsAnalyzed: posts.length,
+      daysAnalyzed: 7,
+      currentPercentile: source.lastPostsData?.percentileUsed || 90,
+      currentThreshold: source.calculatedThreshold,
+      averageViews: Math.round(detailedStats.mean),
+      medianViews: detailedStats.median,
+      percentiles: percentileData
+    });
+  } catch (error) {
+    console.error(`Error getting percentile stats for VK source ${req.params.id}:`, error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
