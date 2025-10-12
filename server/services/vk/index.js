@@ -434,27 +434,20 @@ const calculateStatisticalThreshold = (posts, multiplier) => {
 const calculatePercentileThreshold = (posts, percentile = 90) => {
   if (!posts || posts.length === 0) return 0;
   
-  // Get detailed statistics (includes percentiles)
-  const stats = calculateDetailedStats(posts);
+  // Extract view counts and sort in ascending order
+  const viewCounts = posts
+    .map(post => post.views?.count || 0)
+    .sort((a, b) => a - b);
   
-  // Use pre-calculated percentiles or interpolate
-  if (percentile === 75) return stats.percentiles.p75;
-  if (percentile === 90) return stats.percentiles.p90;
-  if (percentile === 95) return stats.percentiles.p95;
-  if (percentile === 99) return stats.percentiles.p99;
+  if (viewCounts.length === 0) return 0;
   
-  // Interpolate for other percentiles (e.g., 80, 85)
-  if (percentile >= 75 && percentile < 90) {
-    const ratio = (percentile - 75) / (90 - 75);
-    return Math.round(stats.percentiles.p75 + (stats.percentiles.p90 - stats.percentiles.p75) * ratio);
-  }
-  if (percentile >= 90 && percentile < 95) {
-    const ratio = (percentile - 90) / (95 - 90);
-    return Math.round(stats.percentiles.p90 + (stats.percentiles.p95 - stats.percentiles.p90) * ratio);
-  }
+  // Calculate percentile index
+  // For percentile P, we want the value where P% of data is below and (100-P)% is above
+  // So for p90, we want 90% of data below = index at 10% from the top
+  const index = Math.ceil(viewCounts.length * (percentile / 100)) - 1;
+  const clampedIndex = Math.max(0, Math.min(viewCounts.length - 1, index));
   
-  // Default to p85
-  return Math.round(stats.percentiles.p75 + (stats.percentiles.p90 - stats.percentiles.p75) * 0.625);
+  return viewCounts[clampedIndex];
 };
 
 /**
