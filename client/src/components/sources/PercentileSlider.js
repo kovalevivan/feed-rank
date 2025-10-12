@@ -73,6 +73,45 @@ const PercentileSlider = ({ sourceId, value, onChange, disabled = false }) => {
     // Find closest by linear interpolation
     const sorted = [...stats.percentiles].sort((a, b) => a.percentile - b.percentile);
     
+    // Handle values below minimum
+    if (percentile < sorted[0].percentile) {
+      // Extrapolate using first two points
+      if (sorted.length >= 2) {
+        const p1 = sorted[0];
+        const p2 = sorted[1];
+        const ratio = (percentile - p1.percentile) / (p2.percentile - p1.percentile);
+        
+        return {
+          percentile,
+          threshold: Math.max(0, Math.round(p1.threshold + (p2.threshold - p1.threshold) * ratio)),
+          viralCount: Math.max(0, Math.round(p1.viralCount + (p2.viralCount - p1.viralCount) * ratio)),
+          viralPercent: Math.max(0, parseFloat((p1.viralPercent + (p2.viralPercent - p1.viralPercent) * ratio).toFixed(1))),
+          postsPerWeek: Math.max(0, Math.round(p1.postsPerWeek + (p2.postsPerWeek - p1.postsPerWeek) * ratio))
+        };
+      }
+      return sorted[0];
+    }
+    
+    // Handle values above maximum
+    if (percentile > sorted[sorted.length - 1].percentile) {
+      // Extrapolate using last two points
+      if (sorted.length >= 2) {
+        const p1 = sorted[sorted.length - 2];
+        const p2 = sorted[sorted.length - 1];
+        const ratio = (percentile - p1.percentile) / (p2.percentile - p1.percentile);
+        
+        return {
+          percentile,
+          threshold: Math.max(0, Math.round(p1.threshold + (p2.threshold - p1.threshold) * ratio)),
+          viralCount: Math.max(0, Math.round(p1.viralCount + (p2.viralCount - p1.viralCount) * ratio)),
+          viralPercent: Math.max(0, parseFloat((p1.viralPercent + (p2.viralPercent - p1.viralPercent) * ratio).toFixed(1))),
+          postsPerWeek: Math.max(0, Math.round(p1.postsPerWeek + (p2.postsPerWeek - p1.postsPerWeek) * ratio))
+        };
+      }
+      return sorted[sorted.length - 1];
+    }
+    
+    // Interpolate between two points
     for (let i = 0; i < sorted.length - 1; i++) {
       if (percentile >= sorted[i].percentile && percentile <= sorted[i + 1].percentile) {
         const lower = sorted[i];
@@ -89,6 +128,7 @@ const PercentileSlider = ({ sourceId, value, onChange, disabled = false }) => {
       }
     }
     
+    // Fallback (should never reach here)
     return sorted[sorted.length - 1];
   };
 
