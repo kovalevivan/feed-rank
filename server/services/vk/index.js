@@ -11,12 +11,25 @@ let vk;
 
 /**
  * Automatically forwards a viral post to all mapped Telegram channels
+ * Only forwards posts that are less than 48 hours old
  * @param {Object} post - Post document
  * @param {Object} source - VK source document
  * @returns {Promise<Object>} - Forwarding results
  */
 const autoForwardViralPost = async (post, source) => {
   try {
+    // Check post age - don't forward posts older than 48 hours
+    if (post.publishedAt) {
+      const postAge = Date.now() - new Date(post.publishedAt).getTime();
+      const maxAge = 48 * 60 * 60 * 1000; // 48 hours in milliseconds
+      
+      if (postAge > maxAge) {
+        const ageHours = Math.round(postAge / (60 * 60 * 1000));
+        console.log(`⏭️  Skipping viral post ${post.postId} - too old (${ageHours}h, limit: 48h)`);
+        return { forwarded: 0, errors: 0, skipped: true, reason: 'too_old' };
+      }
+    }
+    
     // Import telegramService here to avoid circular dependency
     const telegramService = require('../telegram');
     
