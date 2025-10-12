@@ -6,3 +6,26 @@
 /feed-rank.iml
 /client/node_modules/
 /server/data/
+
+# VK Experiment data files and outputs
+/server/services/vk-experiment/data/
+/server/services/vk-experiment/data-v2/
+/server/services/vk-experiment/visualizations/
+/server/services/vk-experiment/quality_analysis/
+/server/services/vk-experiment/data_analysis/
+/server/services/vk-experiment/group_normalized_analysis/
+/server/services/vk-experiment/*_dashboard/
+/server/services/vk-experiment/node_modules/
+/server/services/vk-experiment/package-lock.json
+/server/services/vk-experiment/*.md
+/server/services/vk-experiment/*.py
+
+# Experiment logs
+/logs/experiment*.log
+
+# Temporary analysis scripts
+/server/*threshold*.js
+/server/*threshold*.json
+/server/*THRESHOLD*.md
+/server/*THRESHOLD*.txt
+/server/check-*.js
