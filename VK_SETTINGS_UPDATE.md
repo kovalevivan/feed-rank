@@ -20,8 +20,8 @@ File: `server/models/VkSource.js`
 - Set `postsToCheck` default to **50 posts**
 
 ### 3. UI Simplified ✅
-File: `client/src/components/sources/SourceForm.js`
 
+#### Form (SourceForm.js)
 **Removed UI controls for:**
 - ❌ Check Frequency (minutes) - now fixed at 30 min
 - ❌ Posts to Check - now fixed at 50 posts
@@ -31,12 +31,24 @@ File: `client/src/components/sources/SourceForm.js`
 - ❌ Advanced Threshold Calculator
 - ❌ Statistical charts and detailed analytics
 
-**Kept in UI:**
+**Kept in form:**
 - ✅ Source Name (VK group)
 - ✅ Threshold Type (Auto/Manual)
 - ✅ Manual Threshold value (for manual mode)
 - ✅ Current Threshold display (for auto mode)
 - ✅ Active toggle
+
+#### List (SourcesList.js)
+**Removed columns:**
+- ❌ Check Frequency column
+- ❌ Posts to Check column
+
+**Kept in list:**
+- ✅ Source Name
+- ✅ Threshold (with Auto/Manual badge)
+- ✅ Last Check
+- ✅ Status (Active/Inactive)
+- ✅ Actions (Calculate, Process, Edit, Delete)
 
 ### 4. Threshold Recalculation ✅
 Recalculated thresholds for all 156 active VK groups:
