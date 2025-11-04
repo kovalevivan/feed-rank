@@ -58,16 +58,43 @@ const autoForwardViralPost = async (post, source) => {
 // Telegram Client for reading user subscriptions
 let client;
 let isConnected = false;
+let isInitializing = false;
+let messageListenerSetup = false;
 
 /**
  * Initialize Telegram Client with user credentials
  */
 const init = async () => {
+  // Prevent multiple simultaneous initializations
+  if (isInitializing) {
+    console.log('⏳ Initialization already in progress, skipping...');
+    return;
+  }
+  
   try {
+    isInitializing = true;
+    
     if (!process.env.TELEGRAM_API_ID || !process.env.TELEGRAM_API_HASH) {
       console.warn('Telegram API credentials not set. User channel reading will not work.');
       console.log('To enable reading from subscribed channels, set TELEGRAM_API_ID and TELEGRAM_API_HASH');
       return;
+    }
+    
+    // Close old client if exists to prevent memory leak
+    if (client) {
+      try {
+        console.log('🔄 Closing old Telegram client...');
+        await client.disconnect();
+        client = null;
+        isConnected = false;
+        messageListenerSetup = false; // Reset listener flag
+      } catch (disconnectError) {
+        console.warn('Warning disconnecting old client:', disconnectError.message);
+        // Continue with new initialization anyway
+        client = null;
+        isConnected = false;
+        messageListenerSetup = false;
+      }
     }
     
     const apiId = parseInt(process.env.TELEGRAM_API_ID);
@@ -138,6 +165,8 @@ const init = async () => {
     
     // Set connected to false on error
     isConnected = false;
+  } finally {
+    isInitializing = false;
   }
 };
 
@@ -183,6 +212,12 @@ setInterval(async () => {
 const setupMessageListener = () => {
   if (!client || !isConnected) return;
   
+  // Prevent setting up multiple listeners (old client cleanup handles old listeners)
+  if (messageListenerSetup) {
+    console.log('📻 Message listener already set up');
+    return;
+  }
+  
   client.addEventHandler(async (event) => {
     try {
       const message = event.message;
@@ -213,6 +248,7 @@ const setupMessageListener = () => {
     }
   }, new NewMessage({}));
   
+  messageListenerSetup = true;
   console.log('📻 Real-time message listener set up');
 };
 
