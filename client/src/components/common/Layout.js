@@ -94,13 +94,13 @@ const Layout = () => {
   
   // Navigation items
   const navItems = [
-    { text: translate('Dashboard'), icon: <DashboardIcon />, path: '/' },
-    { text: translate('Sources'), icon: <SourceIcon />, path: '/sources' },
-    { text: translate('Source Groups'), icon: <SourceIcon />, path: '/source-groups' },
-    { text: translate('Telegram Channels'), icon: <SendIcon />, path: '/channels' },
-    { text: translate('Mappings'), icon: <LinkIcon />, path: '/mappings' },
-    { text: translate('Analytics'), icon: <AnalyticsIcon />, path: '/analytics' },
-    { text: translate('Settings'), icon: <SettingsIcon />, path: '/settings' },
+    { text: translate('Dashboard'), icon: <DashboardIcon />, path: '/app' },
+    { text: translate('Sources'), icon: <SourceIcon />, path: '/app/sources' },
+    { text: translate('Source Groups'), icon: <SourceIcon />, path: '/app/source-groups' },
+    { text: translate('Telegram Channels'), icon: <SendIcon />, path: '/app/channels' },
+    { text: translate('Mappings'), icon: <LinkIcon />, path: '/app/mappings' },
+    { text: translate('Analytics'), icon: <AnalyticsIcon />, path: '/app/analytics' },
+    { text: translate('Settings'), icon: <SettingsIcon />, path: '/app/settings' },
   ];
   
   // Toggle drawer

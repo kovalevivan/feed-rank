@@ -11,6 +11,7 @@ import { TranslationProvider } from './translations/TranslationContext';
 // Components
 import Layout from './components/common/Layout';
 import PrivateRoute from './components/common/PrivateRoute';
+import LandingPage from './components/landing/LandingPage';
 
 // Pages
 import Dashboard from './components/dashboard/Dashboard';
@@ -75,12 +76,15 @@ function App() {
           <CssBaseline />
           <Router>
             <Routes>
+              {/* Landing Page */}
+              <Route path="/" element={<LandingPage />} />
+              
               {/* Auth Routes */}
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               
-              {/* Protected Routes */}
-              <Route path="/" element={<Layout />}>
+              {/* Protected Routes - Application */}
+              <Route path="/app" element={<Layout />}>
                 <Route index element={<PrivateRoute><Dashboard /></PrivateRoute>} />
                 
                 {/* Unified Sources Routes */}
@@ -117,10 +121,10 @@ function App() {
                 
                 {/* Analytics Route */}
                 <Route path="analytics" element={<PrivateRoute><Analytics /></PrivateRoute>} />
-                
-                {/* Catch all - redirect to dashboard */}
-                <Route path="*" element={<Navigate to="/" replace />} />
               </Route>
+              
+              {/* Catch all - redirect to landing */}
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Router>
         </TranslationProvider>

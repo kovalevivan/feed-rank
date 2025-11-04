@@ -32,7 +32,7 @@ const Login = () => {
   // Redirect if authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/');
+      navigate('/app');
     }
     
     return () => {
