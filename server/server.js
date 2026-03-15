@@ -133,6 +133,9 @@ app.use('/api/settings', require('./controllers/settings'));
 app.use('/api/vk-source-groups', require('./controllers/vkSourceGroups'));
 app.use('/api/source-groups', require('./controllers/sourceGroups'));
 app.use('/api/analytics', require('./controllers/analytics'));
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
 
 // Initialize services
 const vkService = require('./services/vk');
@@ -156,11 +159,21 @@ initializeServices();
 
 // Serve static assets in production
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../client/build')));
-  
-  app.get('*', (req, res) => {
-    res.sendFile(path.resolve(__dirname, '../client/build', 'index.html'));
-  });
+  const clientBuildPath = path.join(__dirname, '../client/build');
+  const clientIndexPath = path.resolve(clientBuildPath, 'index.html');
+
+  if (fs.existsSync(clientIndexPath)) {
+    app.use(express.static(clientBuildPath));
+
+    app.get('*', (req, res) => {
+      res.sendFile(clientIndexPath);
+    });
+  } else {
+    console.warn('Client build not found. Serving API only.');
+    app.get('/', (req, res) => {
+      res.json({ status: 'ok', mode: 'api-only' });
+    });
+  }
 }
 
 // Error handling middleware
