@@ -25,7 +25,8 @@ const init = () => {
     return;
   }
   
-  bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
+  // Polling is not required for server-side forwarding and can destabilize app runtimes.
+  bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false });
   
   // Register command handlers
   registerCommands();
