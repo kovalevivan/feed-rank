@@ -1,0 +1,8 @@
+{
+  "name": "feed-rank",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "start": "cd server && npm start"
+  }
+}
