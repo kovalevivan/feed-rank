@@ -63,14 +63,7 @@ const mongooseOptions = {
   replicaSet: undefined   // Explicitly disable replica set
 };
 
-// Make sure we're using the feedrank database
-let feedrankURI = mongoURI;
-if (!mongoURI.includes('/feedrank')) {
-  feedrankURI = mongoURI.replace(/\/[^?]+(\?.+)?$/, '/feedrank$1');
-  console.log('Ensuring connection to feedrank database');
-}
-
-mongoose.connect(feedrankURI, mongooseOptions)
+mongoose.connect(mongoURI, mongooseOptions)
   .then(() => {
     console.log('MongoDB connected successfully');
     
