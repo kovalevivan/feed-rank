@@ -4,20 +4,16 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { Provider } from 'react-redux';
 import store from './redux/store';
+import './api/axios';
 
 // Translation Provider
 import { TranslationProvider } from './translations/TranslationContext';
 
 // Components
 import Layout from './components/common/Layout';
-import PrivateRoute from './components/common/PrivateRoute';
-import LandingPage from './components/landing/LandingPage';
 
 // Pages
 import Dashboard from './components/dashboard/Dashboard';
-import Login from './components/auth/Login';
-import Register from './components/auth/Register';
-import SourcesList from './components/sources/SourcesList';
 import SourceForm from './components/sources/SourceForm';
 import UnifiedSourcesList from './components/sources/UnifiedSourcesList';
 import UnifiedSourceForm from './components/sources/UnifiedSourceForm';
@@ -76,55 +72,42 @@ function App() {
           <CssBaseline />
           <Router>
             <Routes>
-              {/* Landing Page */}
-              <Route path="/" element={<LandingPage />} />
-              
-              {/* Auth Routes */}
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
-              
-              {/* Protected Routes - Application */}
+              <Route path="/" element={<Navigate to="/app" replace />} />
+              <Route path="/login" element={<Navigate to="/app" replace />} />
+              <Route path="/register" element={<Navigate to="/app" replace />} />
+
               <Route path="/app" element={<Layout />}>
-                <Route index element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+                <Route index element={<Dashboard />} />
                 
-                {/* Unified Sources Routes */}
-                <Route path="sources" element={<PrivateRoute><UnifiedSourcesList /></PrivateRoute>} />
-                <Route path="sources/new" element={<PrivateRoute><UnifiedSourceForm /></PrivateRoute>} />
-                <Route path="sources/:id" element={<PrivateRoute><UnifiedSourceForm /></PrivateRoute>} />
+                <Route path="sources" element={<UnifiedSourcesList />} />
+                <Route path="sources/new" element={<UnifiedSourceForm />} />
+                <Route path="sources/:id" element={<UnifiedSourceForm />} />
                 
-                {/* VK Sources Routes (internal use only - no separate pages) */}
-                <Route path="vk-sources/new" element={<PrivateRoute><SourceForm /></PrivateRoute>} />
-                <Route path="vk-sources/:id" element={<PrivateRoute><SourceForm /></PrivateRoute>} />
+                <Route path="vk-sources/new" element={<SourceForm />} />
+                <Route path="vk-sources/:id" element={<SourceForm />} />
                 
-                {/* Source Groups Routes */}
-                <Route path="source-groups" element={<PrivateRoute><SourceGroupsList /></PrivateRoute>} />
-                <Route path="source-groups/new" element={<PrivateRoute><SourceGroupForm /></PrivateRoute>} />
-                <Route path="source-groups/:id" element={<PrivateRoute><SourceGroupForm /></PrivateRoute>} />
+                <Route path="source-groups" element={<SourceGroupsList />} />
+                <Route path="source-groups/new" element={<SourceGroupForm />} />
+                <Route path="source-groups/:id" element={<SourceGroupForm />} />
                 
-                {/* Channels Routes */}
-                <Route path="channels" element={<PrivateRoute><ChannelsList /></PrivateRoute>} />
-                <Route path="channels/new" element={<PrivateRoute><ChannelForm /></PrivateRoute>} />
-                <Route path="channels/:id" element={<PrivateRoute><ChannelForm /></PrivateRoute>} />
+                <Route path="channels" element={<ChannelsList />} />
+                <Route path="channels/new" element={<ChannelForm />} />
+                <Route path="channels/:id" element={<ChannelForm />} />
                 
-                {/* Telegram Sources Routes */}
-                <Route path="telegram-sources" element={<PrivateRoute><TelegramSourcesList /></PrivateRoute>} />
-                <Route path="telegram-sources/new" element={<PrivateRoute><TelegramSourceForm /></PrivateRoute>} />
-                <Route path="telegram-sources/:id" element={<PrivateRoute><TelegramSourceForm /></PrivateRoute>} />
+                <Route path="telegram-sources" element={<TelegramSourcesList />} />
+                <Route path="telegram-sources/new" element={<TelegramSourceForm />} />
+                <Route path="telegram-sources/:id" element={<TelegramSourceForm />} />
                 
-                {/* Mappings Routes */}
-                <Route path="mappings" element={<PrivateRoute><MappingsList /></PrivateRoute>} />
-                <Route path="mappings/new" element={<PrivateRoute><MappingForm /></PrivateRoute>} />
-                <Route path="mappings/:id" element={<PrivateRoute><MappingForm /></PrivateRoute>} />
+                <Route path="mappings" element={<MappingsList />} />
+                <Route path="mappings/new" element={<MappingForm />} />
+                <Route path="mappings/:id" element={<MappingForm />} />
                 
-                {/* Settings Route */}
-                <Route path="settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
+                <Route path="settings" element={<Settings />} />
                 
-                {/* Analytics Route */}
-                <Route path="analytics" element={<PrivateRoute><Analytics /></PrivateRoute>} />
+                <Route path="analytics" element={<Analytics />} />
               </Route>
               
-              {/* Catch all - redirect to landing */}
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<Navigate to="/app" replace />} />
             </Routes>
           </Router>
         </TranslationProvider>

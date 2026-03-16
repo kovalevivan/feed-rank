@@ -11,20 +11,8 @@ axios.defaults.baseURL = apiBaseUrl;
 // Add detailed request logging
 axios.interceptors.request.use(
   config => {
-    // Get token from localStorage
-    const token = localStorage.getItem('token');
-    
     console.log(`🔄 [Request] ${config.method.toUpperCase()} ${config.url}`, 
       config.data ? { data: config.data } : '');
-    
-    // If token exists, add it to x-auth-token header (not Authorization)
-    if (token) {
-      config.headers['x-auth-token'] = token;
-      console.log('🔑 Auth token added to request:', { token: token.substring(0, 15) + '...' });
-    } else {
-      console.warn('⚠️ No auth token found in localStorage');
-    }
-    
     return config;
   },
   error => {
@@ -46,18 +34,6 @@ axios.interceptors.response.use(
       data: error.response?.data,
       message: error.message
     });
-    
-    // Handle authentication errors
-    if (error.response && error.response.status === 401) {
-      // Clear token and redirect to login if there's an auth error
-      localStorage.removeItem('token');
-      
-      // Only redirect if not already on login page
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
-    }
-    
     return Promise.reject(error);
   }
 );
