@@ -6,6 +6,19 @@ const telegramSourcesService = require('../services/telegram/sources');
 const { updateSourceThreshold, getRecentPostsForAnalysis, calculateStatisticalThreshold, calculatePercentileThreshold } = require('../services/telegram/analytics');
 const mongoose = require('mongoose');
 
+const normalizeTelegramUsername = (value) => {
+  if (!value || typeof value !== 'string') {
+    return value;
+  }
+
+  const trimmed = value.trim();
+  const withoutProtocol = trimmed.replace(/^https?:\/\/?/i, '');
+  const withoutDomain = withoutProtocol.replace(/^t\.me\//i, '');
+  const withoutAt = withoutDomain.replace(/^@/, '');
+
+  return withoutAt;
+};
+
 // Get all Telegram sources
 router.get('/', async (req, res) => {
   try {
@@ -87,6 +100,8 @@ router.post(
         viralDetectionMetric, minReactionsForViral, minCommentsForViral, minForwardsForViral,
         reactionWeight, commentWeight, forwardWeight, thresholdMethod, statisticalMultiplier
       } = req.body;
+
+      username = normalizeTelegramUsername(username);
       
       // At least one of chatId or username must be provided
       if (!chatId && !username) {
@@ -351,7 +366,8 @@ router.delete('/:id', async (req, res) => {
 // Test connection to a Telegram source
 router.post('/test-connection', async (req, res) => {
   try {
-    const { chatId, username } = req.body;
+    const { chatId } = req.body;
+    const username = normalizeTelegramUsername(req.body.username);
     
     if (!chatId && !username) {
       return res.status(400).json({ message: 'Either chatId or username is required' });

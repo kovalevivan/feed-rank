@@ -61,6 +61,8 @@ const TelegramSourceForm = () => {
   const [multiplierError, setMultiplierError] = useState('');
   const [thresholdCalculated, setThresholdCalculated] = useState(false);
 
+  const hasSourceIdentifier = Boolean(formData.chatId || formData.username);
+
   // Load subscriptions on component mount
   useEffect(() => {
     const loadSubscriptions = async () => {
@@ -110,7 +112,16 @@ const TelegramSourceForm = () => {
   }, [id, isEditing, subscriptions]);
 
   const handleInputChange = (field) => (event) => {
-    const value = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
+    let value = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
+
+    if (field === 'username' && typeof value === 'string') {
+      value = value
+        .trim()
+        .replace(/^https?:\/\/?/i, '')
+        .replace(/^t\.me\//i, '')
+        .replace(/^@/, '');
+    }
+
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -212,13 +223,8 @@ const TelegramSourceForm = () => {
 
     try {
       // Validate required fields
-      if (!formData.name || !formData.chatId) {
-        setError('Выберите канал/группу и укажите название источника');
-        return;
-      }
-      
-      if (!selectedSubscription && !isEditing) {
-        setError('Выберите канал или группу из списка подписок');
+      if (!formData.name || !hasSourceIdentifier) {
+        setError('Укажите название источника и username или chat ID канала');
         return;
       }
 
@@ -325,6 +331,38 @@ const TelegramSourceForm = () => {
                 />
               </Grid>
 
+              {!isEditing && (
+                <>
+                  <Grid item xs={12}>
+                    <Alert severity="info">
+                      Можно либо выбрать канал из подписок Telegram Client API, либо ввести публичный username / chat ID вручную.
+                    </Alert>
+                  </Grid>
+
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      label="Username канала"
+                      value={formData.username}
+                      onChange={handleInputChange('username')}
+                      fullWidth
+                      placeholder="moynizhny, @moynizhny или https://t.me/moynizhny"
+                      helperText="Для публичных каналов можно указывать username или ссылку t.me"
+                    />
+                  </Grid>
+
+                  <Grid item xs={12} md={6}>
+                    <TextField
+                      label="Chat ID"
+                      value={formData.chatId}
+                      onChange={handleInputChange('chatId')}
+                      fullWidth
+                      placeholder="-1001234567890"
+                      helperText="Необязательно, если указан публичный username"
+                    />
+                  </Grid>
+                </>
+              )}
+
               {/* Selected Channel Information - Read Only */}
               {selectedSubscription && (
                 <Grid item xs={12}>
@@ -391,13 +429,13 @@ const TelegramSourceForm = () => {
               {!selectedSubscription && !isEditing && (
                 <Grid item xs={12}>
                   <Alert severity="info" sx={{ mt: 2 }}>
-                    Для создания источника необходимо выбрать канал или группу из списка выше
+                    Если список подписок пуст, добавьте публичный канал по username или ссылке `t.me/...` вручную
                   </Alert>
                 </Grid>
               )}
 
               {/* Custom Name Field */}
-              {(selectedSubscription || isEditing) && (
+              {(selectedSubscription || isEditing || hasSourceIdentifier) && (
                 <>
                   <Grid item xs={12}>
                     <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
@@ -420,7 +458,7 @@ const TelegramSourceForm = () => {
               )}
 
               {/* Configuration sections - only show when subscription selected or editing */}
-              {(selectedSubscription || isEditing) && (
+              {(selectedSubscription || isEditing || hasSourceIdentifier) && (
                 <>
                   {/* Viral Detection Strategy */}
                   <Grid item xs={12}>
@@ -691,7 +729,7 @@ const TelegramSourceForm = () => {
                   <Button
                     type="submit"
                     variant="contained"
-                    disabled={loading || (!selectedSubscription && !isEditing)}
+                    disabled={loading || !formData.name || !hasSourceIdentifier}
                   >
                     {loading ? 'Сохранение...' : (isEditing ? 'Обновить источник' : 'Создать источник')}
                   </Button>
