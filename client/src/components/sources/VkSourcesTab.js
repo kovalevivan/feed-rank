@@ -187,7 +187,7 @@ const VkSourcesTab = () => {
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button
             component={RouterLink}
-            to="/sources/new"
+            to="/app/sources/new"
             variant="contained"
             startIcon={<AddIcon />}
           >
@@ -275,7 +275,7 @@ const VkSourcesTab = () => {
                     <Tooltip title={translate('Edit')}>
                       <IconButton
                         component={RouterLink}
-                        to={`/sources/${source._id}`}
+                        to={`/app/sources/${source._id}`}
                         size="small"
                         color="primary"
                       >
@@ -337,7 +337,7 @@ const VkSourcesTab = () => {
           </Typography>
           <Button
             component={RouterLink}
-            to="/sources/new"
+            to="/app/sources/new"
             variant="contained"
             startIcon={<AddIcon />}
             sx={{ mt: 2 }}

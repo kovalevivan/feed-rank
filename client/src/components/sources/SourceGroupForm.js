@@ -121,7 +121,7 @@ const SourceGroupForm = () => {
   // Redirect on successful creation/update
   useEffect(() => {
     if (success) {
-      navigate('/source-groups');
+      navigate('/app/source-groups');
     }
   }, [success, navigate]);
 
@@ -137,7 +137,7 @@ const SourceGroupForm = () => {
   // Handle navigation back
   const handleNavigateBack = () => {
     dispatch(resetSuccess());
-    navigate('/source-groups');
+    navigate('/app/source-groups');
   };
   
   // Form submission handler

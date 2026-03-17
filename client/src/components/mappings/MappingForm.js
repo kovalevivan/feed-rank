@@ -177,7 +177,7 @@ const MappingForm = () => {
       
       // Redirect after short delay
       setTimeout(() => {
-        navigate('/mappings');
+        navigate('/app/mappings');
       }, 1500);
     } catch (err) {
       setError(err.response?.data?.message || translate('Failed to save mapping'));
@@ -199,7 +199,7 @@ const MappingForm = () => {
         <Button
           variant="outlined"
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate('/mappings')}
+          onClick={() => navigate('/app/mappings')}
           disabled={loading}
         >
           {translate('Back to Mappings')}
@@ -310,7 +310,7 @@ const MappingForm = () => {
               <Button
                 type="button"
                 variant="outlined"
-                onClick={() => navigate('/mappings')}
+                onClick={() => navigate('/app/mappings')}
                 sx={{ mr: 2 }}
                 disabled={loading}
               >

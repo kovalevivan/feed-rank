@@ -130,7 +130,7 @@ const ChannelsList = () => {
         <Typography variant="h4">{translate('Telegram Channels')}</Typography>
         <Button
           component={RouterLink}
-          to="/channels/new"
+          to="/app/channels/new"
           variant="contained"
           startIcon={<AddIcon />}
         >
@@ -201,7 +201,7 @@ const ChannelsList = () => {
                         </IconButton>
                       </Tooltip>
                       <Tooltip title={translate('Edit')}>
-                        <IconButton component={RouterLink} to={`/channels/${channel._id}`}>
+                        <IconButton component={RouterLink} to={`/app/channels/${channel._id}`}>
                           <EditIcon />
                         </IconButton>
                       </Tooltip>

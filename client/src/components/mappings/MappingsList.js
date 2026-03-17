@@ -254,7 +254,7 @@ const MappingsList = () => {
         <Typography variant="h4">{translate('Mappings')}</Typography>
         <Button
           component={RouterLink}
-          to="/mappings/new"
+          to="/app/mappings/new"
           variant="contained"
           startIcon={<AddIcon />}
         >

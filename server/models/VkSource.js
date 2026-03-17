@@ -120,8 +120,7 @@ const VkSourceSchema = new mongoose.Schema({
     default: Date.now
   }
 }, { 
-  collection: 'vksources', 
-  dbName: 'feedrank'  // Use the feedrank database
+  collection: 'vksources'
 });
 
 // Update the updatedAt field before save

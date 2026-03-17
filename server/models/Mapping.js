@@ -44,8 +44,7 @@ const MappingSchema = new mongoose.Schema({
     default: Date.now
   }
 }, { 
-  collection: 'mappings', 
-  dbName: 'feedrank'  // Use the feedrank database
+  collection: 'mappings'
 });
 
 // Create unique index for sourceGroup + telegramChannel combination

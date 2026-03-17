@@ -37,14 +37,14 @@ const UnifiedSourceForm = () => {
           try {
             await fetch(`/api/vk-sources/${id}`);
             // If successful, it's a VK source
-            navigate(`/vk-sources/${id}`, { replace: true });
+            navigate(`/app/vk-sources/${id}`, { replace: true });
             return;
           } catch (vkError) {
             // If VK fails, try Telegram
             try {
               await fetch(`/api/telegram-sources/${id}`);
               // If successful, it's a Telegram source
-              navigate(`/telegram-sources/${id}`, { replace: true });
+              navigate(`/app/telegram-sources/${id}`, { replace: true });
               return;
             } catch (telegramError) {
               // If both fail, show error
@@ -68,7 +68,7 @@ const UnifiedSourceForm = () => {
   };
 
   const handleCancel = () => {
-    navigate('/sources');
+    navigate('/app/sources');
   };
 
   // If editing and loading, show loading state

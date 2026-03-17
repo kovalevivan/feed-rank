@@ -166,8 +166,7 @@ const TelegramSourceSchema = new mongoose.Schema({
     default: Date.now
   }
 }, { 
-  collection: 'telegramsources', 
-  dbName: 'feedrank'
+  collection: 'telegramsources'
 });
 
 // Update the updatedAt field before save

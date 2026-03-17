@@ -68,7 +68,7 @@ const SourceGroupsList = () => {
   // Handle edit group
   const handleEditGroup = (id) => {
     console.log(`🔍 Navigating to edit group with ID: ${id}`);
-    navigate(`/source-groups/${id}`);
+    navigate(`/app/source-groups/${id}`);
   };
   
   // Handle delete confirmation dialog
@@ -92,7 +92,7 @@ const SourceGroupsList = () => {
   
   // Handle add new group
   const handleAddGroup = () => {
-    navigate('/source-groups/new');
+    navigate('/app/source-groups/new');
   };
   
   // Handle error close

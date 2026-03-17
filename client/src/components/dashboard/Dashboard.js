@@ -161,7 +161,7 @@ const Dashboard = () => {
                     {post.vkSource ? (
                       <Button
                         component={RouterLink}
-                        to={`/sources/${post.vkSource._id}`}
+                        to={`/app/sources/${post.vkSource._id}`}
                         variant="outlined"
                         size="small"
                       >
@@ -190,7 +190,7 @@ const Dashboard = () => {
             <Box sx={{ mt: 2, textAlign: 'center' }}>
               <Button
                 component={RouterLink}
-                to="/sources"
+                to="/app/sources"
                 variant="contained"
               >
                 {translate('View All Sources')}
@@ -223,7 +223,7 @@ const Dashboard = () => {
                     {item.source ? (
                       <Button
                         component={RouterLink}
-                        to={`/sources/${item.source._id}`}
+                        to={`/app/sources/${item.source._id}`}
                         variant="outlined"
                         size="small"
                       >
@@ -252,7 +252,7 @@ const Dashboard = () => {
             <Box sx={{ mt: 2, textAlign: 'center' }}>
               <Button
                 component={RouterLink}
-                to="/sources"
+                to="/app/sources"
                 variant="contained"
               >
                 {translate('Manage Sources')}

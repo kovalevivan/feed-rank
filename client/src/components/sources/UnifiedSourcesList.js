@@ -201,7 +201,7 @@ const UnifiedSourcesList = () => {
   };
 
   const getEditPath = (source) => {
-    return source.type === 'vk' ? `/sources/${source._id}` : `/telegram-sources/${source._id}`;
+    return source.type === 'vk' ? `/app/sources/${source._id}` : `/app/telegram-sources/${source._id}`;
   };
 
   const loading = vkLoading || telegramLoading;
@@ -214,7 +214,7 @@ const UnifiedSourcesList = () => {
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button
             component={RouterLink}
-            to="/sources/new"
+            to="/app/sources/new"
             variant="contained"
             startIcon={<AddIcon />}
           >

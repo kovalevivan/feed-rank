@@ -105,7 +105,7 @@ const SourceForm = () => {
   // Redirect after successful submission (only if this form submitted)
   useEffect(() => {
     if (success && submitted) {
-      navigate('/sources');
+      navigate('/app/sources');
       // Clear success to avoid redirect loops next time
       dispatch(clearVkSourceSuccess());
       setSubmitted(false);
@@ -166,7 +166,7 @@ const SourceForm = () => {
         <Button
           variant="outlined"
           startIcon={<ArrowBackIcon />}
-          onClick={() => navigate('/sources')}
+          onClick={() => navigate('/app/sources')}
         >
           {translate('Back to Sources')}
         </Button>
@@ -228,7 +228,7 @@ const SourceForm = () => {
             <Button
               type="button"
               variant="outlined"
-              onClick={() => navigate('/sources')}
+              onClick={() => navigate('/app/sources')}
               sx={{ mr: 2 }}
             >
               {translate('Cancel')}

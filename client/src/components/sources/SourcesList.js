@@ -180,7 +180,7 @@ const SourcesList = () => {
         <Typography variant="h4">{translate('VK Sources')}</Typography>
         <Button
           component={RouterLink}
-          to="/sources/new"
+          to="/app/sources/new"
           variant="contained"
           startIcon={<AddIcon />}
         >
@@ -323,7 +323,7 @@ const SourcesList = () => {
                         <Tooltip title={translate('Edit')}>
                           <IconButton
                             component={RouterLink}
-                            to={`/sources/${source._id}`}
+                            to={`/app/sources/${source._id}`}
                             color="primary"
                           >
                             <EditIcon />

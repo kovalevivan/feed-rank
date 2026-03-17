@@ -41,8 +41,7 @@ const SourceGroupSchema = new mongoose.Schema({
     default: Date.now
   }
 }, { 
-  collection: 'sourcegroups', 
-  dbName: 'feedrank'  // Use the feedrank database
+  collection: 'sourcegroups'
 });
 
 // Update the updatedAt field before save

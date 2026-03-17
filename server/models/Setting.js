@@ -33,8 +33,7 @@ const SettingSchema = new mongoose.Schema({
     default: Date.now
   }
 }, { 
-  collection: 'settings', 
-  dbName: 'feedrank'  // Use the feedrank database
+  collection: 'settings'
 });
 
 // Update the updatedAt field before save

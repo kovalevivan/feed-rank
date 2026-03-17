@@ -172,7 +172,7 @@ const ChannelForm = () => {
       
       // Success - redirect after short delay to allow user to see success message
       setTimeout(() => {
-        navigate('/channels');
+        navigate('/app/channels');
       }, 1500);
       
     } catch (err) {
@@ -197,7 +197,7 @@ const ChannelForm = () => {
       <Button
         variant="outlined"
         startIcon={<ArrowBackIcon />}
-        onClick={() => navigate('/channels')}
+        onClick={() => navigate('/app/channels')}
       >
         {translate('Back to Channels')}
       </Button>
@@ -219,7 +219,7 @@ const ChannelForm = () => {
       <Button
         type="button"
         variant="outlined"
-        onClick={() => navigate('/channels')}
+        onClick={() => navigate('/app/channels')}
         sx={{ mr: 2 }}
         disabled={submitting || loading}
       >

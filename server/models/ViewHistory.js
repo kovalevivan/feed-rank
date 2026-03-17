@@ -40,8 +40,7 @@ const ViewHistorySchema = new mongoose.Schema({
     default: 0
   }
 }, { 
-  collection: 'viewhistory', 
-  dbName: 'feedrank'
+  collection: 'viewhistory'
 });
 
 // Compound index for efficient queries

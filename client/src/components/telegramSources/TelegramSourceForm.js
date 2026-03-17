@@ -242,12 +242,12 @@ const TelegramSourceForm = () => {
       if (isEditing) {
         await axios.put(`/api/telegram-sources/${id}`, submitData);
         setSuccess('Telegram источник успешно обновлен!');
-        navigate('/sources');
+        navigate('/app/sources');
       } else {
         await axios.post('/api/telegram-sources', submitData);
         setSuccess('Telegram источник успешно создан!');
         setTimeout(() => {
-          navigate('/sources');
+          navigate('/app/sources');
         }, 1500);
       }
     } catch (err) {
@@ -259,7 +259,7 @@ const TelegramSourceForm = () => {
   };
 
   const handleCancel = () => {
-    navigate('/sources');
+    navigate('/app/sources');
   };
 
   return (

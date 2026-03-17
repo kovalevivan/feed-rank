@@ -134,7 +134,7 @@ const TelegramSourcesList = () => {
         <Typography variant="h4">{translate('Telegram Sources')}</Typography>
         <Button
           component={RouterLink}
-          to="/telegram-sources/new"
+          to="/app/telegram-sources/new"
           variant="contained"
           startIcon={<AddIcon />}
         >
@@ -225,7 +225,7 @@ const TelegramSourcesList = () => {
                         </IconButton>
                       </Tooltip>
                       <Tooltip title={translate('Edit')}>
-                        <IconButton component={RouterLink} to={`/telegram-sources/${source._id}`}>
+                        <IconButton component={RouterLink} to={`/app/telegram-sources/${source._id}`}>
                           <EditIcon />
                         </IconButton>
                       </Tooltip>

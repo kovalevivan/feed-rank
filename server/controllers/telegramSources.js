@@ -416,7 +416,15 @@ router.post('/:id/process', async (req, res) => {
     });
   } catch (error) {
     console.error(`Error processing Telegram source ${req.params.id}:`, error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    const isClientUnavailable = error.message && error.message.includes('Telegram Client not connected');
+
+    res.status(isClientUnavailable ? 503 : 500).json({
+      message: isClientUnavailable ? 'Telegram Client is not connected' : 'Server error',
+      error: error.message,
+      help: isClientUnavailable
+        ? 'Update TELEGRAM_SESSION with a valid session to enable reading messages from Telegram sources.'
+        : undefined
+    });
   }
 });
 

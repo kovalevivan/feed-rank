@@ -36,8 +36,7 @@ const UserSchema = new mongoose.Schema({
     default: Date.now
   }
 }, { 
-  collection: 'users', 
-  dbName: 'feedrank'  // Use the feedrank database
+  collection: 'users'
 });
 
 // Update the updatedAt field before save

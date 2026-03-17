@@ -80,7 +80,7 @@ const Instructions = () => {
         <Box sx={{ mt: 2, mb: 2, display: 'flex', justifyContent: 'center' }}>
           <Button 
             component={RouterLink} 
-            to="/sources" 
+            to="/app/sources" 
             variant="contained" 
             endIcon={<ArrowForwardIcon />}
             sx={{ mx: 1 }}
@@ -128,7 +128,7 @@ const Instructions = () => {
         <Box sx={{ mt: 2, mb: 2, display: 'flex', justifyContent: 'center' }}>
           <Button 
             component={RouterLink} 
-            to="/channels" 
+            to="/app/channels" 
             variant="contained" 
             endIcon={<ArrowForwardIcon />}
             sx={{ mx: 1 }}
@@ -176,7 +176,7 @@ const Instructions = () => {
         <Box sx={{ mt: 2, mb: 2, display: 'flex', justifyContent: 'center' }}>
           <Button 
             component={RouterLink} 
-            to="/mappings" 
+            to="/app/mappings" 
             variant="contained" 
             endIcon={<ArrowForwardIcon />}
             sx={{ mx: 1 }}
@@ -203,7 +203,7 @@ const Instructions = () => {
                 </Typography>
                 <Button 
                   component={RouterLink} 
-                  to="/" 
+                  to="/app" 
                   variant="outlined" 
                   size="small" 
                   fullWidth
@@ -225,7 +225,7 @@ const Instructions = () => {
                 </Typography>
                 <Button 
                   component={RouterLink} 
-                  to="/sources" 
+                  to="/app/sources" 
                   variant="outlined" 
                   size="small" 
                   fullWidth
@@ -247,7 +247,7 @@ const Instructions = () => {
                 </Typography>
                 <Button 
                   component={RouterLink} 
-                  to="/settings" 
+                  to="/app/settings" 
                   variant="outlined" 
                   size="small" 
                   fullWidth

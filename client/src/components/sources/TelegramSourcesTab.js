@@ -134,7 +134,7 @@ const TelegramSourcesTab = () => {
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Button
           component={RouterLink}
-          to="/telegram-sources/new"
+          to="/app/telegram-sources/new"
           variant="contained"
           startIcon={<AddIcon />}
         >
@@ -234,7 +234,7 @@ const TelegramSourcesTab = () => {
                     <Tooltip title={translate('Edit')}>
                       <IconButton
                         component={RouterLink}
-                        to={`/telegram-sources/${source._id}`}
+                        to={`/app/telegram-sources/${source._id}`}
                         size="small"
                         color="primary"
                       >
@@ -284,7 +284,7 @@ const TelegramSourcesTab = () => {
           </Typography>
           <Button
             component={RouterLink}
-            to="/telegram-sources/new"
+            to="/app/telegram-sources/new"
             variant="contained"
             startIcon={<AddIcon />}
             sx={{ mt: 2 }}

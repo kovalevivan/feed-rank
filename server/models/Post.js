@@ -113,8 +113,7 @@ const PostSchema = new mongoose.Schema({
     default: Date.now
   }
 }, { 
-  collection: 'posts', 
-  dbName: 'feedrank'  // Use the feedrank database
+  collection: 'posts'
 });
 
 // Compound indexes for post uniqueness
