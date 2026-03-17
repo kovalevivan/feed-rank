@@ -48,7 +48,8 @@ const TelegramSourceForm = () => {
     reactionWeight: 1,
     commentWeight: 2,
     forwardWeight: 3,
-    checkFrequency: 60
+    checkFrequency: 60,
+    maxNewsAgeMinutes: 60
   });
 
   const [loading, setLoading] = useState(false);
@@ -89,7 +90,11 @@ const TelegramSourceForm = () => {
           setLoading(true);
           const response = await axios.get(`/api/telegram-sources/${id}`);
           const sourceData = response.data;
-          setFormData(sourceData);
+          setFormData(prev => ({
+            ...prev,
+            ...sourceData,
+            maxNewsAgeMinutes: sourceData.maxNewsAgeMinutes || 60
+          }));
           
           // Find matching subscription if exists
           if (sourceData.chatId && subscriptions.length > 0) {
@@ -236,7 +241,8 @@ const TelegramSourceForm = () => {
         reactionWeight: parseFloat(formData.reactionWeight.toString().replace(',', '.')) || 1,
         commentWeight: parseFloat(formData.commentWeight.toString().replace(',', '.')) || 2,
         forwardWeight: parseFloat(formData.forwardWeight.toString().replace(',', '.')) || 3,
-        checkFrequency: parseInt(formData.checkFrequency) || 60
+        checkFrequency: parseInt(formData.checkFrequency) || 60,
+        maxNewsAgeMinutes: parseInt(formData.maxNewsAgeMinutes) || 60
       };
 
       if (isEditing) {
@@ -694,6 +700,18 @@ const TelegramSourceForm = () => {
                   fullWidth
                   inputProps={{ min: 5, max: 1440 }}
                   helperText="Как часто проверять новые сообщения (5-1440 минут)"
+                />
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <TextField
+                  label="Максимальный возраст новости (минуты)"
+                  type="number"
+                  value={formData.maxNewsAgeMinutes}
+                  onChange={handleInputChange('maxNewsAgeMinutes')}
+                  fullWidth
+                  inputProps={{ min: 1, max: 10080 }}
+                  helperText="Новости старше этого возраста будут игнорироваться. По умолчанию: 60 минут"
                 />
               </Grid>
 

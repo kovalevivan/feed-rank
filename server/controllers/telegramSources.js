@@ -73,6 +73,7 @@ router.post(
     body('thresholdType').optional().isIn(['auto', 'manual']).withMessage('Invalid threshold type'),
     body('manualThreshold').optional().isNumeric().withMessage('Manual threshold must be a number'),
     body('checkFrequency').optional().isNumeric().withMessage('Check frequency must be a number'),
+    body('maxNewsAgeMinutes').optional().isInt({ min: 1, max: 10080 }).withMessage('Maximum news age must be between 1 and 10080 minutes'),
     body('minViewsForViral').optional().isNumeric().withMessage('Minimum views must be a number'),
     // Viral detection settings
     body('viralDetectionMetric').optional().isIn(['views', 'reactions', 'comments', 'engagement_score']).withMessage('Invalid viral detection metric'),
@@ -95,7 +96,7 @@ router.post(
     try {
       console.log('Creating Telegram source with data:', req.body);
       let { 
-        name, chatId, username, thresholdType, manualThreshold, checkFrequency, minViewsForViral,
+        name, chatId, username, thresholdType, manualThreshold, checkFrequency, maxNewsAgeMinutes, minViewsForViral,
         // Viral detection settings
         viralDetectionMetric, minReactionsForViral, minCommentsForViral, minForwardsForViral,
         reactionWeight, commentWeight, forwardWeight, thresholdMethod, statisticalMultiplier
@@ -172,6 +173,7 @@ router.post(
         thresholdType: thresholdType || 'auto',
         manualThreshold: thresholdType === 'manual' ? manualThreshold : undefined,
         checkFrequency: checkFrequency || 60,
+        maxNewsAgeMinutes: maxNewsAgeMinutes || 60,
         minViewsForViral: minViewsForViral || 1000,
         // Viral detection settings
         viralDetectionMetric: viralDetectionMetric || 'reactions',
@@ -209,6 +211,7 @@ router.put(
     body('thresholdType').optional().isIn(['auto', 'manual']).withMessage('Invalid threshold type'),
     body('manualThreshold').optional().isNumeric().withMessage('Manual threshold must be a number'),
     body('checkFrequency').optional().isNumeric().withMessage('Check frequency must be a number'),
+    body('maxNewsAgeMinutes').optional().isInt({ min: 1, max: 10080 }).withMessage('Maximum news age must be between 1 and 10080 minutes'),
     body('minViewsForViral').optional().isNumeric().withMessage('Minimum views must be a number'),
     // Viral detection settings
     body('viralDetectionMetric').optional().isIn(['views', 'reactions', 'comments', 'engagement_score']).withMessage('Invalid viral detection metric'),
@@ -249,7 +252,7 @@ router.put(
       }
       
       const { 
-        name, username, active, thresholdType, manualThreshold, checkFrequency, minViewsForViral,
+        name, username, active, thresholdType, manualThreshold, checkFrequency, maxNewsAgeMinutes, minViewsForViral,
         // Viral detection settings
         viralDetectionMetric, minReactionsForViral, minCommentsForViral, minForwardsForViral,
         reactionWeight, commentWeight, forwardWeight, thresholdMethod, statisticalMultiplier
@@ -278,6 +281,10 @@ router.put(
       
       if (checkFrequency !== undefined) {
         source.checkFrequency = Math.max(5, checkFrequency); // Minimum 5 minutes
+      }
+
+      if (maxNewsAgeMinutes !== undefined) {
+        source.maxNewsAgeMinutes = Math.max(1, maxNewsAgeMinutes);
       }
       
       if (minViewsForViral !== undefined) {

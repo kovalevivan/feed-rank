@@ -51,6 +51,7 @@ const SourceForm = () => {
     customPercentile: 90,
     manualThreshold: 1000,
     checkFrequency: 60,
+    maxNewsAgeMinutes: 60,
     postsToCheck: 50,
     active: true,
     experimentalViewTracking: false,
@@ -90,6 +91,7 @@ const SourceForm = () => {
         customPercentile: vkSource.customPercentile || 90,
         manualThreshold: vkSource.manualThreshold || 1000,
         checkFrequency: vkSource.checkFrequency || 60,
+        maxNewsAgeMinutes: vkSource.maxNewsAgeMinutes || 60,
         postsToCheck: vkSource.postsToCheck || 50,
         active: vkSource.active !== undefined ? vkSource.active : true,
         experimentalViewTracking: vkSource.experimentalViewTracking || false,
@@ -139,6 +141,7 @@ const SourceForm = () => {
       customPercentile: parseInt(formData.customPercentile),
       manualThreshold: parseInt(formData.manualThreshold),
       checkFrequency: parseInt(formData.checkFrequency),
+      maxNewsAgeMinutes: parseInt(formData.maxNewsAgeMinutes),
       postsToCheck: parseInt(formData.postsToCheck)
     };
     
@@ -205,6 +208,20 @@ const SourceForm = () => {
             disabled={loading}
           />
           
+          <Divider sx={{ my: 3 }} />
+
+          <TextField
+            fullWidth
+            label="Максимальный возраст новости (минуты)"
+            name="maxNewsAgeMinutes"
+            type="number"
+            value={formData.maxNewsAgeMinutes}
+            onChange={handleChange}
+            margin="normal"
+            inputProps={{ min: 1, max: 10080 }}
+            helperText="Новости старше этого возраста будут игнорироваться. По умолчанию: 60 минут"
+          />
+
           <Divider sx={{ my: 3 }} />
           
           <Box sx={{ display: 'flex', alignItems: 'center' }}>

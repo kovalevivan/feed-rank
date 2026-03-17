@@ -13,6 +13,18 @@ const { updateSourceThreshold } = require('./analytics');
  */
 const autoForwardViralPost = async (post, source) => {
   try {
+    if (post.publishedAt) {
+      const maxNewsAgeMinutes = Math.max(1, source?.maxNewsAgeMinutes || 60);
+      const postAgeMs = Date.now() - new Date(post.publishedAt).getTime();
+      const maxAgeMs = maxNewsAgeMinutes * 60 * 1000;
+
+      if (postAgeMs > maxAgeMs) {
+        const ageMinutes = Math.round(postAgeMs / (60 * 1000));
+        console.log(`⏭️ Skipping Telegram post ${post.originalPostId} - too old (${ageMinutes}m, limit: ${maxNewsAgeMinutes}m)`);
+        return { forwarded: 0, errors: 0, skipped: true, reason: 'too_old' };
+      }
+    }
+
     // Import telegramService here to avoid circular dependency
     const telegramService = require('./index');
     const { getAllMappingsForSource } = require('../../utils/mappingUtils');
@@ -435,17 +447,23 @@ const getRecentMessages = async (chatId, limit = 50, offsetId = 0, username = nu
  */
 const processMessage = async (message, source) => {
   try {
-    // Check if message already processed
-    const existingPost = await Post.findOne({
-      telegramSource: source._id,
-      originalPostId: message.id.toString()
-    });
-    
     // Extract message data
     const messageData = await extractMessageData(message, source);
     if (!messageData) {
       return null;
     }
+
+    const maxNewsAgeMinutes = Math.max(1, source?.maxNewsAgeMinutes || 60);
+    const messageAgeMs = Date.now() - new Date(messageData.publishedAt).getTime();
+    if (messageAgeMs > maxNewsAgeMinutes * 60 * 1000) {
+      return null;
+    }
+
+    // Check if message already processed
+    const existingPost = await Post.findOne({
+      telegramSource: source._id,
+      originalPostId: message.id.toString()
+    });
     
     // Check if message meets viral criteria
     const meetsViralCriteria = checkViralCriteria(messageData, source);

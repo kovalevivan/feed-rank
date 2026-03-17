@@ -9,23 +9,35 @@ const { getCombinedStopWords } = require('../../utils/stopWordsUtils');
 // Initialize VK API client
 let vk;
 
+const getSourceMaxNewsAgeMs = (source) => {
+  const maxNewsAgeMinutes = Math.max(1, source?.maxNewsAgeMinutes || 60);
+  return maxNewsAgeMinutes * 60 * 1000;
+};
+
+const isPublishedWithinAgeLimit = (publishedAt, source) => {
+  if (!publishedAt) return true;
+  const postAgeMs = Date.now() - new Date(publishedAt).getTime();
+  return postAgeMs <= getSourceMaxNewsAgeMs(source);
+};
+
 /**
  * Automatically forwards a viral post to all mapped Telegram channels
- * Only forwards posts that are less than 24 hours old
+ * Only forwards posts that are newer than the source age limit
  * @param {Object} post - Post document
  * @param {Object} source - VK source document
  * @returns {Promise<Object>} - Forwarding results
  */
 const autoForwardViralPost = async (post, source) => {
   try {
-    // Check post age - don't forward posts older than 24 hours
+    // Check post age before forwarding
     if (post.publishedAt) {
-      const postAge = Date.now() - new Date(post.publishedAt).getTime();
-      const maxAge = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-      
-      if (postAge > maxAge) {
-        const ageHours = Math.round(postAge / (60 * 60 * 1000));
-        console.log(`⏭️  Skipping viral post ${post.postId} - too old (${ageHours}h, limit: 24h)`);
+      const postAgeMs = Date.now() - new Date(post.publishedAt).getTime();
+      const maxAgeMs = getSourceMaxNewsAgeMs(source);
+
+      if (postAgeMs > maxAgeMs) {
+        const ageMinutes = Math.round(postAgeMs / (60 * 1000));
+        const limitMinutes = Math.round(maxAgeMs / (60 * 1000));
+        console.log(`⏭️  Skipping viral post ${post.postId} - too old (${ageMinutes}m, limit: ${limitMinutes}m)`);
         return { forwarded: 0, errors: 0, skipped: true, reason: 'too_old' };
       }
     }
@@ -589,9 +601,16 @@ const processSourcePosts = async (sourceId) => {
           return !stopWords.some(word => postText.includes(word));
         })
       : posts;
+
+    const freshPosts = filteredPosts.filter((post) => isPublishedWithinAgeLimit(new Date(post.date * 1000), source));
+    const skippedByAge = filteredPosts.length - freshPosts.length;
     
     if (posts.length - filteredPosts.length > 0) {
       console.log(`Filtered out ${posts.length - filteredPosts.length} posts containing stop words`);
+    }
+
+    if (skippedByAge > 0) {
+      console.log(`Filtered out ${skippedByAge} posts older than ${source.maxNewsAgeMinutes || 60} minutes`);
     }
     
     let viralCount = 0;
@@ -602,7 +621,7 @@ const processSourcePosts = async (sourceId) => {
     let autoForwardedCount = 0;
     
     // Process each post
-    for (const post of filteredPosts) {
+    for (const post of freshPosts) {
       const postId = post.id.toString();
       const viewCount = post.views?.count || 0;
       const isViral = viewCount > threshold;

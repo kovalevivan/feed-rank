@@ -51,7 +51,8 @@ router.post(
     body('customPercentile').optional().isInt({ min: 50, max: 99 }).withMessage('Custom percentile must be between 50 and 99'),
     body('manualThreshold').if(body('thresholdType').equals('manual')).isInt({ min: 1 }).withMessage('Manual threshold must be a positive number'),
     body('checkFrequency').isInt({ min: 5 }).withMessage('Check frequency must be at least 5 minutes'),
-    body('postsToCheck').optional().isInt({ min: 10, max: 100 }).withMessage('Posts to check must be between 10 and 100')
+    body('postsToCheck').optional().isInt({ min: 10, max: 100 }).withMessage('Posts to check must be between 10 and 100'),
+    body('maxNewsAgeMinutes').optional().isInt({ min: 1, max: 10080 }).withMessage('Maximum news age must be between 1 and 10080 minutes')
   ],
   async (req, res) => {
     // Validate request
@@ -61,7 +62,7 @@ router.post(
     }
     
     try {
-      const { name, thresholdType, thresholdMethod, manualThreshold, checkFrequency, postsToCheck } = req.body;
+      const { name, thresholdType, thresholdMethod, manualThreshold, checkFrequency, postsToCheck, maxNewsAgeMinutes } = req.body;
       
       // Resolve group ID from name
       let groupId;
@@ -96,6 +97,7 @@ router.post(
         manualThreshold: thresholdType === 'manual' ? manualThreshold : 0,
         checkFrequency: checkFrequency || 60, // Default to hourly
         postsToCheck: postsToCheck || 50, // Default to 50
+        maxNewsAgeMinutes: maxNewsAgeMinutes || 60,
         createdBy: req.user?._id // If authentication is implemented
       });
       
@@ -143,6 +145,7 @@ router.put(
     body('manualThreshold').if(body('thresholdType').equals('manual')).isInt({ min: 1 }).withMessage('Manual threshold must be a positive number'),
     body('checkFrequency').optional().isInt({ min: 5 }).withMessage('Check frequency must be at least 5 minutes'),
     body('postsToCheck').optional().isInt({ min: 10, max: 100 }).withMessage('Posts to check must be between 10 and 100'),
+    body('maxNewsAgeMinutes').optional().isInt({ min: 1, max: 10080 }).withMessage('Maximum news age must be between 1 and 10080 minutes'),
     body('active').optional().isBoolean().withMessage('Active must be boolean'),
     body('experimentalViewTracking').optional().isBoolean().withMessage('Experimental view tracking must be boolean'),
     body('highDynamicsDetection.enabled').optional().isBoolean().withMessage('High dynamics detection enabled must be boolean'),
@@ -170,7 +173,8 @@ router.put(
         customPercentile,
         manualThreshold, 
         checkFrequency, 
-        postsToCheck, 
+        postsToCheck,
+        maxNewsAgeMinutes,
         active, 
         experimentalViewTracking,
         highDynamicsDetection 
@@ -251,6 +255,10 @@ router.put(
       
       if (postsToCheck !== undefined) {
         source.postsToCheck = postsToCheck;
+      }
+
+      if (maxNewsAgeMinutes !== undefined) {
+        source.maxNewsAgeMinutes = maxNewsAgeMinutes;
       }
       
       if (active !== undefined) {

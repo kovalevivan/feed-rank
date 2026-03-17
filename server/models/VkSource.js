@@ -66,6 +66,12 @@ const VkSourceSchema = new mongoose.Schema({
     type: Number,   // In minutes
     default: 30     // Default: every 30 minutes
   },
+  maxNewsAgeMinutes: {
+    type: Number,
+    default: 60,
+    min: 1,
+    max: 10080
+  },
   postsToCheck: {
     type: Number,
     default: 50,    // Default: 50 posts
