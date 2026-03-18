@@ -205,7 +205,7 @@ const updateSourceThreshold = async (sourceId, thresholdMethod = 'statistical', 
  * @param {number} limit - Maximum number of posts to return (default: 100)
  * @returns {Promise<Array>} - Array of recent posts
  */
-const getRecentPostsForAnalysis = async (sourceIdOrChatId, limit = 100) => {
+const getRecentPostsForAnalysis = async (sourceIdOrChatId, limit = 100, username = null) => {
   try {
     let query;
     
@@ -219,29 +219,39 @@ const getRecentPostsForAnalysis = async (sourceIdOrChatId, limit = 100) => {
     } else if (isChatId) {
       // For chatId, try to fetch directly from Telegram instead of database
       console.log(`📊 ChatId provided for analysis: ${sourceIdOrChatId} - fetching directly from Telegram`);
+      const normalizedUsername = typeof username === 'string' && username.trim()
+        ? username.trim().replace(/^@/, '')
+        : null;
+      const sourceLookupConditions = [{ chatId: sourceIdOrChatId }];
+      if (normalizedUsername) {
+        sourceLookupConditions.push(
+          { username: normalizedUsername },
+          { username: `@${normalizedUsername}` }
+        );
+      }
+
+      const source = await TelegramSource.findOne({ $or: sourceLookupConditions });
       
       try {
         // Import client here to avoid circular dependency
         const { getMessagesForThresholdCalculation } = require('./client');
-        
-        // First, check if source exists to get username
-        const source = await TelegramSource.findOne({ chatId: sourceIdOrChatId });
-        const username = source?.username || null;
-        
+
         // Fetch messages directly from Telegram
-        return await getMessagesForThresholdCalculation(sourceIdOrChatId, username, limit);
+        return await getMessagesForThresholdCalculation(
+          sourceIdOrChatId,
+          source?.username || normalizedUsername,
+          limit
+        );
       } catch (error) {
         console.warn(`⚠️ Could not fetch messages directly from Telegram for ${sourceIdOrChatId}: ${error.message}`);
         console.log(`📊 Falling back to database posts for analysis...`);
-        
-        // Fall back to database posts if available
-        const fallbackQuery = { 
-          $or: [
-            { originalPostId: { $regex: sourceIdOrChatId } },
-            { telegramSource: sourceIdOrChatId }
-          ]
-        };
-        
+
+        if (!source) {
+          console.log(`📊 No matching source found for chatId ${sourceIdOrChatId}, database fallback unavailable`);
+          return [];
+        }
+
+        const fallbackQuery = { telegramSource: source._id };
         const fallbackPosts = await Post.find(fallbackQuery)
           .sort({ publishedAt: -1 })
           .limit(limit)

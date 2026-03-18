@@ -460,9 +460,13 @@ router.get('/subscriptions/list', async (req, res) => {
 router.post('/calculate-threshold', async (req, res) => {
   try {
     const { chatId, username, thresholdMethod = 'statistical', statisticalMultiplier = 0.5, postsCount = 100, saveToSource = false } = req.body;
-    
-    if (!chatId) {
-      return res.status(400).json({ message: 'Chat ID is required' });
+    const normalizedUsername = typeof username === 'string' && username.trim()
+      ? username.trim().replace(/^@/, '')
+      : null;
+    const targetChatId = chatId || null;
+
+    if (!targetChatId && !normalizedUsername) {
+      return res.status(400).json({ message: 'Chat ID or username is required' });
     }
     
     // Validate method
@@ -479,10 +483,28 @@ router.post('/calculate-threshold', async (req, res) => {
       });
     }
     
-    console.log(`📊 Calculating threshold for chatId: ${chatId}${username ? ` (username: ${username})` : ''}`);
-    
-    // Get recent posts for analysis (now fetches directly from Telegram for new channels)
-    const recentPosts = await getRecentPostsForAnalysis(chatId, postsCount);
+    console.log(`📊 Calculating threshold for chatId: ${targetChatId || '[not provided]'}${normalizedUsername ? ` (username: ${normalizedUsername})` : ''}`);
+
+    let recentPosts = [];
+
+    if (targetChatId) {
+      recentPosts = await getRecentPostsForAnalysis(targetChatId, postsCount, normalizedUsername);
+    } else {
+      const source = await TelegramSource.findOne({
+        $or: [
+          { username: normalizedUsername },
+          { username: `@${normalizedUsername}` }
+        ]
+      });
+
+      if (!source) {
+        return res.status(404).json({
+          message: 'Telegram source not found for the provided username'
+        });
+      }
+
+      recentPosts = await getRecentPostsForAnalysis(source.chatId, postsCount, normalizedUsername);
+    }
     
     if (recentPosts.length === 0) {
       return res.status(400).json({ 
@@ -506,7 +528,20 @@ router.post('/calculate-threshold', async (req, res) => {
     // If saveToSource is true, try to find and update existing source
     if (saveToSource) {
       try {
-        const existingSource = await TelegramSource.findOne({ chatId });
+        const sourceLookupConditions = [];
+        if (targetChatId) {
+          sourceLookupConditions.push({ chatId: targetChatId });
+        }
+        if (normalizedUsername) {
+          sourceLookupConditions.push(
+            { username: normalizedUsername },
+            { username: `@${normalizedUsername}` }
+          );
+        }
+
+        const existingSource = sourceLookupConditions.length
+          ? await TelegramSource.findOne({ $or: sourceLookupConditions })
+          : null;
         if (existingSource) {
           console.log(`💾 Saving calculated threshold (${threshold}) to existing source: ${existingSource.name}`);
           
