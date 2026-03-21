@@ -4,6 +4,7 @@ const TelegramSource = require('../../models/TelegramSource');
 const vkService = require('../vk');
 const telegramService = require('../telegram');
 const telegramSourcesService = require('../telegram/sources');
+const telegramAnalyticsService = require('../telegramAnalytics');
 const Post = require('../../models/Post');
 const Mapping = require('../../models/Mapping');
 const ViewHistory = require('../../models/ViewHistory');
@@ -66,6 +67,15 @@ const init = () => {
       await monitorMemoryUsage();
     } catch (error) {
       console.error('Error monitoring memory:', error);
+    }
+  });
+
+  // Maintain denser analytics snapshots for Telegram sources with slower polling.
+  cron.schedule('*/15 * * * *', async () => {
+    try {
+      await refreshTelegramAnalyticsSnapshots();
+    } catch (error) {
+      console.error('Error refreshing Telegram analytics snapshots:', error);
     }
   });
   
@@ -254,6 +264,30 @@ const processSourceNow = async (sourceId) => {
     console.error(`Error manually processing source ${sourceId}:`, error);
     throw error;
   }
+};
+
+const refreshTelegramAnalyticsSnapshots = async () => {
+  if (!telegramAnalyticsService.isEnabled()) {
+    return { processedSources: 0 };
+  }
+
+  const telegramSources = await TelegramSource.find({
+    active: true,
+    checkFrequency: { $gt: 15 }
+  });
+
+  let processedSources = 0;
+
+  for (const source of telegramSources) {
+    try {
+      await telegramSourcesService.processMessagesFromSource(source);
+      processedSources++;
+    } catch (error) {
+      console.warn(`Telegram analytics refresh failed for ${source.name}:`, error.message);
+    }
+  }
+
+  return { processedSources };
 };
 
 /**

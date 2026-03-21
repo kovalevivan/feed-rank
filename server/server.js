@@ -5,7 +5,8 @@ const path = require('path');
 const dotenv = require('dotenv');
 const fs = require('fs');
 
-// Load environment variables
+// Load environment variables from the repository root first, then local server overrides.
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config();
 
 // Initialize Express app
@@ -126,8 +127,10 @@ app.use('/api/settings', require('./controllers/settings'));
 app.use('/api/vk-source-groups', require('./controllers/vkSourceGroups'));
 app.use('/api/source-groups', require('./controllers/sourceGroups'));
 app.use('/api/analytics', require('./controllers/analytics'));
+app.use('/api/telegram-analytics', require('./controllers/telegramAnalytics'));
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
+  const telegramAnalyticsService = require('./services/telegramAnalytics');
+  res.json({ status: 'ok', telegramAnalytics: telegramAnalyticsService.getHealth() });
 });
 
 // Initialize services
@@ -135,10 +138,12 @@ const vkService = require('./services/vk');
 const telegramService = require('./services/telegram');
 const telegramSourcesService = require('./services/telegram/sources');
 const schedulerService = require('./services/scheduler');
+const telegramAnalyticsService = require('./services/telegramAnalytics');
 
 // Start services
 const initializeServices = async () => {
   try {
+    await telegramAnalyticsService.init();
     telegramService.init();
     await telegramSourcesService.init();
     schedulerService.init();

@@ -4,6 +4,7 @@ const { NewMessage } = require('telegram/events');
 const TelegramSource = require('../../models/TelegramSource');
 const Post = require('../../models/Post');
 const { updateSourceThreshold } = require('./analytics');
+const telegramAnalyticsService = require('../telegramAnalytics');
 
 /**
  * Automatically forwards a viral Telegram post to all mapped channels
@@ -64,6 +65,28 @@ const autoForwardViralPost = async (post, source) => {
   } catch (error) {
     console.error(`Error auto-forwarding viral Telegram post ${post.originalPostId}:`, error);
     return { forwarded: 0, errors: 1 };
+  }
+};
+
+const getThresholdUsed = (source) => {
+  if (!source) {
+    return 0;
+  }
+
+  if (source.thresholdType === 'manual') {
+    return Number(source.manualThreshold || 0);
+  }
+
+  switch (source.viralDetectionMetric) {
+    case 'views':
+      return Number(source.calculatedThreshold || source.minViewsForViral || 0);
+    case 'comments':
+      return Number(source.calculatedThreshold || source.minCommentsForViral || 0);
+    case 'engagement_score':
+      return Number(source.calculatedThreshold || 30);
+    case 'reactions':
+    default:
+      return Number(source.calculatedThreshold || source.minReactionsForViral || 0);
   }
 };
 
@@ -445,8 +468,11 @@ const getRecentMessages = async (chatId, limit = 50, offsetId = 0, username = nu
 /**
  * Process a message and create a post if needed
  */
-const processMessage = async (message, source) => {
+const processMessage = async (message, source, options = {}) => {
   try {
+    const observedAt = new Date();
+    const thresholdUsed = getThresholdUsed(source);
+
     // Extract message data
     const messageData = await extractMessageData(message, source);
     if (!messageData) {
@@ -483,6 +509,7 @@ const processMessage = async (message, source) => {
         existingPost.commentCount = messageData.commentCount || 0;
         existingPost.forwardCount = messageData.forwardCount || 0;
         existingPost.viewCount = messageData.viewCount || 0;
+        existingPost.thresholdUsed = thresholdUsed;
         existingPost.updatedAt = new Date();
         
         // Check if post became viral after update
@@ -490,6 +517,15 @@ const processMessage = async (message, source) => {
         existingPost.isViral = meetsViralCriteria;
         
         await existingPost.save();
+
+        await telegramAnalyticsService.recordPostObservation({
+          source,
+          post: existingPost,
+          messageData,
+          observedAt,
+          thresholdUsed,
+          runId: options.runId || null
+        });
         
         // If post became viral and wasn't before, auto-forward it
         if (!wasViral && meetsViralCriteria) {
@@ -511,6 +547,14 @@ const processMessage = async (message, source) => {
         
         return existingPost;
       } else {
+        await telegramAnalyticsService.recordPostObservation({
+          source,
+          post: existingPost,
+          messageData,
+          observedAt,
+          thresholdUsed,
+          runId: options.runId || null
+        });
         // No metrics changed, skip processing
         return null;
       }
@@ -530,10 +574,20 @@ const processMessage = async (message, source) => {
       publishedAt: messageData.publishedAt,
       originalPostUrl: messageData.url,
       isViral: meetsViralCriteria,
+      thresholdUsed,
       status: 'pending'
     });
     
     await post.save();
+
+    await telegramAnalyticsService.recordPostObservation({
+      source,
+      post,
+      messageData,
+      observedAt,
+      thresholdUsed,
+      runId: options.runId || null
+    });
     
     // Update source statistics
     source.totalPosts += 1;
@@ -789,8 +843,10 @@ const processMessagesFromSource = async (telegramSource) => {
     throw new Error('Telegram Client not connected');
   }
   
+  let analyticsRunId = null;
   try {
     console.log(`🔄 Processing messages from ${telegramSource.name}...`);
+    analyticsRunId = await telegramAnalyticsService.startRun(telegramSource, 'source_sync');
     
     // Check if we need to calculate threshold for auto mode
     if (telegramSource.thresholdType === 'auto' && !telegramSource.calculatedThreshold) {
@@ -876,6 +932,12 @@ const processMessagesFromSource = async (telegramSource) => {
     
     if (messages.length === 0) {
       console.log(`No new messages found for ${telegramSource.name}`);
+      await telegramAnalyticsService.finishRun(analyticsRunId, {
+        messagesScanned: 0,
+        postsCreated: 0,
+        postsUpdated: 0,
+        snapshotsWritten: 0
+      });
       return { processed: 0, created: 0 };
     }
     
@@ -886,7 +948,7 @@ const processMessagesFromSource = async (telegramSource) => {
     
     // Process messages in reverse order (oldest first)
     for (const message of messages.reverse()) {
-      const result = await processMessage(message, telegramSource);
+      const result = await processMessage(message, telegramSource, { runId: analyticsRunId });
       
       if (result) {
         // Check if this was a new post or an updated existing post
@@ -911,12 +973,20 @@ const processMessagesFromSource = async (telegramSource) => {
     telegramSource.lastChecked = new Date();
     telegramSource.lastPostId = latestMessageId;
     await telegramSource.save();
+
+    await telegramAnalyticsService.finishRun(analyticsRunId, {
+      messagesScanned: processedCount,
+      postsCreated: createdCount,
+      postsUpdated: updatedCount,
+      snapshotsWritten: processedCount
+    });
     
     console.log(`✅ Processed ${processedCount} messages, created ${createdCount} posts, updated ${updatedCount} posts for ${telegramSource.name}`);
     
     return { processed: processedCount, created: createdCount, updated: updatedCount };
     
   } catch (error) {
+    await telegramAnalyticsService.finishRun(analyticsRunId, {}, error);
     console.error(`Error processing messages from ${telegramSource.name}:`, error);
     throw error;
   }

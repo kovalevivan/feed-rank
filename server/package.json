@@ -20,6 +20,7 @@
     "mongoose": "^7.6.3",
     "node-cron": "^3.0.2",
     "node-telegram-bot-api": "^0.64.0",
+    "pg": "^8.20.0",
     "telegram": "^2.26.22",
     "vk-io": "^4.9.1"
   },
