@@ -145,6 +145,7 @@ const bootstrapSchema = async () => {
     CREATE INDEX IF NOT EXISTS idx_tg_posts_mongo_post ON tg_posts(mongo_post_id);
     CREATE INDEX IF NOT EXISTS idx_tg_post_snapshots_post_time ON tg_post_snapshots(post_id, snapshot_at DESC);
     CREATE INDEX IF NOT EXISTS idx_tg_post_snapshots_run ON tg_post_snapshots(run_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_tg_post_snapshots_unique_point ON tg_post_snapshots(post_id, snapshot_at);
   `);
 };
 
@@ -413,6 +414,17 @@ const recordPostObservation = async ({
               threshold_used
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            ON CONFLICT (post_id, snapshot_at) DO UPDATE SET
+              run_id = EXCLUDED.run_id,
+              age_minutes = EXCLUDED.age_minutes,
+              view_count = EXCLUDED.view_count,
+              forward_count = EXCLUDED.forward_count,
+              reaction_count = EXCLUDED.reaction_count,
+              comment_count = EXCLUDED.comment_count,
+              reply_count = EXCLUDED.reply_count,
+              engagement_score = EXCLUDED.engagement_score,
+              is_viral = EXCLUDED.is_viral,
+              threshold_used = EXCLUDED.threshold_used
           `,
           [
             postResult.rows[0].id,
@@ -540,6 +552,89 @@ const getSourcePosts = async (mongoSourceId, limit = 100) => {
   return result.rows;
 };
 
+const backfillFromMongo = async () => {
+  if (!enabled || !pool) {
+    return {
+      enabled: false,
+      sourcesProcessed: 0,
+      postsProcessed: 0,
+      snapshotsWritten: 0
+    };
+  }
+
+  const mongoose = require('mongoose');
+  const TelegramSource = require('../../models/TelegramSource');
+  const Post = require('../../models/Post');
+
+  const sources = await TelegramSource.find({ active: true }).lean();
+
+  let sourcesProcessed = 0;
+  let postsProcessed = 0;
+  let snapshotsWritten = 0;
+
+  for (const source of sources) {
+    const runId = await startRun(source, 'mongo_backfill');
+
+    try {
+      const posts = await Post.find({ telegramSource: source._id })
+        .sort({ publishedAt: 1, createdAt: 1 })
+        .lean();
+
+      for (const post of posts) {
+        const observedAt = post.updatedAt || post.createdAt || post.publishedAt || new Date();
+        const messageData = {
+          text: post.text || '',
+          publishedAt: post.publishedAt || post.createdAt || observedAt,
+          url: post.originalPostUrl || null,
+          attachments: Array.isArray(post.attachments) ? post.attachments : [],
+          viewCount: post.viewCount || 0,
+          forwardCount: post.forwardCount || 0,
+          reactionCount: post.reactionCount || 0,
+          commentCount: post.commentCount || 0,
+          replyCount: post.replyCount || 0
+        };
+
+        const ok = await recordPostObservation({
+          source,
+          post,
+          messageData,
+          observedAt,
+          thresholdUsed: post.thresholdUsed || source.calculatedThreshold || source.manualThreshold || 0,
+          runId
+        });
+
+        postsProcessed += 1;
+        if (ok) {
+          snapshotsWritten += 1;
+        }
+      }
+
+      sourcesProcessed += 1;
+      await finishRun(runId, {
+        messagesScanned: posts.length,
+        postsCreated: posts.length,
+        postsUpdated: 0,
+        snapshotsWritten: posts.length
+      });
+    } catch (error) {
+      await finishRun(runId, {
+        messagesScanned: 0,
+        postsCreated: 0,
+        postsUpdated: 0,
+        snapshotsWritten: 0
+      }, error);
+      throw error;
+    }
+  }
+
+  return {
+    enabled: true,
+    sourcesProcessed,
+    postsProcessed,
+    snapshotsWritten
+  };
+};
+
 module.exports = {
   init,
   isEnabled,
@@ -547,6 +642,7 @@ module.exports = {
   startRun,
   finishRun,
   recordPostObservation,
+  backfillFromMongo,
   getOverview,
   getSourcesOverview,
   getSourcePosts

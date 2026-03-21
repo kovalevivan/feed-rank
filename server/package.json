@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "backfill:telegram-analytics": "node scripts/backfill-telegram-analytics.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
