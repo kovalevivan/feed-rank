@@ -188,6 +188,12 @@ router.post(
         // Only add createdBy if req.user exists and has an _id
         ...(req.user && req.user._id ? { createdBy: req.user._id } : {})
       });
+
+      if (newSource.viralDetectionMetric === 'views') {
+        newSource.minViewsForViral = newSource.thresholdType === 'manual'
+          ? (newSource.manualThreshold || newSource.minViewsForViral)
+          : newSource.minViewsForViral;
+      }
       
       // Save new source
       await newSource.save();
@@ -277,6 +283,9 @@ router.put(
       
       if (manualThreshold !== undefined) {
         source.manualThreshold = manualThreshold;
+        if ((viralDetectionMetric || source.viralDetectionMetric) === 'views') {
+          source.minViewsForViral = manualThreshold;
+        }
       }
       
       if (checkFrequency !== undefined) {
@@ -459,7 +468,15 @@ router.get('/subscriptions/list', async (req, res) => {
 // Calculate threshold for a source (new or existing)
 router.post('/calculate-threshold', async (req, res) => {
   try {
-    const { chatId, username, thresholdMethod = 'statistical', statisticalMultiplier = 0.5, postsCount = 100, saveToSource = false } = req.body;
+    const {
+      chatId,
+      username,
+      thresholdMethod = 'statistical',
+      statisticalMultiplier = 0.5,
+      postsCount = 100,
+      saveToSource = false,
+      viralDetectionMetric = 'reactions'
+    } = req.body;
     const normalizedUsername = typeof username === 'string' && username.trim()
       ? username.trim().replace(/^@/, '')
       : null;
@@ -475,6 +492,12 @@ router.post('/calculate-threshold', async (req, res) => {
         message: 'Invalid threshold method. Must be "statistical" or "percentile"' 
       });
     }
+
+    if (!['views', 'reactions', 'comments', 'engagement_score'].includes(viralDetectionMetric)) {
+      return res.status(400).json({
+        message: 'Invalid viral detection metric'
+      });
+    }
     
     // Validate multiplier
     if (typeof statisticalMultiplier !== 'number' || statisticalMultiplier < 0.1 || statisticalMultiplier > 5) {
@@ -488,7 +511,7 @@ router.post('/calculate-threshold', async (req, res) => {
     let recentPosts = [];
 
     if (targetChatId) {
-      recentPosts = await getRecentPostsForAnalysis(targetChatId, postsCount, normalizedUsername);
+      recentPosts = await getRecentPostsForAnalysis(targetChatId, postsCount, normalizedUsername, viralDetectionMetric);
     } else {
       const source = await TelegramSource.findOne({
         $or: [
@@ -503,7 +526,7 @@ router.post('/calculate-threshold', async (req, res) => {
         });
       }
 
-      recentPosts = await getRecentPostsForAnalysis(source.chatId, postsCount, normalizedUsername);
+      recentPosts = await getRecentPostsForAnalysis(source.chatId, postsCount, normalizedUsername, viralDetectionMetric);
     }
     
     if (recentPosts.length === 0) {
@@ -515,12 +538,12 @@ router.post('/calculate-threshold', async (req, res) => {
     // Calculate threshold based on method
     let threshold;
     if (thresholdMethod === 'statistical') {
-      threshold = calculateStatisticalThreshold(recentPosts, statisticalMultiplier);
+      threshold = calculateStatisticalThreshold(recentPosts, statisticalMultiplier, viralDetectionMetric);
     } else if (thresholdMethod === 'percentile') {
       // Use statisticalMultiplier as percentile value (e.g., 1.5 = 85th percentile, 2.0 = 90th percentile)
       // Convert multiplier to percentile: 1.0 = 80%, 1.5 = 85%, 2.0 = 90%, 2.5 = 95%, 3.0 = 97%
       const percentile = Math.min(97, Math.max(80, 75 + (statisticalMultiplier * 10)));
-      threshold = calculatePercentileThreshold(recentPosts, percentile);
+      threshold = calculatePercentileThreshold(recentPosts, percentile, viralDetectionMetric);
     } else {
       throw new Error(`Unknown threshold method: ${thresholdMethod}`);
     }
@@ -549,11 +572,16 @@ router.post('/calculate-threshold', async (req, res) => {
           existingSource.calculatedThreshold = threshold;
           existingSource.thresholdMethod = thresholdMethod;
           existingSource.statisticalMultiplier = statisticalMultiplier;
+          existingSource.viralDetectionMetric = viralDetectionMetric;
+          if (viralDetectionMetric === 'views') {
+            existingSource.minViewsForViral = threshold;
+          }
           existingSource.lastPostsData = {
             postsAnalyzed: recentPosts.length,
             lastAnalysisDate: new Date(),
             thresholdMethod: thresholdMethod,
-            multiplierUsed: thresholdMethod === 'statistical' ? statisticalMultiplier : null
+            multiplierUsed: thresholdMethod === 'statistical' ? statisticalMultiplier : null,
+            metricUsed: viralDetectionMetric
           };
           
           await existingSource.save();
@@ -570,6 +598,7 @@ router.post('/calculate-threshold', async (req, res) => {
       postsAnalyzed: recentPosts.length,
       method: thresholdMethod,
       multiplier: statisticalMultiplier,
+      viralDetectionMetric,
       message: `Threshold calculated based on ${recentPosts.length} recent posts`
     };
     
@@ -655,7 +684,7 @@ router.get('/:id/threshold-analysis', async (req, res) => {
     }
     
     // Get recent posts for analysis
-    const recentPosts = await getRecentPostsForAnalysis(req.params.id, 100);
+    const recentPosts = await getRecentPostsForAnalysis(req.params.id, 100, null, source.viralDetectionMetric);
     
     res.json({
       source: {

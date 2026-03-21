@@ -195,6 +195,7 @@ const TelegramSourceForm = () => {
       const response = await axios.post(`/api/telegram-sources/calculate-threshold`, {
         chatId: formData.chatId,
         username: formData.username,
+        viralDetectionMetric: formData.viralDetectionMetric,
         thresholdMethod: formData.thresholdMethod,
         statisticalMultiplier: multiplier,
         postsCount: 100,
@@ -483,15 +484,15 @@ const TelegramSourceForm = () => {
                     value={formData.viralDetectionMetric}
                     onChange={handleInputChange('viralDetectionMetric')}
                   >
+                    <MenuItem value="views">Просмотры</MenuItem>
                     <MenuItem value="reactions">Реакции</MenuItem>
                     <MenuItem value="comments">Комментарии</MenuItem>
-                    <MenuItem value="forwards">Пересылки</MenuItem>
                     <MenuItem value="engagement_score">Комплексная оценка вовлеченности</MenuItem>
                   </Select>
                   <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+                    {formData.viralDetectionMetric === 'views' && 'Посты считаются вирусными на основе количества просмотров'}
                     {formData.viralDetectionMetric === 'reactions' && 'Посты считаются вирусными на основе количества реакций'}
                     {formData.viralDetectionMetric === 'comments' && 'Посты считаются вирусными на основе количества комментариев'}
-                    {formData.viralDetectionMetric === 'forwards' && 'Посты считаются вирусными на основе количества пересылок'}
                     {formData.viralDetectionMetric === 'engagement_score' && 'Посты оцениваются по взвешенной сумме всех метрик'}
                   </Typography>
                 </FormControl>
@@ -543,9 +544,10 @@ const TelegramSourceForm = () => {
                       formData.viralDetectionMetric === 'engagement_score' 
                         ? "Минимальная взвешенная оценка вовлеченности"
                         : `Минимальное количество ${
+                            formData.viralDetectionMetric === 'views' ? 'просмотров' :
                             formData.viralDetectionMetric === 'reactions' ? 'реакций' :
                             formData.viralDetectionMetric === 'comments' ? 'комментариев' :
-                            formData.viralDetectionMetric === 'forwards' ? 'пересылок' : 'единиц'
+                            'единиц'
                           }`
                     }
                   />

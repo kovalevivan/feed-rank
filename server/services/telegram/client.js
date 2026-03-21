@@ -711,27 +711,30 @@ const checkViralCriteria = (messageData, source) => {
     
     // Determine which metric to use for viral detection
     const detectionMetric = source.viralDetectionMetric || 'reactions';
+    const getEffectiveThreshold = (fallbackValue) => {
+      if (source.thresholdType === 'manual') {
+        return source.manualThreshold;
+      }
+
+      return source.calculatedThreshold || fallbackValue;
+    };
     
     let meetsThreshold = false;
     
     switch (detectionMetric) {
       case 'reactions':
-        const minReactions = source.thresholdType === 'manual' 
-          ? source.manualThreshold 
-          : (source.calculatedThreshold || source.minReactionsForViral || 10);
+        const minReactions = getEffectiveThreshold(source.minReactionsForViral || 10);
         meetsThreshold = reactionCount >= minReactions;
         break;
         
       case 'comments':
-        const minComments = source.thresholdType === 'manual' 
-          ? source.manualThreshold 
-          : (source.calculatedThreshold || source.minCommentsForViral || 5);
+        const minComments = getEffectiveThreshold(source.minCommentsForViral || 5);
         meetsThreshold = commentCount >= minComments;
         break;
         
       case 'views':
-        // Legacy view-based detection
-        meetsThreshold = viewCount >= (source.minViewsForViral || 1000);
+        const minViews = getEffectiveThreshold(source.minViewsForViral || 1000);
+        meetsThreshold = viewCount >= minViews;
         break;
         
               case 'engagement_score':
@@ -747,9 +750,7 @@ const checkViralCriteria = (messageData, source) => {
         );
         
         // Use appropriate threshold based on type
-        const minEngagementScore = source.thresholdType === 'manual' 
-          ? source.manualThreshold 
-          : (source.calculatedThreshold || 30);
+        const minEngagementScore = getEffectiveThreshold(30);
           
         meetsThreshold = engagementScore >= minEngagementScore;
         
@@ -762,7 +763,9 @@ const checkViralCriteria = (messageData, source) => {
     }
     
     // Additional check: ensure at least some basic engagement
-    const hasMinimalEngagement = (reactionCount + commentCount + forwardCount) > 0;
+    const hasMinimalEngagement = detectionMetric === 'views'
+      ? viewCount > 0
+      : (reactionCount + commentCount + forwardCount) > 0;
     
     const isViral = meetsThreshold && hasMinimalEngagement;
     

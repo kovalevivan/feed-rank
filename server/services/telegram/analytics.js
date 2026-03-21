@@ -1,22 +1,37 @@
 const TelegramSource = require('../../models/TelegramSource');
 const Post = require('../../models/Post');
 
+const getMetricValue = (post, viralDetectionMetric = 'reactions') => {
+  switch (viralDetectionMetric) {
+    case 'reactions':
+      return post.reactionCount || 0;
+    case 'comments':
+      return post.commentCount || 0;
+    case 'views':
+      return post.viewCount || 0;
+    case 'engagement_score':
+    default: {
+      const reactionScore = (post.reactionCount || 0) * 1.0;
+      const commentScore = (post.commentCount || 0) * 2.0;
+      const forwardScore = (post.forwardCount || 0) * 3.0;
+      return reactionScore + commentScore + forwardScore;
+    }
+  }
+};
+
 /**
  * Calculate average engagement for posts
  * @param {Array} posts - Array of post objects
  * @returns {Number} - Average engagement score
  */
-const calculateAverageEngagement = (posts) => {
+const calculateAverageEngagement = (posts, viralDetectionMetric = 'engagement_score') => {
   if (posts.length === 0) return 0;
-  
-  const totalEngagement = posts.reduce((sum, post) => {
-    const reactionScore = (post.reactionCount || 0) * 1.0;
-    const commentScore = (post.commentCount || 0) * 2.0;
-    const forwardScore = (post.forwardCount || 0) * 3.0;
-    return sum + reactionScore + commentScore + forwardScore;
+
+  const totalMetric = posts.reduce((sum, post) => {
+    return sum + getMetricValue(post, viralDetectionMetric);
   }, 0);
-  
-  return Math.round(totalEngagement / posts.length);
+
+  return Math.round(totalMetric / posts.length);
 };
 
 /**
@@ -27,31 +42,8 @@ const calculateAverageEngagement = (posts) => {
  */
 const calculateStatisticalThreshold = (posts, multiplier = 1.0, viralDetectionMetric = 'reactions') => {
   if (posts.length === 0) return 0;
-  
-  // Calculate metric values based on the viral detection metric
-  let metricValues;
-  
-  switch (viralDetectionMetric) {
-    case 'reactions':
-      metricValues = posts.map(post => post.reactionCount || 0);
-      break;
-    case 'comments':
-      metricValues = posts.map(post => post.commentCount || 0);
-      break;
-    case 'views':
-      metricValues = posts.map(post => post.viewCount || 0);
-      break;
-    case 'engagement_score':
-    default:
-      // Calculate engagement scores for all posts
-      metricValues = posts.map(post => {
-        const reactionScore = (post.reactionCount || 0) * 1.0;
-        const commentScore = (post.commentCount || 0) * 2.0;
-        const forwardScore = (post.forwardCount || 0) * 3.0;
-        return reactionScore + commentScore + forwardScore;
-      });
-      break;
-  }
+
+  const metricValues = posts.map(post => getMetricValue(post, viralDetectionMetric));
   
   // Calculate mean
   const mean = metricValues.reduce((sum, value) => sum + value, 0) / metricValues.length;
@@ -72,25 +64,18 @@ const calculateStatisticalThreshold = (posts, multiplier = 1.0, viralDetectionMe
  * @param {Number} percentile - Percentile value (e.g., 90 for 90th percentile, meaning top 10%)
  * @returns {Number} - Percentile threshold
  */
-const calculatePercentileThreshold = (posts, percentile = 90) => {
+const calculatePercentileThreshold = (posts, percentile = 90, viralDetectionMetric = 'engagement_score') => {
   if (posts.length === 0) return 0;
-  
-  // Calculate engagement scores for all posts using the same formula as statistical method
-  const engagementScores = posts.map(post => {
-    const reactionScore = (post.reactionCount || 0) * 1.0;
-    const commentScore = (post.commentCount || 0) * 2.0;
-    const forwardScore = (post.forwardCount || 0) * 3.0;
-    return reactionScore + commentScore + forwardScore;
-  });
-  
-  // Sort engagement scores in ascending order
-  engagementScores.sort((a, b) => a - b);
+
+  const metricValues = posts
+    .map(post => getMetricValue(post, viralDetectionMetric))
+    .sort((a, b) => a - b);
   
   // Calculate percentile index
-  const index = Math.ceil((percentile / 100) * engagementScores.length) - 1;
-  const clampedIndex = Math.max(0, Math.min(index, engagementScores.length - 1));
+  const index = Math.ceil((percentile / 100) * metricValues.length) - 1;
+  const clampedIndex = Math.max(0, Math.min(index, metricValues.length - 1));
   
-  const threshold = Math.round(engagementScores[clampedIndex]);
+  const threshold = Math.round(metricValues[clampedIndex]);
   
   return Math.max(threshold, 5); // Minimum threshold of 5
 };
@@ -100,7 +85,7 @@ const calculatePercentileThreshold = (posts, percentile = 90) => {
  * @param {Array} posts - Array of post objects
  * @returns {Object} - Detailed statistics
  */
-const calculateDetailedStats = (posts) => {
+const calculateDetailedStats = (posts, viralDetectionMetric = 'engagement_score') => {
   if (posts.length === 0) {
     return {
       count: 0,
@@ -112,20 +97,16 @@ const calculateDetailedStats = (posts) => {
     };
   }
   
-  // Calculate engagement scores
-  const engagementScores = posts.map(post => {
-    const reactionScore = (post.reactionCount || 0) * 1.0;
-    const commentScore = (post.commentCount || 0) * 2.0;
-    const forwardScore = (post.forwardCount || 0) * 3.0;
-    return reactionScore + commentScore + forwardScore;
-  }).sort((a, b) => a - b);
+  const metricValues = posts
+    .map(post => getMetricValue(post, viralDetectionMetric))
+    .sort((a, b) => a - b);
+
+  const mean = metricValues.reduce((sum, score) => sum + score, 0) / metricValues.length;
+  const median = metricValues.length % 2 === 0 
+    ? (metricValues[metricValues.length / 2 - 1] + metricValues[metricValues.length / 2]) / 2
+    : metricValues[Math.floor(metricValues.length / 2)];
   
-  const mean = engagementScores.reduce((sum, score) => sum + score, 0) / engagementScores.length;
-  const median = engagementScores.length % 2 === 0 
-    ? (engagementScores[engagementScores.length / 2 - 1] + engagementScores[engagementScores.length / 2]) / 2
-    : engagementScores[Math.floor(engagementScores.length / 2)];
-  
-  const variance = engagementScores.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) / engagementScores.length;
+  const variance = metricValues.reduce((sum, score) => sum + Math.pow(score - mean, 2), 0) / metricValues.length;
   const stdDev = Math.sqrt(variance);
   
   return {
@@ -133,8 +114,8 @@ const calculateDetailedStats = (posts) => {
     mean: Math.round(mean),
     median: Math.round(median),
     stdDev: Math.round(stdDev),
-    min: engagementScores[0] || 0,
-    max: engagementScores[engagementScores.length - 1] || 0
+    min: metricValues[0] || 0,
+    max: metricValues[metricValues.length - 1] || 0
   };
 };
 
@@ -152,7 +133,7 @@ const updateSourceThreshold = async (sourceId, thresholdMethod = 'statistical', 
     
     // Get recent posts for analysis (up to 200 posts)
     const postsForAnalysis = 200;
-    const recentPosts = await getRecentPostsForAnalysis(sourceId, postsForAnalysis);
+    const recentPosts = await getRecentPostsForAnalysis(sourceId, postsForAnalysis, null, source.viralDetectionMetric);
     
     if (recentPosts.length === 0) {
       console.warn(`No recent posts found for Telegram source ${sourceId}, using default threshold`);
@@ -162,7 +143,7 @@ const updateSourceThreshold = async (sourceId, thresholdMethod = 'statistical', 
     }
     
     let calculatedThreshold;
-    let detailedStats = calculateDetailedStats(recentPosts);
+    let detailedStats = calculateDetailedStats(recentPosts, source.viralDetectionMetric);
     
     // Always update the statisticalMultiplier
     const usedMultiplier = multiplier || source.statisticalMultiplier || 1.0;
@@ -170,8 +151,11 @@ const updateSourceThreshold = async (sourceId, thresholdMethod = 'statistical', 
     
     if (thresholdMethod === 'statistical') {
       calculatedThreshold = calculateStatisticalThreshold(recentPosts, usedMultiplier, source.viralDetectionMetric);
+    } else if (thresholdMethod === 'percentile') {
+      const percentile = Math.min(97, Math.max(80, 75 + (usedMultiplier * 10)));
+      calculatedThreshold = calculatePercentileThreshold(recentPosts, percentile, source.viralDetectionMetric);
     } else {
-      calculatedThreshold = calculateAverageEngagement(recentPosts);
+      calculatedThreshold = calculateAverageEngagement(recentPosts, source.viralDetectionMetric);
     }
     
     // Store the threshold and additional data
@@ -205,7 +189,7 @@ const updateSourceThreshold = async (sourceId, thresholdMethod = 'statistical', 
  * @param {number} limit - Maximum number of posts to return (default: 100)
  * @returns {Promise<Array>} - Array of recent posts
  */
-const getRecentPostsForAnalysis = async (sourceIdOrChatId, limit = 100, username = null) => {
+const getRecentPostsForAnalysis = async (sourceIdOrChatId, limit = 100, username = null, viralDetectionMetric = null) => {
   try {
     let query;
     
@@ -237,11 +221,12 @@ const getRecentPostsForAnalysis = async (sourceIdOrChatId, limit = 100, username
         const { getMessagesForThresholdCalculation } = require('./client');
 
         // Fetch messages directly from Telegram
-        return await getMessagesForThresholdCalculation(
+        const telegramPosts = await getMessagesForThresholdCalculation(
           sourceIdOrChatId,
           source?.username || normalizedUsername,
           limit
         );
+        return telegramPosts.filter(post => getMetricValue(post, viralDetectionMetric || source?.viralDetectionMetric || 'engagement_score') > 0);
       } catch (error) {
         console.warn(`⚠️ Could not fetch messages directly from Telegram for ${sourceIdOrChatId}: ${error.message}`);
         console.log(`📊 Falling back to database posts for analysis...`);
@@ -259,7 +244,7 @@ const getRecentPostsForAnalysis = async (sourceIdOrChatId, limit = 100, username
           .lean();
         
         console.log(`📊 Found ${fallbackPosts.length} posts in database for fallback analysis`);
-        return fallbackPosts;
+        return fallbackPosts.filter(post => getMetricValue(post, viralDetectionMetric || source.viralDetectionMetric || 'engagement_score') > 0);
       }
     } else {
       throw new Error(`Invalid sourceIdOrChatId format: ${sourceIdOrChatId}`);
@@ -273,8 +258,7 @@ const getRecentPostsForAnalysis = async (sourceIdOrChatId, limit = 100, username
     
     // Filter out posts with no engagement data
     const postsWithEngagement = recentPosts.filter(post => {
-      const hasEngagement = (post.reactionCount || 0) + (post.commentCount || 0) + (post.forwardCount || 0) > 0;
-      return hasEngagement;
+      return getMetricValue(post, viralDetectionMetric || 'engagement_score') > 0;
     });
     
     console.log(`📊 Retrieved ${postsWithEngagement.length} posts with engagement data out of ${recentPosts.length} total posts for analysis`);
