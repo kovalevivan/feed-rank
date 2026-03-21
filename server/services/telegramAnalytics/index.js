@@ -4,6 +4,8 @@ let pool = null;
 let initialized = false;
 let enabled = false;
 let lastError = null;
+const STALE_RUN_ERROR = 'Marked stale by analytics recovery';
+const SUPERSEDED_RUN_ERROR = 'Superseded by a newer run';
 
 const getConnectionConfig = () => {
   const connectionString = process.env.ANALYTICS_DATABASE_URL;
@@ -149,6 +151,27 @@ const bootstrapSchema = async () => {
   `);
 };
 
+const recoverStaleRuns = async (maxAgeMinutes = 30) => {
+  if (!pool) {
+    return 0;
+  }
+
+  const result = await pool.query(
+    `
+      UPDATE tg_ingest_runs
+      SET
+        status = 'failed',
+        finished_at = NOW(),
+        error_text = COALESCE(error_text, $2)
+      WHERE status = 'running'
+        AND started_at < NOW() - ($1::text || ' minutes')::interval
+    `,
+    [toInteger(maxAgeMinutes, 30), STALE_RUN_ERROR]
+  );
+
+  return result.rowCount || 0;
+};
+
 const init = async () => {
   if (initialized) {
     return getHealth();
@@ -165,9 +188,13 @@ const init = async () => {
     pool = new Pool(config);
     await pool.query('SELECT 1');
     await bootstrapSchema();
+    const recoveredRuns = await recoverStaleRuns(30);
     enabled = true;
     lastError = null;
     console.log('✅ Telegram analytics PostgreSQL initialized');
+    if (recoveredRuns > 0) {
+      console.log(`🧹 Recovered ${recoveredRuns} stale Telegram analytics runs`);
+    }
   } catch (error) {
     lastError = error;
     enabled = false;
@@ -242,6 +269,19 @@ const startRun = async (source, runType = 'source_sync') => {
   try {
     return await withClient(async (client) => {
       const channelId = await upsertChannel(client, source);
+      await client.query(
+        `
+          UPDATE tg_ingest_runs
+          SET
+            status = 'failed',
+            finished_at = NOW(),
+            error_text = COALESCE(error_text, $3)
+          WHERE channel_id = $1
+            AND run_type = $2
+            AND status = 'running'
+        `,
+        [channelId, runType, SUPERSEDED_RUN_ERROR]
+      );
       const result = await client.query(
         `
           INSERT INTO tg_ingest_runs (channel_id, run_type, status)
@@ -639,6 +679,7 @@ module.exports = {
   init,
   isEnabled,
   getHealth,
+  recoverStaleRuns,
   startRun,
   finishRun,
   recordPostObservation,
