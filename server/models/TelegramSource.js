@@ -97,6 +97,12 @@ const TelegramSourceSchema = new mongoose.Schema({
     default: 60,
     min: 5
   },
+  postsToCheck: {
+    type: Number,
+    default: 30,
+    min: 1,
+    max: 500
+  },
   maxNewsAgeMinutes: {
     type: Number,
     default: 60,

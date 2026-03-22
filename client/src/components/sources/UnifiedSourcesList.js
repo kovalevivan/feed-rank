@@ -340,7 +340,7 @@ const UnifiedSourcesList = () => {
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2">
-                          {source.postsToCheck || (source.type === 'vk' ? '50' : '100')}
+                          {source.postsToCheck || (source.type === 'vk' ? '50' : '30')}
                         </Typography>
                       </TableCell>
                       <TableCell>

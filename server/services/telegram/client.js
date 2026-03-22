@@ -951,7 +951,7 @@ const processMessagesFromSource = async (telegramSource) => {
     let trackedMessagesForUpdate = [];
     
     try {
-      const postsToCheck = Math.max(1, Number.parseInt(telegramSource.postsToCheck || 10, 10) || 10);
+      const postsToCheck = Math.max(1, Number.parseInt(telegramSource.postsToCheck || 30, 10) || 30);
 
       // Fetch new messages since lastPostId
       newMessages = await getRecentMessages(

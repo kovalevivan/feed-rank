@@ -49,6 +49,7 @@ const TelegramSourceForm = () => {
     commentWeight: 2,
     forwardWeight: 3,
     checkFrequency: 60,
+    postsToCheck: 30,
     maxNewsAgeMinutes: 60
   });
 
@@ -93,6 +94,7 @@ const TelegramSourceForm = () => {
           setFormData(prev => ({
             ...prev,
             ...sourceData,
+            postsToCheck: sourceData.postsToCheck || 30,
             maxNewsAgeMinutes: sourceData.maxNewsAgeMinutes || 60
           }));
           
@@ -243,6 +245,7 @@ const TelegramSourceForm = () => {
         commentWeight: parseFloat(formData.commentWeight.toString().replace(',', '.')) || 2,
         forwardWeight: parseFloat(formData.forwardWeight.toString().replace(',', '.')) || 3,
         checkFrequency: parseInt(formData.checkFrequency) || 60,
+        postsToCheck: parseInt(formData.postsToCheck) || 30,
         maxNewsAgeMinutes: parseInt(formData.maxNewsAgeMinutes) || 60
       };
 
@@ -714,6 +717,18 @@ const TelegramSourceForm = () => {
                   fullWidth
                   inputProps={{ min: 1, max: 10080 }}
                   helperText="Новости старше этого возраста будут игнорироваться. По умолчанию: 60 минут"
+                />
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <TextField
+                  label="Сколько новых постов проверять за цикл"
+                  type="number"
+                  value={formData.postsToCheck}
+                  onChange={handleInputChange('postsToCheck')}
+                  fullWidth
+                  inputProps={{ min: 1, max: 500 }}
+                  helperText="Лимит новых сообщений, которые будут добираться из канала за один проход. По умолчанию: 30"
                 />
               </Grid>
 
