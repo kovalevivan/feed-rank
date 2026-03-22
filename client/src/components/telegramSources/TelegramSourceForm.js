@@ -49,7 +49,7 @@ const TelegramSourceForm = () => {
     commentWeight: 2,
     forwardWeight: 3,
     checkFrequency: 60,
-    postsToCheck: 30,
+    postsToCheck: 50,
     maxNewsAgeMinutes: 60
   });
 
@@ -94,7 +94,7 @@ const TelegramSourceForm = () => {
           setFormData(prev => ({
             ...prev,
             ...sourceData,
-            postsToCheck: sourceData.postsToCheck || 30,
+            postsToCheck: sourceData.postsToCheck || 50,
             maxNewsAgeMinutes: sourceData.maxNewsAgeMinutes || 60
           }));
           
@@ -245,7 +245,7 @@ const TelegramSourceForm = () => {
         commentWeight: parseFloat(formData.commentWeight.toString().replace(',', '.')) || 2,
         forwardWeight: parseFloat(formData.forwardWeight.toString().replace(',', '.')) || 3,
         checkFrequency: parseInt(formData.checkFrequency) || 60,
-        postsToCheck: parseInt(formData.postsToCheck) || 30,
+        postsToCheck: parseInt(formData.postsToCheck) || 50,
         maxNewsAgeMinutes: parseInt(formData.maxNewsAgeMinutes) || 60
       };
 
@@ -728,7 +728,7 @@ const TelegramSourceForm = () => {
                   onChange={handleInputChange('postsToCheck')}
                   fullWidth
                   inputProps={{ min: 1, max: 500 }}
-                  helperText="Лимит новых сообщений, которые будут добираться из канала за один проход. По умолчанию: 30"
+                  helperText="Лимит новых сообщений, которые будут добираться из канала за один проход. По умолчанию: 50"
                 />
               </Grid>
 

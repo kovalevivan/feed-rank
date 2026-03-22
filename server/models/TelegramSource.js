@@ -99,7 +99,7 @@ const TelegramSourceSchema = new mongoose.Schema({
   },
   postsToCheck: {
     type: Number,
-    default: 30,
+    default: 50,
     min: 1,
     max: 500
   },

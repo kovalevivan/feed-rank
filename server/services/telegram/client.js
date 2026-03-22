@@ -552,24 +552,27 @@ const resolveChatEntity = async (chatId, username = null) => {
 /**
  * Get recent messages from a channel/group
  */
-const getRecentMessages = async (chatId, limit = 50, offsetId = 0, username = null) => {
+const getRecentMessages = async (chatId, limit = 50, afterMessageId = 0, username = null) => {
   if (!client || !isConnected) {
     throw new Error('Telegram Client not connected');
   }
   
   try {
-    console.log(`📥 Fetching ${limit} messages from ${chatId} (username: ${username})...`);
+    console.log(`📥 Fetching up to ${limit} recent messages from ${chatId} after ${afterMessageId} (username: ${username})...`);
     const entity = await resolveChatEntity(chatId, username);
 
-    // Now get messages using the resolved entity
-    const messages = await withTelegramTimeout(
+    // Fetch the latest messages and filter by message id locally.
+    // offsetId in Telegram pagination is not a "fetch newer than" cursor.
+    const recentMessages = await withTelegramTimeout(
       () => client.getMessages(entity, {
-        limit: limit,
-        offsetId: offsetId
+        limit
       }),
       TELEGRAM_OPERATION_TIMEOUT_MS,
-      `getMessages:${chatId}:offset:${offsetId}:limit:${limit}`
+      `getMessages:${chatId}:after:${afterMessageId}:limit:${limit}`
     );
+
+    const minId = Number.parseInt(afterMessageId, 10) || 0;
+    const messages = recentMessages.filter((message) => Number(message?.id || 0) > minId);
     
     console.log(`✅ Retrieved ${messages.length} messages from ${chatId}`);
     return messages;
@@ -1036,7 +1039,7 @@ const processMessagesFromSource = async (telegramSource) => {
     let trackedMessagesForUpdate = [];
     
     try {
-      const postsToCheck = Math.max(1, Number.parseInt(telegramSource.postsToCheck || 30, 10) || 30);
+      const postsToCheck = Math.max(1, Number.parseInt(telegramSource.postsToCheck || 50, 10) || 50);
 
       // Fetch new messages since lastPostId
       newMessages = await getRecentMessages(

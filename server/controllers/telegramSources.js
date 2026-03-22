@@ -174,7 +174,7 @@ router.post(
         thresholdType: thresholdType || 'auto',
         manualThreshold: thresholdType === 'manual' ? manualThreshold : undefined,
         checkFrequency: checkFrequency || 60,
-        postsToCheck: Math.max(1, Math.min(500, Number.parseInt(postsToCheck || 30, 10) || 30)),
+        postsToCheck: Math.max(1, Math.min(500, Number.parseInt(postsToCheck || 50, 10) || 50)),
         maxNewsAgeMinutes: maxNewsAgeMinutes || 60,
         minViewsForViral: minViewsForViral || 1000,
         // Viral detection settings
@@ -296,7 +296,7 @@ router.put(
       }
 
       if (postsToCheck !== undefined) {
-        source.postsToCheck = Math.max(1, Math.min(500, Number.parseInt(postsToCheck, 10) || 30));
+        source.postsToCheck = Math.max(1, Math.min(500, Number.parseInt(postsToCheck, 10) || 50));
       }
 
       if (maxNewsAgeMinutes !== undefined) {
