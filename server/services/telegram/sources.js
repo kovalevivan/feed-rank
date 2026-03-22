@@ -8,6 +8,25 @@ let bot;
 let processingQueue = Promise.resolve();
 const queuedSourceIds = new Set();
 const activeSourceIds = new Set();
+const SOURCE_PROCESS_TIMEOUT_MS = Math.max(
+  30 * 1000,
+  Number.parseInt(process.env.TELEGRAM_SOURCE_PROCESS_TIMEOUT_MS || `${5 * 60 * 1000}`, 10) || 5 * 60 * 1000
+);
+
+const withTimeout = (promise, timeoutMs, sourceName) => {
+  let timeoutId;
+
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Telegram source processing timed out after ${Math.round(timeoutMs / 1000)}s for ${sourceName}`));
+    }, timeoutMs);
+  });
+
+  return Promise.race([
+    promise.finally(() => clearTimeout(timeoutId)),
+    timeoutPromise
+  ]);
+};
 
 /**
  * Initialize the Telegram services for reading sources
@@ -127,14 +146,22 @@ const processMessagesFromSource = async (telegramSource) => {
       console.log(`🚀 Using Client API exclusively for ${telegramSource.name}`);
 
       try {
-        return await telegramClient.processMessagesFromSource(telegramSource);
+        return await withTimeout(
+          telegramClient.processMessagesFromSource(telegramSource),
+          SOURCE_PROCESS_TIMEOUT_MS,
+          telegramSource.name
+        );
       } catch (clientError) {
         console.error(`❌ Client API failed for ${telegramSource.name}:`, clientError.message);
 
         console.log('🔄 Attempting to reinitialize Telegram Client...');
         await telegramClient.init();
 
-        return await telegramClient.processMessagesFromSource(telegramSource);
+        return await withTimeout(
+          telegramClient.processMessagesFromSource(telegramSource),
+          SOURCE_PROCESS_TIMEOUT_MS,
+          telegramSource.name
+        );
       }
     } catch (error) {
       console.error(`❌ Error processing Telegram source ${telegramSource.name}:`, error);
