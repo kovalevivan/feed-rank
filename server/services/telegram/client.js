@@ -95,10 +95,57 @@ let client;
 let isConnected = false;
 let isInitializing = false;
 let messageListenerSetup = false;
+let lastForcedResetAt = 0;
 const DEFAULT_ANALYTICS_TRACKING_HOURS = Math.max(
   1,
   Number.parseInt(process.env.TELEGRAM_ANALYTICS_TRACKING_HOURS || '24', 10) || 24
 );
+const CLIENT_RESET_COOLDOWN_MS = Math.max(
+  10 * 1000,
+  Number.parseInt(process.env.TELEGRAM_CLIENT_RESET_COOLDOWN_MS || '30000', 10) || 30000
+);
+
+const isRecoverableConnectionError = (error) => {
+  const message = error?.message || '';
+  return (
+    message.includes('Not connected') ||
+    message.includes('Connection closed') ||
+    message.includes('TIMEOUT') ||
+    message.includes('timed out') ||
+    message.includes('sender already has some hanging states')
+  );
+};
+
+const resetClientState = async (reason = 'unspecified') => {
+  console.log(`🔄 Resetting Telegram client state (${reason})...`);
+
+  if (client) {
+    try {
+      await Promise.race([
+        client.disconnect(),
+        new Promise((resolve) => setTimeout(resolve, 5000))
+      ]);
+    } catch (disconnectError) {
+      console.warn('Warning disconnecting Telegram client during reset:', disconnectError.message);
+    }
+  }
+
+  client = null;
+  isConnected = false;
+  messageListenerSetup = false;
+};
+
+const forceReinitialize = async (reason = 'unspecified') => {
+  const now = Date.now();
+  if (now - lastForcedResetAt < CLIENT_RESET_COOLDOWN_MS) {
+    console.log(`⏭️ Skipping Telegram client hard reset (${reason}) - cooldown active`);
+    return;
+  }
+
+  lastForcedResetAt = now;
+  await resetClientState(reason);
+  await init();
+};
 
 /**
  * Initialize Telegram Client with user credentials
@@ -119,22 +166,7 @@ const init = async () => {
       return;
     }
     
-    // Close old client if exists to prevent memory leak
-    if (client) {
-      try {
-        console.log('🔄 Closing old Telegram client...');
-        await client.disconnect();
-        client = null;
-        isConnected = false;
-        messageListenerSetup = false; // Reset listener flag
-      } catch (disconnectError) {
-        console.warn('Warning disconnecting old client:', disconnectError.message);
-        // Continue with new initialization anyway
-        client = null;
-        isConnected = false;
-        messageListenerSetup = false;
-      }
-    }
+    await resetClientState('init');
     
     const apiId = parseInt(process.env.TELEGRAM_API_ID);
     const apiHash = process.env.TELEGRAM_API_HASH;
@@ -463,6 +495,9 @@ const getRecentMessages = async (chatId, limit = 50, offsetId = 0, username = nu
     
   } catch (error) {
     console.error(`Error getting messages from ${chatId}:`, error);
+    if (isRecoverableConnectionError(error)) {
+      await forceReinitialize(`getRecentMessages:${chatId}`);
+    }
     throw error;
   }
 };
@@ -497,6 +532,9 @@ const getMessagesByIds = async (chatId, messageIds = [], username = null) => {
     return batches;
   } catch (error) {
     console.error(`Error getting tracked messages from ${chatId}:`, error);
+    if (isRecoverableConnectionError(error)) {
+      await forceReinitialize(`getMessagesByIds:${chatId}`);
+    }
     throw error;
   }
 };
@@ -1163,6 +1201,7 @@ const getClient = () => {
 
 module.exports = {
   init,
+  forceReinitialize,
   getUserSubscriptions,
   isConnected: isClientConnected,
   getClient,

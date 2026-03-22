@@ -153,15 +153,9 @@ const processMessagesFromSource = async (telegramSource) => {
         );
       } catch (clientError) {
         console.error(`❌ Client API failed for ${telegramSource.name}:`, clientError.message);
-
-        console.log('🔄 Attempting to reinitialize Telegram Client...');
-        await telegramClient.init();
-
-        return await withTimeout(
-          telegramClient.processMessagesFromSource(telegramSource),
-          SOURCE_PROCESS_TIMEOUT_MS,
-          telegramSource.name
-        );
+        console.log('🔄 Attempting to hard-reset Telegram Client...');
+        await telegramClient.forceReinitialize(`source:${telegramSource.name}`);
+        throw clientError;
       }
     } catch (error) {
       console.error(`❌ Error processing Telegram source ${telegramSource.name}:`, error);
