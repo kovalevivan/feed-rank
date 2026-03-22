@@ -5,6 +5,9 @@ const telegramClient = require('./client');
 
 // Initialize Telegram Bot for reading messages
 let bot;
+let processingQueue = Promise.resolve();
+const queuedSourceIds = new Set();
+const activeSourceIds = new Set();
 
 /**
  * Initialize the Telegram services for reading sources
@@ -106,32 +109,45 @@ const getRecentMessages = async (chatId, limit = 100, fromMessageId = null) => {
  * Process messages from a Telegram source and create posts
  */
 const processMessagesFromSource = async (telegramSource) => {
-  try {
-    console.log(`🔄 Processing messages from Telegram source: ${telegramSource.name}`);
-    
-    // FORCE Client API usage - no Bot API fallback for sources
-    console.log(`🚀 Using Client API exclusively for ${telegramSource.name}`);
-    
-    try {
-      return await telegramClient.processMessagesFromSource(telegramSource);
-    } catch (clientError) {
-      console.error(`❌ Client API failed for ${telegramSource.name}:`, clientError.message);
-      
-      // Try to reinitialize the client
-      console.log('🔄 Attempting to reinitialize Telegram Client...');
-      await telegramClient.init();
-      
-      // Retry with reinitialized client
-      return await telegramClient.processMessagesFromSource(telegramSource);
-    }
-    
-    // No Bot API fallback - Client API is required for sources
-    throw new Error('Client API connection required for Telegram sources');
-    
-  } catch (error) {
-    console.error(`❌ Error processing Telegram source ${telegramSource.name}:`, error);
-    throw error;
+  const sourceId = telegramSource._id.toString();
+
+  if (activeSourceIds.has(sourceId) || queuedSourceIds.has(sourceId)) {
+    console.log(`⏭️ Skipping Telegram source ${telegramSource.name}: already queued or processing`);
+    return { processed: 0, created: 0, updated: 0, skipped: true };
   }
+
+  queuedSourceIds.add(sourceId);
+
+  const runSource = async () => {
+    queuedSourceIds.delete(sourceId);
+    activeSourceIds.add(sourceId);
+
+    try {
+      console.log(`🔄 Processing messages from Telegram source: ${telegramSource.name}`);
+      console.log(`🚀 Using Client API exclusively for ${telegramSource.name}`);
+
+      try {
+        return await telegramClient.processMessagesFromSource(telegramSource);
+      } catch (clientError) {
+        console.error(`❌ Client API failed for ${telegramSource.name}:`, clientError.message);
+
+        console.log('🔄 Attempting to reinitialize Telegram Client...');
+        await telegramClient.init();
+
+        return await telegramClient.processMessagesFromSource(telegramSource);
+      }
+    } catch (error) {
+      console.error(`❌ Error processing Telegram source ${telegramSource.name}:`, error);
+      throw error;
+    } finally {
+      activeSourceIds.delete(sourceId);
+    }
+  };
+
+  const runPromise = processingQueue.then(runSource, runSource);
+  processingQueue = runPromise.catch(() => {});
+
+  return runPromise;
 };
 
 /**
@@ -274,5 +290,9 @@ module.exports = {
   processMessagesFromSource,
   processAllSources,
   testConnection,
-  getBot: () => bot
+  getBot: () => bot,
+  getQueueState: () => ({
+    queued: queuedSourceIds.size,
+    active: activeSourceIds.size
+  })
 };
