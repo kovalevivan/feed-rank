@@ -95,6 +95,10 @@ let client;
 let isConnected = false;
 let isInitializing = false;
 let messageListenerSetup = false;
+const DEFAULT_ANALYTICS_TRACKING_HOURS = Math.max(
+  1,
+  Number.parseInt(process.env.TELEGRAM_ANALYTICS_TRACKING_HOURS || '24', 10) || 24
+);
 
 /**
  * Initialize Telegram Client with user credentials
@@ -504,17 +508,18 @@ const processMessage = async (message, source, options = {}) => {
   try {
     const observedAt = new Date();
     const thresholdUsed = getThresholdUsed(source);
-
-    // Extract message data
-    const messageData = await extractMessageData(message, source);
-    if (!messageData) {
-      return null;
-    }
-
     const existingPost = await Post.findOne({
       telegramSource: source._id,
       originalPostId: message.id.toString()
     });
+
+    // Extract message data
+    const messageData = await extractMessageData(message, source, {
+      includeMedia: !existingPost
+    });
+    if (!messageData) {
+      return null;
+    }
 
     const maxNewsAgeMinutes = Math.max(1, source?.maxNewsAgeMinutes || 60);
     const messageAgeMs = Date.now() - new Date(messageData.publishedAt).getTime();
@@ -651,7 +656,7 @@ const processMessage = async (message, source, options = {}) => {
 /**
  * Extract relevant data from Telegram message
  */
-const extractMessageData = async (message, source) => {
+const extractMessageData = async (message, source, options = {}) => {
   try {
     // Skip empty messages
     if (!message.message && !message.media) {
@@ -689,7 +694,7 @@ const extractMessageData = async (message, source) => {
     }
     
     // Extract media attachments
-    if (message.media) {
+    if (message.media && options.includeMedia !== false) {
       const attachment = await extractMediaAttachment(message.media, message);
       if (attachment) {
         messageData.attachments.push(attachment);
@@ -900,10 +905,12 @@ const processMessagesFromSource = async (telegramSource) => {
     let trackedMessagesForUpdate = [];
     
     try {
+      const postsToCheck = Math.max(1, Number.parseInt(telegramSource.postsToCheck || 10, 10) || 10);
+
       // Fetch new messages since lastPostId
       newMessages = await getRecentMessages(
         telegramSource.chatId,
-        50,
+        postsToCheck,
         telegramSource.lastPostId || 0,
         telegramSource.username
       );
@@ -939,10 +946,24 @@ const processMessagesFromSource = async (telegramSource) => {
     try {
       // Re-fetch all already tracked posts for this source so analytics keeps accumulating
       // snapshots for the posts we have already started observing.
+      const trackingWindowStart = new Date(
+        Date.now() - DEFAULT_ANALYTICS_TRACKING_HOURS * 60 * 60 * 1000
+      );
       const trackedPosts = await Post.find(
-        { telegramSource: telegramSource._id },
-        'originalPostId'
-      ).lean();
+        {
+          telegramSource: telegramSource._id,
+          publishedAt: { $gte: trackingWindowStart }
+        },
+        'originalPostId publishedAt'
+      )
+        .sort({ publishedAt: -1 })
+        .lean();
+
+      console.log(
+        `📈 Re-evaluating ${trackedPosts.length} tracked posts for ${telegramSource.name} ` +
+        `within the last ${DEFAULT_ANALYTICS_TRACKING_HOURS}h`
+      );
+
       trackedMessagesForUpdate = await getMessagesByIds(
         telegramSource.chatId,
         trackedPosts.map((post) => post.originalPostId),
