@@ -581,7 +581,10 @@ const processMessage = async (message, source, options = {}) => {
           }
         }
         
-        return existingPost;
+        return {
+          action: 'updated',
+          post: existingPost
+        };
       } else {
         await telegramAnalyticsService.recordPostObservation({
           source,
@@ -591,8 +594,10 @@ const processMessage = async (message, source, options = {}) => {
           thresholdUsed,
           runId: options.runId || null
         });
-        // No metrics changed, skip processing
-        return null;
+        return {
+          action: 'observed',
+          post: existingPost
+        };
       }
     }
     
@@ -645,7 +650,10 @@ const processMessage = async (message, source, options = {}) => {
     }
     
     // Message processed (logging reduced)
-    return post;
+    return {
+      action: 'created',
+      post
+    };
     
   } catch (error) {
     console.error(`Error processing message ${message.id}:`, error);
@@ -1007,12 +1015,9 @@ const processMessagesFromSource = async (telegramSource) => {
       const result = await processMessage(message, telegramSource, { runId: analyticsRunId });
       
       if (result) {
-        // Check if this was a new post or an updated existing post
-        if (result.createdAt && new Date() - new Date(result.createdAt) < 1000) {
-          // Recently created (within 1 second) = new post
+        if (result.action === 'created') {
           createdCount++;
-        } else {
-          // Older post = updated post
+        } else if (result.action === 'updated') {
           updatedCount++;
         }
       }
