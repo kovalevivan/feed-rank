@@ -96,6 +96,7 @@ let isConnected = false;
 let isInitializing = false;
 let messageListenerSetup = false;
 let lastForcedResetAt = 0;
+const entityCache = new Map();
 const DEFAULT_ANALYTICS_TRACKING_HOURS = Math.max(
   1,
   Number.parseInt(process.env.TELEGRAM_ANALYTICS_TRACKING_HOURS || '24', 10) || 24
@@ -104,6 +105,61 @@ const CLIENT_RESET_COOLDOWN_MS = Math.max(
   10 * 1000,
   Number.parseInt(process.env.TELEGRAM_CLIENT_RESET_COOLDOWN_MS || '30000', 10) || 30000
 );
+const TELEGRAM_OPERATION_TIMEOUT_MS = Math.max(
+  5 * 1000,
+  Number.parseInt(process.env.TELEGRAM_OPERATION_TIMEOUT_MS || '20000', 10) || 20000
+);
+const ENTITY_CACHE_TTL_MS = Math.max(
+  60 * 1000,
+  Number.parseInt(process.env.TELEGRAM_ENTITY_CACHE_TTL_MS || `${30 * 60 * 1000}`, 10) || 30 * 60 * 1000
+);
+
+const withTelegramTimeout = async (operation, timeoutMs, label) => {
+  let timeoutId;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(operation),
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(`Telegram operation timed out after ${Math.round(timeoutMs / 1000)}s: ${label}`));
+        }, timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+};
+
+const getCachedEntity = (chatId, username = null) => {
+  const keys = [chatId, username].filter(Boolean);
+  for (const key of keys) {
+    const cached = entityCache.get(key);
+    if (!cached) {
+      continue;
+    }
+    if (Date.now() - cached.cachedAt > ENTITY_CACHE_TTL_MS) {
+      entityCache.delete(key);
+      continue;
+    }
+    return cached.entity;
+  }
+  return null;
+};
+
+const cacheEntity = (entity, chatId, username = null) => {
+  const cached = {
+    entity,
+    cachedAt: Date.now()
+  };
+  if (chatId) {
+    entityCache.set(chatId, cached);
+  }
+  if (username) {
+    entityCache.set(username, cached);
+  }
+};
 
 const isRecoverableConnectionError = (error) => {
   const message = error?.message || '';
@@ -112,7 +168,8 @@ const isRecoverableConnectionError = (error) => {
     message.includes('Connection closed') ||
     message.includes('TIMEOUT') ||
     message.includes('timed out') ||
-    message.includes('sender already has some hanging states')
+    message.includes('sender already has some hanging states') ||
+    message.includes('Telegram operation timed out')
   );
 };
 
@@ -133,6 +190,7 @@ const resetClientState = async (reason = 'unspecified') => {
   client = null;
   isConnected = false;
   messageListenerSetup = false;
+  entityCache.clear();
 };
 
 const forceReinitialize = async (reason = 'unspecified') => {
@@ -436,40 +494,59 @@ const getChatInfo = async (identifier) => {
 };
 
 const resolveChatEntity = async (chatId, username = null) => {
-  let entity;
+  const cachedEntity = getCachedEntity(chatId, username);
+  if (cachedEntity) {
+    return cachedEntity;
+  }
+
+  const attempts = [];
+  if (chatId) {
+    const entityId = Number.parseInt(chatId, 10);
+    if (Number.isFinite(entityId)) {
+      attempts.push({
+        label: `id:${chatId}`,
+        resolver: async () => {
+          console.log(`🔄 Resolving entity by ID: ${entityId} (from ${chatId})`);
+          return withTelegramTimeout(
+            () => client.getEntity(entityId),
+            TELEGRAM_OPERATION_TIMEOUT_MS,
+            `getEntity:${chatId}`
+          );
+        }
+      });
+    }
+  }
 
   if (username && username.startsWith('@')) {
-    try {
-      console.log(`🔄 Resolving entity by username: ${username}`);
-      entity = await client.getEntity(username);
-      console.log(`✅ Resolved entity by username: ${entity.id}`);
-    } catch (usernameError) {
-      console.warn(`⚠️ Failed to resolve by username ${username}:`, usernameError.message);
-      entity = null;
-    }
-  }
-
-  if (!entity) {
-    try {
-      let entityId;
-      if (chatId.startsWith('-100')) {
-        entityId = parseInt(chatId, 10);
-      } else if (chatId.startsWith('-')) {
-        entityId = parseInt(chatId, 10);
-      } else {
-        entityId = parseInt(chatId, 10);
+    attempts.push({
+      label: `username:${username}`,
+      resolver: async () => {
+        console.log(`🔄 Resolving entity by username: ${username}`);
+        return withTelegramTimeout(
+          () => client.getEntity(username),
+          TELEGRAM_OPERATION_TIMEOUT_MS,
+          `getEntity:${username}`
+        );
       }
+    });
+  }
 
-      console.log(`🔄 Resolving entity by ID: ${entityId} (from ${chatId})`);
-      entity = await client.getEntity(entityId);
-      console.log(`✅ Resolved entity by ID: ${entity.id}`);
-    } catch (idError) {
-      console.error(`❌ Failed to resolve entity by ID ${chatId}:`, idError.message);
-      throw new Error(`Cannot resolve chat entity. Chat may be private or bot doesn't have access. ID: ${chatId}, Username: ${username}`);
+  let lastError = null;
+  for (const attempt of attempts) {
+    try {
+      const entity = await attempt.resolver();
+      console.log(`✅ Resolved entity by ${attempt.label}: ${entity.id}`);
+      cacheEntity(entity, chatId, username);
+      return entity;
+    } catch (error) {
+      lastError = error;
+      console.warn(`⚠️ Failed to resolve entity via ${attempt.label}:`, error.message);
     }
   }
 
-  return entity;
+  throw new Error(
+    `Cannot resolve chat entity. Chat may be private or bot doesn't have access. ID: ${chatId}, Username: ${username}. ${lastError ? `Last error: ${lastError.message}` : ''}`.trim()
+  );
 };
 
 /**
@@ -485,10 +562,14 @@ const getRecentMessages = async (chatId, limit = 50, offsetId = 0, username = nu
     const entity = await resolveChatEntity(chatId, username);
 
     // Now get messages using the resolved entity
-    const messages = await client.getMessages(entity, {
-      limit: limit,
-      offsetId: offsetId
-    });
+    const messages = await withTelegramTimeout(
+      () => client.getMessages(entity, {
+        limit: limit,
+        offsetId: offsetId
+      }),
+      TELEGRAM_OPERATION_TIMEOUT_MS,
+      `getMessages:${chatId}:offset:${offsetId}:limit:${limit}`
+    );
     
     console.log(`✅ Retrieved ${messages.length} messages from ${chatId}`);
     return messages;
@@ -522,9 +603,13 @@ const getMessagesByIds = async (chatId, messageIds = [], username = null) => {
     const entity = await resolveChatEntity(chatId, username);
     const batches = [];
 
-    for (let index = 0; index < uniqueIds.length; index += 100) {
-      const chunk = uniqueIds.slice(index, index + 100);
-      const chunkMessages = await client.getMessages(entity, { ids: chunk });
+    for (let index = 0; index < uniqueIds.length; index += 50) {
+      const chunk = uniqueIds.slice(index, index + 50);
+      const chunkMessages = await withTelegramTimeout(
+        () => client.getMessages(entity, { ids: chunk }),
+        TELEGRAM_OPERATION_TIMEOUT_MS,
+        `getMessagesByIds:${chatId}:chunk:${index / 50 + 1}`
+      );
       batches.push(...chunkMessages.filter(Boolean));
     }
 
