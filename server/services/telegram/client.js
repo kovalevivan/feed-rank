@@ -399,6 +399,43 @@ const getChatInfo = async (identifier) => {
   }
 };
 
+const resolveChatEntity = async (chatId, username = null) => {
+  let entity;
+
+  if (username && username.startsWith('@')) {
+    try {
+      console.log(`🔄 Resolving entity by username: ${username}`);
+      entity = await client.getEntity(username);
+      console.log(`✅ Resolved entity by username: ${entity.id}`);
+    } catch (usernameError) {
+      console.warn(`⚠️ Failed to resolve by username ${username}:`, usernameError.message);
+      entity = null;
+    }
+  }
+
+  if (!entity) {
+    try {
+      let entityId;
+      if (chatId.startsWith('-100')) {
+        entityId = parseInt(chatId, 10);
+      } else if (chatId.startsWith('-')) {
+        entityId = parseInt(chatId, 10);
+      } else {
+        entityId = parseInt(chatId, 10);
+      }
+
+      console.log(`🔄 Resolving entity by ID: ${entityId} (from ${chatId})`);
+      entity = await client.getEntity(entityId);
+      console.log(`✅ Resolved entity by ID: ${entity.id}`);
+    } catch (idError) {
+      console.error(`❌ Failed to resolve entity by ID ${chatId}:`, idError.message);
+      throw new Error(`Cannot resolve chat entity. Chat may be private or bot doesn't have access. ID: ${chatId}, Username: ${username}`);
+    }
+  }
+
+  return entity;
+};
+
 /**
  * Get recent messages from a channel/group
  */
@@ -409,47 +446,8 @@ const getRecentMessages = async (chatId, limit = 50, offsetId = 0, username = nu
   
   try {
     console.log(`📥 Fetching ${limit} messages from ${chatId} (username: ${username})...`);
-    
-    let entity;
-    
-    // Try username first (more reliable for public channels)
-    if (username && username.startsWith('@')) {
-      try {
-        console.log(`🔄 Resolving entity by username: ${username}`);
-        entity = await client.getEntity(username);
-        console.log(`✅ Resolved entity by username: ${entity.id}`);
-      } catch (usernameError) {
-        console.warn(`⚠️ Failed to resolve by username ${username}:`, usernameError.message);
-        entity = null;
-      }
-    }
-    
-    // If username resolution failed, try by chat ID
-    if (!entity) {
-      try {
-        // For supergroup/channel IDs, convert to proper format
-        let entityId;
-        if (chatId.startsWith('-100')) {
-          // For supergroups/channels: -1001234567890 -> -1001234567890 (keep as negative number)
-          // The Telegram client expects the full negative ID for channels/supergroups
-          entityId = parseInt(chatId);
-        } else if (chatId.startsWith('-')) {
-          // Regular group ID (negative but not -100 prefix)
-          entityId = parseInt(chatId);
-        } else {
-          // Positive ID (user or other entity)
-          entityId = parseInt(chatId);
-        }
-        
-        console.log(`🔄 Resolving entity by ID: ${entityId} (from ${chatId})`);
-        entity = await client.getEntity(entityId);
-        console.log(`✅ Resolved entity by ID: ${entity.id}`);
-      } catch (idError) {
-        console.error(`❌ Failed to resolve entity by ID ${chatId}:`, idError.message);
-        throw new Error(`Cannot resolve chat entity. Chat may be private or bot doesn't have access. ID: ${chatId}, Username: ${username}`);
-      }
-    }
-    
+    const entity = await resolveChatEntity(chatId, username);
+
     // Now get messages using the resolved entity
     const messages = await client.getMessages(entity, {
       limit: limit,
@@ -461,6 +459,40 @@ const getRecentMessages = async (chatId, limit = 50, offsetId = 0, username = nu
     
   } catch (error) {
     console.error(`Error getting messages from ${chatId}:`, error);
+    throw error;
+  }
+};
+
+const getMessagesByIds = async (chatId, messageIds = [], username = null) => {
+  if (!client || !isConnected) {
+    throw new Error('Telegram Client not connected');
+  }
+
+  const uniqueIds = [...new Set(
+    messageIds
+      .map((id) => Number.parseInt(id, 10))
+      .filter((id) => Number.isFinite(id) && id > 0)
+  )];
+
+  if (uniqueIds.length === 0) {
+    return [];
+  }
+
+  try {
+    console.log(`📥 Fetching ${uniqueIds.length} tracked messages by id from ${chatId}...`);
+    const entity = await resolveChatEntity(chatId, username);
+    const batches = [];
+
+    for (let index = 0; index < uniqueIds.length; index += 100) {
+      const chunk = uniqueIds.slice(index, index + 100);
+      const chunkMessages = await client.getMessages(entity, { ids: chunk });
+      batches.push(...chunkMessages.filter(Boolean));
+    }
+
+    console.log(`✅ Retrieved ${batches.length} tracked messages from ${chatId}`);
+    return batches;
+  } catch (error) {
+    console.error(`Error getting tracked messages from ${chatId}:`, error);
     throw error;
   }
 };
@@ -479,17 +511,16 @@ const processMessage = async (message, source, options = {}) => {
       return null;
     }
 
-    const maxNewsAgeMinutes = Math.max(1, source?.maxNewsAgeMinutes || 60);
-    const messageAgeMs = Date.now() - new Date(messageData.publishedAt).getTime();
-    if (messageAgeMs > maxNewsAgeMinutes * 60 * 1000) {
-      return null;
-    }
-
-    // Check if message already processed
     const existingPost = await Post.findOne({
       telegramSource: source._id,
       originalPostId: message.id.toString()
     });
+
+    const maxNewsAgeMinutes = Math.max(1, source?.maxNewsAgeMinutes || 60);
+    const messageAgeMs = Date.now() - new Date(messageData.publishedAt).getTime();
+    if (messageAgeMs > maxNewsAgeMinutes * 60 * 1000 && !existingPost && !options.ignoreAgeLimit) {
+      return null;
+    }
     
     // Check if message meets viral criteria
     const meetsViralCriteria = checkViralCriteria(messageData, source);
@@ -866,7 +897,7 @@ const processMessagesFromSource = async (telegramSource) => {
     
     // Get recent messages (including some older ones for re-evaluation)
     let newMessages = [];
-    let recentMessagesForUpdate = [];
+    let trackedMessagesForUpdate = [];
     
     try {
       // Fetch new messages since lastPostId
@@ -906,15 +937,19 @@ const processMessagesFromSource = async (telegramSource) => {
     }
     
     try {
-      // Also fetch some recent messages for re-evaluation (last 20 messages regardless of lastPostId)
-      recentMessagesForUpdate = await getRecentMessages(
+      // Re-fetch all already tracked posts for this source so analytics keeps accumulating
+      // snapshots for the posts we have already started observing.
+      const trackedPosts = await Post.find(
+        { telegramSource: telegramSource._id },
+        'originalPostId'
+      ).lean();
+      trackedMessagesForUpdate = await getMessagesByIds(
         telegramSource.chatId,
-        20,
-        0, // Get recent messages regardless of lastPostId
+        trackedPosts.map((post) => post.originalPostId),
         telegramSource.username
       );
     } catch (error) {
-      console.warn(`⚠️ Could not fetch recent messages for re-evaluation from ${telegramSource.name}: ${error.message}`);
+      console.warn(`⚠️ Could not fetch tracked messages for re-evaluation from ${telegramSource.name}: ${error.message}`);
       // Continue with empty array - don't fail the entire process
     }
     
@@ -924,8 +959,8 @@ const processMessagesFromSource = async (telegramSource) => {
     // Add new messages
     newMessages.forEach(msg => allMessagesMap.set(msg.id, msg));
     
-    // Add recent messages for re-evaluation
-    recentMessagesForUpdate.forEach(msg => allMessagesMap.set(msg.id, msg));
+    // Add previously tracked messages for re-evaluation
+    trackedMessagesForUpdate.forEach(msg => allMessagesMap.set(msg.id, msg));
     
     // Convert back to array and sort by ID
     const messages = Array.from(allMessagesMap.values()).sort((a, b) => a.id - b.id);
@@ -1107,6 +1142,7 @@ module.exports = {
   getClient,
   getChatInfo,
   getRecentMessages,
+  getMessagesByIds,
   getMessagesForThresholdCalculation,
   processMessagesFromSource,
   autoForwardViralPost,
