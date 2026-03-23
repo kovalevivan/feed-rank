@@ -60,7 +60,11 @@ const autoForwardViralPost = async (post, source) => {
     for (const mapping of mappings) {
       if (mapping.telegramChannel && mapping.telegramChannel.active) {
         try {
-          await telegramService.forwardPost(post, source, mapping.telegramChannel);
+          const result = await telegramService.forwardPost(post, source, mapping.telegramChannel);
+          if (result?.skipped) {
+            console.log(`⏭️ Skipped forwarding viral post ${post.postId} to ${mapping.telegramChannel.name}: ${result.reason}`);
+            continue;
+          }
           forwardedCount++;
           console.log(`✅ Auto-forwarded viral post ${post.postId} to ${mapping.telegramChannel.name}`);
         } catch (error) {

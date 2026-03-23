@@ -332,12 +332,15 @@ const processHighDynamicsPosts = async () => {
             for (const mapping of mappings) {
               if (mapping.telegramChannel && mapping.telegramChannel.active) {
                 try {
-                  await telegramService.forwardPost(post, source, mapping.telegramChannel, {
+                  const result = await telegramService.forwardPost(post, source, mapping.telegramChannel, {
                     isHighDynamics: true,
                     growthRate: dynamicsCheck.growthRate,
                     viewHistory: dynamicsCheck.history,
                     timeRange: dynamicsCheck.timeRange
                   });
+                  if (result?.skipped) {
+                    continue;
+                  }
                   
                   console.log(`✅ Forwarded high dynamics post ${post.postId} to ${mapping.telegramChannel.name}`);
                 } catch (error) {

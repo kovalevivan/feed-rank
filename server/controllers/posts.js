@@ -217,6 +217,17 @@ router.put(
                 // Pass the populated source data directly
                 const sourceData = post.vkSource || post.telegramSource;
                 const result = await telegramService.forwardPost(post, sourceData, mapping.telegramChannel);
+                if (result?.skipped) {
+                  forwardResults.push({
+                    channel: mapping.telegramChannel._id,
+                    success: false,
+                    skipped: true,
+                    reason: result.reason,
+                    ageMinutes: result.ageMinutes,
+                    limitMinutes: result.limitMinutes
+                  });
+                  continue;
+                }
                 forwardResults.push({
                   channel: mapping.telegramChannel._id,
                   success: true,
@@ -304,7 +315,17 @@ router.put(
             for (const mapping of mappings) {
               if (mapping.telegramChannel && mapping.telegramChannel.active) {
                 try {
-                  await telegramService.forwardPost(post, post.vkSource, mapping.telegramChannel);
+                  const result = await telegramService.forwardPost(post, post.vkSource, mapping.telegramChannel);
+                  if (result?.skipped) {
+                    return {
+                      postId: post._id,
+                      success: false,
+                      skipped: true,
+                      reason: result.reason,
+                      ageMinutes: result.ageMinutes,
+                      limitMinutes: result.limitMinutes
+                    };
+                  }
                 } catch (error) {
                   console.error(`Error forwarding post ${post._id} to channel ${mapping.telegramChannel._id}:`, error);
                 }

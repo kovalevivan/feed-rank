@@ -16,6 +16,27 @@ const tempDir = os.tmpdir();
 // Initialize Telegram Bot
 let bot;
 
+const getPostAgeLimitDecision = (post, source) => {
+  if (!post?.publishedAt) {
+    return { allowed: true };
+  }
+
+  const maxNewsAgeMinutes = Math.max(1, Number(source?.maxNewsAgeMinutes || 60));
+  const postAgeMs = Date.now() - new Date(post.publishedAt).getTime();
+  const maxAgeMs = maxNewsAgeMinutes * 60 * 1000;
+
+  if (postAgeMs <= maxAgeMs) {
+    return { allowed: true };
+  }
+
+  return {
+    allowed: false,
+    reason: 'too_old',
+    ageMinutes: Math.round(postAgeMs / (60 * 1000)),
+    limitMinutes: maxNewsAgeMinutes
+  };
+};
+
 /**
  * Initializes the Telegram Bot
  */
@@ -537,6 +558,21 @@ const forwardPost = async (post, source, channel, options = {}) => {
       sourceName = sourceData ? sourceData.name : 'Неизвестный источник';
       isTelegramPost = true;
     }
+
+    const ageLimitDecision = getPostAgeLimitDecision(post, sourceData);
+    if (!ageLimitDecision.allowed) {
+      console.log(
+        `⏭️ Skipping forward for post ${post.originalPostId || post.postId} - too old ` +
+        `(${ageLimitDecision.ageMinutes}m, limit: ${ageLimitDecision.limitMinutes}m)`
+      );
+      return {
+        success: false,
+        skipped: true,
+        reason: ageLimitDecision.reason,
+        ageMinutes: ageLimitDecision.ageMinutes,
+        limitMinutes: ageLimitDecision.limitMinutes
+      };
+    }
     
     // Escape special HTML characters to prevent formatting issues
     const escapeHtml = (text) => {
@@ -1003,7 +1039,11 @@ const processPendingPosts = async () => {
       for (const mapping of validMappings) {
         try {
           // Use the post's vkSource for forwarding (works for both individual and group mappings)
-          await forwardPost(post, post.vkSource, mapping.telegramChannel);
+          const result = await forwardPost(post, post.vkSource, mapping.telegramChannel);
+          if (result?.skipped) {
+            skippedCount++;
+            continue;
+          }
           forwardedCount++;
           postForwarded = true;
         } catch (error) {
