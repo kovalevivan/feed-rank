@@ -126,7 +126,6 @@ app.use('/api/posts', require('./controllers/posts'));
 app.use('/api/settings', require('./controllers/settings'));
 app.use('/api/vk-source-groups', require('./controllers/vkSourceGroups'));
 app.use('/api/source-groups', require('./controllers/sourceGroups'));
-app.use('/api/analytics', require('./controllers/analytics'));
 app.use('/api/telegram-analytics', require('./controllers/telegramAnalytics'));
 app.get('/api/health', (req, res) => {
   const telegramAnalyticsService = require('./services/telegramAnalytics');
