@@ -636,7 +636,7 @@ const Analytics = () => {
                   {selectedSource ? `Посты канала: ${selectedSource.title}` : 'Посты канала'}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Последние посты без дублей альбомов, с текущими метриками и числом snapshots.
+                  Последние посты без дублей альбомов. Метрики в таблице показаны по выбранному окну времени.
                 </Typography>
               </Box>
               {selectedSource?.username && (
@@ -659,10 +659,10 @@ const Analytics = () => {
                   <TableRow>
                     <TableCell>Пост</TableCell>
                     <TableCell>Опубликован</TableCell>
-                    <TableCell align="right">Views</TableCell>
-                    <TableCell align="right">Лайки</TableCell>
-                    <TableCell align="right">Forwards</TableCell>
-                    <TableCell align="right">Comments</TableCell>
+                    <TableCell align="right">Views в окне</TableCell>
+                    <TableCell align="right">Лайки в окне</TableCell>
+                    <TableCell align="right">Forwards в окне</TableCell>
+                    <TableCell align="right">Comments в окне</TableCell>
                     <TableCell align="right">Preview value</TableCell>
                     <TableCell align="right">Точек в окне</TableCell>
                     <TableCell align="right">Snapshots</TableCell>
@@ -695,10 +695,18 @@ const Analytics = () => {
                           </Button>
                         </TableCell>
                         <TableCell>{formatDateTime(post.published_at)}</TableCell>
-                        <TableCell align="right">{formatNumber(post.view_count_last)}</TableCell>
-                        <TableCell align="right">{formatNumber(post.reaction_count_last)}</TableCell>
-                        <TableCell align="right">{formatNumber(post.forward_count_last)}</TableCell>
-                        <TableCell align="right">{formatNumber(post.comment_count_last)}</TableCell>
+                        <TableCell align="right">
+                          {Number(post.range_snapshots_count) > 0 ? formatNumber(post.range_view_count_max) : '—'}
+                        </TableCell>
+                        <TableCell align="right">
+                          {Number(post.range_snapshots_count) > 0 ? formatNumber(post.range_reaction_count_max) : '—'}
+                        </TableCell>
+                        <TableCell align="right">
+                          {Number(post.range_snapshots_count) > 0 ? formatNumber(post.range_forward_count_max) : '—'}
+                        </TableCell>
+                        <TableCell align="right">
+                          {Number(post.range_snapshots_count) > 0 ? formatNumber(post.range_comment_count_max) : '—'}
+                        </TableCell>
                         <TableCell align="right">{formatNumber(post.previewValue)}</TableCell>
                         <TableCell align="right">{formatNumber(post.range_snapshots_count)}</TableCell>
                         <TableCell align="right">{formatNumber(post.snapshots_count)}</TableCell>
