@@ -34,7 +34,18 @@ router.get('/sources', async (req, res) => {
 router.get('/sources/:sourceId/posts', async (req, res) => {
   try {
     const limit = Number.parseInt(req.query.limit, 10) || 100;
-    const posts = await telegramAnalyticsService.getSourcePosts(req.params.sourceId, limit);
+    const minAgeMinutes = req.query.minAgeMinutes !== undefined
+      ? Number.parseInt(req.query.minAgeMinutes, 10)
+      : null;
+    const maxAgeMinutes = req.query.maxAgeMinutes !== undefined
+      ? Number.parseInt(req.query.maxAgeMinutes, 10)
+      : null;
+    const posts = await telegramAnalyticsService.getSourcePosts(
+      req.params.sourceId,
+      limit,
+      Number.isFinite(minAgeMinutes) ? minAgeMinutes : null,
+      Number.isFinite(maxAgeMinutes) ? maxAgeMinutes : null
+    );
     res.json(posts);
   } catch (error) {
     console.error(`Error getting Telegram analytics posts for ${req.params.sourceId}:`, error);

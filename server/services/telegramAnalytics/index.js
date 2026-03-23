@@ -558,7 +558,7 @@ const getSourcesOverview = async () => {
   return result.rows;
 };
 
-const getSourcePosts = async (mongoSourceId, limit = 100) => {
+const getSourcePosts = async (mongoSourceId, limit = 100, minAgeMinutes = null, maxAgeMinutes = null) => {
   if (!enabled || !pool) {
     return [];
   }
@@ -578,16 +578,40 @@ const getSourcePosts = async (mongoSourceId, limit = 100) => {
         p.comment_count_last,
         p.current_is_viral,
         p.threshold_used,
-        COUNT(s.id)::INT AS snapshots_count
+        COUNT(s.id)::INT AS snapshots_count,
+        COALESCE(range_metrics.range_view_count_max, 0)::INT AS range_view_count_max,
+        COALESCE(range_metrics.range_forward_count_max, 0)::INT AS range_forward_count_max,
+        COALESCE(range_metrics.range_reaction_count_max, 0)::INT AS range_reaction_count_max,
+        COALESCE(range_metrics.range_comment_count_max, 0)::INT AS range_comment_count_max,
+        COALESCE(range_metrics.range_snapshots_count, 0)::INT AS range_snapshots_count
       FROM tg_posts p
       JOIN tg_channels c ON c.id = p.channel_id
       LEFT JOIN tg_post_snapshots s ON s.post_id = p.id
+      LEFT JOIN LATERAL (
+        SELECT
+          MAX(ps.view_count) AS range_view_count_max,
+          MAX(ps.forward_count) AS range_forward_count_max,
+          MAX(ps.reaction_count) AS range_reaction_count_max,
+          MAX(ps.comment_count) AS range_comment_count_max,
+          COUNT(*) AS range_snapshots_count
+        FROM tg_post_snapshots ps
+        WHERE ps.post_id = p.id
+          AND ($3::INT IS NULL OR ps.age_minutes >= $3)
+          AND ($4::INT IS NULL OR ps.age_minutes <= $4)
+      ) AS range_metrics ON TRUE
       WHERE c.mongo_source_id = $1
-      GROUP BY p.id
+      GROUP BY p.id, range_metrics.range_view_count_max, range_metrics.range_forward_count_max,
+               range_metrics.range_reaction_count_max, range_metrics.range_comment_count_max,
+               range_metrics.range_snapshots_count
       ORDER BY p.published_at DESC
       LIMIT $2
     `,
-    [mongoSourceId, toInteger(limit, 100)]
+    [
+      mongoSourceId,
+      toInteger(limit, 100),
+      minAgeMinutes === null ? null : toInteger(minAgeMinutes, 0),
+      maxAgeMinutes === null ? null : toInteger(maxAgeMinutes, 0)
+    ]
   );
 
   return result.rows;

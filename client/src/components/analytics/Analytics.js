@@ -107,6 +107,8 @@ const Analytics = () => {
   const [previewReactionWeight, setPreviewReactionWeight] = useState('1');
   const [previewCommentWeight, setPreviewCommentWeight] = useState('2');
   const [previewForwardWeight, setPreviewForwardWeight] = useState('3');
+  const [previewMinAgeMinutes, setPreviewMinAgeMinutes] = useState('0');
+  const [previewMaxAgeMinutes, setPreviewMaxAgeMinutes] = useState('60');
 
   useEffect(() => {
     dispatch(fetchAnalyticsOverview());
@@ -121,14 +123,19 @@ const Analytics = () => {
 
   useEffect(() => {
     if (selectedSourceId) {
-      dispatch(fetchAnalyticsSourcePosts({ sourceId: selectedSourceId, limit: 50 }));
+      dispatch(fetchAnalyticsSourcePosts({
+        sourceId: selectedSourceId,
+        limit: 50,
+        minAgeMinutes: previewMinAgeMinutes,
+        maxAgeMinutes: previewMaxAgeMinutes
+      }));
       dispatch(fetchAnalyticsSourceConfig({ sourceId: selectedSourceId }));
       return;
     }
 
     dispatch(clearSelectedSourcePosts());
     dispatch(clearSelectedSourceConfig());
-  }, [dispatch, selectedSourceId]);
+  }, [dispatch, selectedSourceId, previewMinAgeMinutes, previewMaxAgeMinutes]);
 
   const selectedSource = useMemo(
     () => sources.find((source) => source.mongo_source_id === selectedSourceId) || null,
@@ -197,6 +204,8 @@ const Analytics = () => {
     setPreviewReactionWeight(String(selectedSourceConfig.reactionWeight ?? 1));
     setPreviewCommentWeight(String(selectedSourceConfig.commentWeight ?? 2));
     setPreviewForwardWeight(String(selectedSourceConfig.forwardWeight ?? 3));
+    setPreviewMinAgeMinutes('0');
+    setPreviewMaxAgeMinutes(String(selectedSourceConfig.maxNewsAgeMinutes ?? 60));
   }, [selectedSourceConfig]);
 
   const runStats = useMemo(() => {
@@ -250,7 +259,12 @@ const Analytics = () => {
     dispatch(fetchAnalyticsOverview());
     dispatch(fetchAnalyticsSources());
     if (selectedSourceId) {
-      dispatch(fetchAnalyticsSourcePosts({ sourceId: selectedSourceId, limit: 50 }));
+      dispatch(fetchAnalyticsSourcePosts({
+        sourceId: selectedSourceId,
+        limit: 50,
+        minAgeMinutes: previewMinAgeMinutes,
+        maxAgeMinutes: previewMaxAgeMinutes
+      }));
     }
   };
 
@@ -269,10 +283,10 @@ const Analytics = () => {
   const previewPosts = useMemo(() => {
     const threshold = Number(previewThreshold) || 0;
     return visiblePosts.map((post) => {
-      const reactions = Number(post.reaction_count_last || 0);
-      const comments = Number(post.comment_count_last || 0);
-      const forwards = Number(post.forward_count_last || 0);
-      const views = Number(post.view_count_last || 0);
+      const reactions = Number(post.range_reaction_count_max ?? post.reaction_count_last ?? 0);
+      const comments = Number(post.range_comment_count_max ?? post.comment_count_last ?? 0);
+      const forwards = Number(post.range_forward_count_max ?? post.forward_count_last ?? 0);
+      const views = Number(post.range_view_count_max ?? post.view_count_last ?? 0);
 
       let previewValue = reactions;
       if (previewMetric === 'views') {
@@ -289,7 +303,7 @@ const Analytics = () => {
       return {
         ...post,
         previewValue,
-        previewIsViral: previewValue >= threshold
+        previewIsViral: Number(post.range_snapshots_count || 0) > 0 && previewValue >= threshold
       };
     });
   }, [visiblePosts, previewMetric, previewThreshold, previewReactionWeight, previewCommentWeight, previewForwardWeight]);
@@ -310,6 +324,8 @@ const Analytics = () => {
     setPreviewReactionWeight(String(selectedSourceConfig.reactionWeight ?? 1));
     setPreviewCommentWeight(String(selectedSourceConfig.commentWeight ?? 2));
     setPreviewForwardWeight(String(selectedSourceConfig.forwardWeight ?? 3));
+    setPreviewMinAgeMinutes('0');
+    setPreviewMaxAgeMinutes(String(selectedSourceConfig.maxNewsAgeMinutes ?? 60));
   };
 
   const openPostDetails = (post) => {
@@ -542,9 +558,30 @@ const Analytics = () => {
                     onChange={(event) => setPreviewThreshold(event.target.value)}
                   />
                 </Grid>
+                <Grid item xs={12} md={2}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="От, мин"
+                    type="number"
+                    value={previewMinAgeMinutes}
+                    onChange={(event) => setPreviewMinAgeMinutes(event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={2}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="До, мин"
+                    type="number"
+                    value={previewMaxAgeMinutes}
+                    onChange={(event) => setPreviewMaxAgeMinutes(event.target.value)}
+                  />
+                </Grid>
                 <Grid item xs={12} md={5}>
                   <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
                     <Chip label={`Будут viral: ${formatNumber(previewViralCount)} из ${formatNumber(previewPosts.length)}`} color="primary" />
+                    <Chip label={`Окно: ${previewMinAgeMinutes || 0}-${previewMaxAgeMinutes || '∞'} мин`} variant="outlined" />
                     {selectedSourceConfig && (
                       <Chip
                         label={`Источник: ${selectedSourceConfig.viralDetectionMetric}, ${selectedSourceConfig.thresholdType}`}
@@ -627,6 +664,7 @@ const Analytics = () => {
                     <TableCell align="right">Forwards</TableCell>
                     <TableCell align="right">Comments</TableCell>
                     <TableCell align="right">Preview value</TableCell>
+                    <TableCell align="right">Точек в окне</TableCell>
                     <TableCell align="right">Snapshots</TableCell>
                     <TableCell>Текущий статус</TableCell>
                     <TableCell>Preview</TableCell>
@@ -662,6 +700,7 @@ const Analytics = () => {
                         <TableCell align="right">{formatNumber(post.forward_count_last)}</TableCell>
                         <TableCell align="right">{formatNumber(post.comment_count_last)}</TableCell>
                         <TableCell align="right">{formatNumber(post.previewValue)}</TableCell>
+                        <TableCell align="right">{formatNumber(post.range_snapshots_count)}</TableCell>
                         <TableCell align="right">{formatNumber(post.snapshots_count)}</TableCell>
                         <TableCell>
                           <Chip

@@ -29,9 +29,16 @@ export const fetchAnalyticsSources = createAsyncThunk(
 
 export const fetchAnalyticsSourcePosts = createAsyncThunk(
   'analytics/fetchSourcePosts',
-  async ({ sourceId, limit = 50 }, { rejectWithValue }) => {
+  async ({ sourceId, limit = 50, minAgeMinutes = null, maxAgeMinutes = null }, { rejectWithValue }) => {
     try {
-      const response = await axios.get(`${API_URL}/telegram-analytics/sources/${sourceId}/posts?limit=${limit}`);
+      const query = new URLSearchParams({ limit: String(limit) });
+      if (minAgeMinutes !== null && minAgeMinutes !== undefined && minAgeMinutes !== '') {
+        query.set('minAgeMinutes', String(minAgeMinutes));
+      }
+      if (maxAgeMinutes !== null && maxAgeMinutes !== undefined && maxAgeMinutes !== '') {
+        query.set('maxAgeMinutes', String(maxAgeMinutes));
+      }
+      const response = await axios.get(`${API_URL}/telegram-analytics/sources/${sourceId}/posts?${query.toString()}`);
       return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data || error.message);
