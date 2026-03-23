@@ -77,7 +77,7 @@ router.post(
     body('maxNewsAgeMinutes').optional().isInt({ min: 1, max: 10080 }).withMessage('Maximum news age must be between 1 and 10080 minutes'),
     body('minViewsForViral').optional().isNumeric().withMessage('Minimum views must be a number'),
     // Viral detection settings
-    body('viralDetectionMetric').optional().isIn(['views', 'reactions', 'comments', 'engagement_score']).withMessage('Invalid viral detection metric'),
+    body('viralDetectionMetric').optional().isIn(['views', 'reactions', 'comments', 'forwards', 'engagement_score']).withMessage('Invalid viral detection metric'),
     body('minReactionsForViral').optional().isNumeric().withMessage('Minimum reactions must be a number'),
     body('minCommentsForViral').optional().isNumeric().withMessage('Minimum comments must be a number'),
     body('minForwardsForViral').optional().isNumeric().withMessage('Minimum forwards must be a number'),
@@ -195,6 +195,10 @@ router.post(
         newSource.minViewsForViral = newSource.thresholdType === 'manual'
           ? (newSource.manualThreshold || newSource.minViewsForViral)
           : newSource.minViewsForViral;
+      } else if (newSource.viralDetectionMetric === 'forwards') {
+        newSource.minForwardsForViral = newSource.thresholdType === 'manual'
+          ? (newSource.manualThreshold || newSource.minForwardsForViral)
+          : newSource.minForwardsForViral;
       }
       
       // Save new source
@@ -223,7 +227,7 @@ router.put(
     body('maxNewsAgeMinutes').optional().isInt({ min: 1, max: 10080 }).withMessage('Maximum news age must be between 1 and 10080 minutes'),
     body('minViewsForViral').optional().isNumeric().withMessage('Minimum views must be a number'),
     // Viral detection settings
-    body('viralDetectionMetric').optional().isIn(['views', 'reactions', 'comments', 'engagement_score']).withMessage('Invalid viral detection metric'),
+    body('viralDetectionMetric').optional().isIn(['views', 'reactions', 'comments', 'forwards', 'engagement_score']).withMessage('Invalid viral detection metric'),
     body('minReactionsForViral').optional().isNumeric().withMessage('Minimum reactions must be a number'),
     body('minCommentsForViral').optional().isNumeric().withMessage('Minimum comments must be a number'),
     body('minForwardsForViral').optional().isNumeric().withMessage('Minimum forwards must be a number'),
@@ -288,6 +292,8 @@ router.put(
         source.manualThreshold = manualThreshold;
         if ((viralDetectionMetric || source.viralDetectionMetric) === 'views') {
           source.minViewsForViral = manualThreshold;
+        } else if ((viralDetectionMetric || source.viralDetectionMetric) === 'forwards') {
+          source.minForwardsForViral = manualThreshold;
         }
       }
       
@@ -500,7 +506,7 @@ router.post('/calculate-threshold', async (req, res) => {
       });
     }
 
-    if (!['views', 'reactions', 'comments', 'engagement_score'].includes(viralDetectionMetric)) {
+    if (!['views', 'reactions', 'comments', 'forwards', 'engagement_score'].includes(viralDetectionMetric)) {
       return res.status(400).json({
         message: 'Invalid viral detection metric'
       });
@@ -582,6 +588,8 @@ router.post('/calculate-threshold', async (req, res) => {
           existingSource.viralDetectionMetric = viralDetectionMetric;
           if (viralDetectionMetric === 'views') {
             existingSource.minViewsForViral = threshold;
+          } else if (viralDetectionMetric === 'forwards') {
+            existingSource.minForwardsForViral = threshold;
           }
           existingSource.lastPostsData = {
             postsAnalyzed: recentPosts.length,

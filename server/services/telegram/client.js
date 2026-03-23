@@ -80,6 +80,8 @@ const getThresholdUsed = (source) => {
   switch (source.viralDetectionMetric) {
     case 'views':
       return Number(source.calculatedThreshold || source.minViewsForViral || 0);
+    case 'forwards':
+      return Number(source.calculatedThreshold || source.minForwardsForViral || 0);
     case 'comments':
       return Number(source.calculatedThreshold || source.minCommentsForViral || 0);
     case 'engagement_score':
@@ -954,6 +956,11 @@ const checkViralCriteria = (messageData, source) => {
       case 'comments':
         const minComments = getEffectiveThreshold(source.minCommentsForViral || 5);
         meetsThreshold = commentCount >= minComments;
+        break;
+
+      case 'forwards':
+        const minForwards = getEffectiveThreshold(source.minForwardsForViral || 3);
+        meetsThreshold = forwardCount >= minForwards;
         break;
         
       case 'views':

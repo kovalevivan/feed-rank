@@ -490,12 +490,14 @@ const TelegramSourceForm = () => {
                     <MenuItem value="views">Просмотры</MenuItem>
                     <MenuItem value="reactions">Реакции</MenuItem>
                     <MenuItem value="comments">Комментарии</MenuItem>
+                    <MenuItem value="forwards">Пересылки</MenuItem>
                     <MenuItem value="engagement_score">Комплексная оценка вовлеченности</MenuItem>
                   </Select>
                   <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
                     {formData.viralDetectionMetric === 'views' && 'Посты считаются вирусными на основе количества просмотров'}
                     {formData.viralDetectionMetric === 'reactions' && 'Посты считаются вирусными на основе количества реакций'}
                     {formData.viralDetectionMetric === 'comments' && 'Посты считаются вирусными на основе количества комментариев'}
+                    {formData.viralDetectionMetric === 'forwards' && 'Посты считаются вирусными на основе количества пересылок'}
                     {formData.viralDetectionMetric === 'engagement_score' && 'Посты оцениваются по взвешенной сумме всех метрик'}
                   </Typography>
                 </FormControl>
@@ -549,6 +551,7 @@ const TelegramSourceForm = () => {
                         : `Минимальное количество ${
                             formData.viralDetectionMetric === 'views' ? 'просмотров' :
                             formData.viralDetectionMetric === 'reactions' ? 'реакций' :
+                            formData.viralDetectionMetric === 'forwards' ? 'пересылок' :
                             formData.viralDetectionMetric === 'comments' ? 'комментариев' :
                             'единиц'
                           }`

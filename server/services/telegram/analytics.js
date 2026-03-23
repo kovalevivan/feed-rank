@@ -7,6 +7,8 @@ const getMetricValue = (post, viralDetectionMetric = 'reactions') => {
       return post.reactionCount || 0;
     case 'comments':
       return post.commentCount || 0;
+    case 'forwards':
+      return post.forwardCount || 0;
     case 'views':
       return post.viewCount || 0;
     case 'engagement_score':

@@ -128,7 +128,7 @@ const TelegramSourceSchema = new mongoose.Schema({
   // Engagement-based viral detection settings
   viralDetectionMetric: {
     type: String,
-    enum: ['views', 'reactions', 'comments', 'engagement_score'],
+    enum: ['views', 'reactions', 'comments', 'forwards', 'engagement_score'],
     default: 'reactions'
   },
   minReactionsForViral: {

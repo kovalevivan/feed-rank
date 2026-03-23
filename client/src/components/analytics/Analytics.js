@@ -183,6 +183,8 @@ const Analytics = () => {
     switch (metric) {
       case 'views':
         return Number(sourceConfig.calculatedThreshold || sourceConfig.minViewsForViral || 0);
+      case 'forwards':
+        return Number(sourceConfig.calculatedThreshold || sourceConfig.minForwardsForViral || 0);
       case 'comments':
         return Number(sourceConfig.calculatedThreshold || sourceConfig.minCommentsForViral || 0);
       case 'engagement_score':
@@ -291,6 +293,8 @@ const Analytics = () => {
       let previewValue = reactions;
       if (previewMetric === 'views') {
         previewValue = views;
+      } else if (previewMetric === 'forwards') {
+        previewValue = forwards;
       } else if (previewMetric === 'comments') {
         previewValue = comments;
       } else if (previewMetric === 'engagement_score') {
@@ -544,6 +548,7 @@ const Analytics = () => {
                       <MenuItem value="views">Просмотры</MenuItem>
                       <MenuItem value="reactions">Лайки</MenuItem>
                       <MenuItem value="comments">Комментарии</MenuItem>
+                      <MenuItem value="forwards">Пересылки</MenuItem>
                       <MenuItem value="engagement_score">Engagement score</MenuItem>
                     </Select>
                   </FormControl>
