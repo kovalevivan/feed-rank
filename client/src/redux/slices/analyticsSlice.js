@@ -39,6 +39,18 @@ export const fetchAnalyticsSourcePosts = createAsyncThunk(
   }
 );
 
+export const fetchAnalyticsSourceConfig = createAsyncThunk(
+  'analytics/fetchSourceConfig',
+  async ({ sourceId }, { rejectWithValue }) => {
+    try {
+      const response = await axios.get(`${API_URL}/telegram-sources/${sourceId}`);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
 export const fetchAnalyticsPostSnapshots = createAsyncThunk(
   'analytics/fetchPostSnapshots',
   async ({ postId, limit = 200 }, { rejectWithValue }) => {
@@ -60,11 +72,13 @@ const analyticsSlice = createSlice({
     overview: null,
     sources: [],
     selectedSourcePosts: [],
+    selectedSourceConfig: null,
     selectedPostSnapshots: [],
     selectedPostId: null,
     overviewLoading: false,
     sourcesLoading: false,
     postsLoading: false,
+    sourceConfigLoading: false,
     snapshotsLoading: false,
     error: null
   },
@@ -78,6 +92,9 @@ const analyticsSlice = createSlice({
     clearSelectedPostSnapshots: (state) => {
       state.selectedPostSnapshots = [];
       state.selectedPostId = null;
+    },
+    clearSelectedSourceConfig: (state) => {
+      state.selectedSourceConfig = null;
     }
   },
   extraReducers: (builder) => {
@@ -119,6 +136,19 @@ const analyticsSlice = createSlice({
         state.selectedSourcePosts = [];
         state.error = action.payload;
       })
+      .addCase(fetchAnalyticsSourceConfig.pending, (state) => {
+        state.sourceConfigLoading = true;
+        state.error = null;
+      })
+      .addCase(fetchAnalyticsSourceConfig.fulfilled, (state, action) => {
+        state.sourceConfigLoading = false;
+        state.selectedSourceConfig = action.payload;
+      })
+      .addCase(fetchAnalyticsSourceConfig.rejected, (state, action) => {
+        state.sourceConfigLoading = false;
+        state.selectedSourceConfig = null;
+        state.error = action.payload;
+      })
       .addCase(fetchAnalyticsPostSnapshots.pending, (state, action) => {
         state.snapshotsLoading = true;
         state.selectedPostId = action.meta.arg.postId;
@@ -137,5 +167,10 @@ const analyticsSlice = createSlice({
   }
 });
 
-export const { clearError, clearSelectedSourcePosts, clearSelectedPostSnapshots } = analyticsSlice.actions;
+export const {
+  clearError,
+  clearSelectedSourcePosts,
+  clearSelectedPostSnapshots,
+  clearSelectedSourceConfig
+} = analyticsSlice.actions;
 export default analyticsSlice.reducer;

@@ -18,6 +18,7 @@ import {
   MenuItem,
   Paper,
   Select,
+  TextField,
   Table,
   TableBody,
   TableCell,
@@ -38,9 +39,11 @@ import {
 import {
   clearError,
   clearSelectedPostSnapshots,
+  clearSelectedSourceConfig,
   clearSelectedSourcePosts,
   fetchAnalyticsOverview,
   fetchAnalyticsPostSnapshots,
+  fetchAnalyticsSourceConfig,
   fetchAnalyticsSourcePosts,
   fetchAnalyticsSources
 } from '../../redux/slices/analyticsSlice';
@@ -87,16 +90,23 @@ const Analytics = () => {
     overview,
     sources,
     selectedSourcePosts,
+    selectedSourceConfig,
     selectedPostSnapshots,
     selectedPostId,
     overviewLoading,
     sourcesLoading,
     postsLoading,
+    sourceConfigLoading,
     snapshotsLoading,
     error
   } = useSelector((state) => state.analytics);
   const [selectedSourceId, setSelectedSourceId] = useState('');
   const [detailsPost, setDetailsPost] = useState(null);
+  const [previewMetric, setPreviewMetric] = useState('reactions');
+  const [previewThreshold, setPreviewThreshold] = useState('0');
+  const [previewReactionWeight, setPreviewReactionWeight] = useState('1');
+  const [previewCommentWeight, setPreviewCommentWeight] = useState('2');
+  const [previewForwardWeight, setPreviewForwardWeight] = useState('3');
 
   useEffect(() => {
     dispatch(fetchAnalyticsOverview());
@@ -112,10 +122,12 @@ const Analytics = () => {
   useEffect(() => {
     if (selectedSourceId) {
       dispatch(fetchAnalyticsSourcePosts({ sourceId: selectedSourceId, limit: 50 }));
+      dispatch(fetchAnalyticsSourceConfig({ sourceId: selectedSourceId }));
       return;
     }
 
     dispatch(clearSelectedSourcePosts());
+    dispatch(clearSelectedSourceConfig());
   }, [dispatch, selectedSourceId]);
 
   const selectedSource = useMemo(
@@ -151,6 +163,41 @@ const Analytics = () => {
 
     return Array.from(postsByPublishedAt.values());
   }, [selectedSourcePosts]);
+
+  const getDefaultPreviewThreshold = (sourceConfig, metric) => {
+    if (!sourceConfig) {
+      return 0;
+    }
+
+    if (sourceConfig.thresholdType === 'manual' && sourceConfig.manualThreshold !== undefined && sourceConfig.manualThreshold !== null) {
+      return Number(sourceConfig.manualThreshold) || 0;
+    }
+
+    switch (metric) {
+      case 'views':
+        return Number(sourceConfig.calculatedThreshold || sourceConfig.minViewsForViral || 0);
+      case 'comments':
+        return Number(sourceConfig.calculatedThreshold || sourceConfig.minCommentsForViral || 0);
+      case 'engagement_score':
+        return Number(sourceConfig.calculatedThreshold || 30);
+      case 'reactions':
+      default:
+        return Number(sourceConfig.calculatedThreshold || sourceConfig.minReactionsForViral || 0);
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedSourceConfig) {
+      return;
+    }
+
+    const metric = selectedSourceConfig.viralDetectionMetric || 'reactions';
+    setPreviewMetric(metric);
+    setPreviewThreshold(String(getDefaultPreviewThreshold(selectedSourceConfig, metric)));
+    setPreviewReactionWeight(String(selectedSourceConfig.reactionWeight ?? 1));
+    setPreviewCommentWeight(String(selectedSourceConfig.commentWeight ?? 2));
+    setPreviewForwardWeight(String(selectedSourceConfig.forwardWeight ?? 3));
+  }, [selectedSourceConfig]);
 
   const runStats = useMemo(() => {
     const initial = { running: 0, completed: 0, failed: 0 };
@@ -217,6 +264,52 @@ const Analytics = () => {
     }
 
     return `https://t.me/${normalizeUsername(source.username)}/${post.message_id}`;
+  };
+
+  const previewPosts = useMemo(() => {
+    const threshold = Number(previewThreshold) || 0;
+    return visiblePosts.map((post) => {
+      const reactions = Number(post.reaction_count_last || 0);
+      const comments = Number(post.comment_count_last || 0);
+      const forwards = Number(post.forward_count_last || 0);
+      const views = Number(post.view_count_last || 0);
+
+      let previewValue = reactions;
+      if (previewMetric === 'views') {
+        previewValue = views;
+      } else if (previewMetric === 'comments') {
+        previewValue = comments;
+      } else if (previewMetric === 'engagement_score') {
+        previewValue =
+          reactions * (Number(previewReactionWeight) || 0) +
+          comments * (Number(previewCommentWeight) || 0) +
+          forwards * (Number(previewForwardWeight) || 0);
+      }
+
+      return {
+        ...post,
+        previewValue,
+        previewIsViral: previewValue >= threshold
+      };
+    });
+  }, [visiblePosts, previewMetric, previewThreshold, previewReactionWeight, previewCommentWeight, previewForwardWeight]);
+
+  const previewViralCount = useMemo(
+    () => previewPosts.filter((post) => post.previewIsViral).length,
+    [previewPosts]
+  );
+
+  const resetPreviewToSource = () => {
+    if (!selectedSourceConfig) {
+      return;
+    }
+
+    const metric = selectedSourceConfig.viralDetectionMetric || 'reactions';
+    setPreviewMetric(metric);
+    setPreviewThreshold(String(getDefaultPreviewThreshold(selectedSourceConfig, metric)));
+    setPreviewReactionWeight(String(selectedSourceConfig.reactionWeight ?? 1));
+    setPreviewCommentWeight(String(selectedSourceConfig.commentWeight ?? 2));
+    setPreviewForwardWeight(String(selectedSourceConfig.forwardWeight ?? 3));
   };
 
   const openPostDetails = (post) => {
@@ -416,6 +509,90 @@ const Analytics = () => {
           </Paper>
 
           <Paper sx={{ p: 3 }}>
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                Тест параметров виральности
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Меняйте параметры локально и сразу смотрите, какие посты будут считаться viral. Настройки источника при этом не сохраняются.
+              </Typography>
+              <Grid container spacing={2} alignItems="center">
+                <Grid item xs={12} md={4}>
+                  <FormControl fullWidth size="small" disabled={sourceConfigLoading}>
+                    <InputLabel>Метрика</InputLabel>
+                    <Select
+                      value={previewMetric}
+                      label="Метрика"
+                      onChange={(event) => setPreviewMetric(event.target.value)}
+                    >
+                      <MenuItem value="views">Просмотры</MenuItem>
+                      <MenuItem value="reactions">Лайки</MenuItem>
+                      <MenuItem value="comments">Комментарии</MenuItem>
+                      <MenuItem value="engagement_score">Engagement score</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Порог"
+                    type="number"
+                    value={previewThreshold}
+                    onChange={(event) => setPreviewThreshold(event.target.value)}
+                  />
+                </Grid>
+                <Grid item xs={12} md={5}>
+                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    <Chip label={`Будут viral: ${formatNumber(previewViralCount)} из ${formatNumber(previewPosts.length)}`} color="primary" />
+                    {selectedSourceConfig && (
+                      <Chip
+                        label={`Источник: ${selectedSourceConfig.viralDetectionMetric}, ${selectedSourceConfig.thresholdType}`}
+                        variant="outlined"
+                      />
+                    )}
+                    <Button size="small" variant="outlined" onClick={resetPreviewToSource} disabled={!selectedSourceConfig}>
+                      Сбросить к настройкам источника
+                    </Button>
+                  </Box>
+                </Grid>
+                {previewMetric === 'engagement_score' && (
+                  <>
+                    <Grid item xs={12} md={4}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        label="Вес лайков"
+                        type="number"
+                        value={previewReactionWeight}
+                        onChange={(event) => setPreviewReactionWeight(event.target.value)}
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        label="Вес комментариев"
+                        type="number"
+                        value={previewCommentWeight}
+                        onChange={(event) => setPreviewCommentWeight(event.target.value)}
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        label="Вес пересылок"
+                        type="number"
+                        value={previewForwardWeight}
+                        onChange={(event) => setPreviewForwardWeight(event.target.value)}
+                      />
+                    </Grid>
+                  </>
+                )}
+              </Grid>
+            </Box>
+
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, gap: 2 }}>
               <Box>
                 <Typography variant="h6">
@@ -449,12 +626,14 @@ const Analytics = () => {
                     <TableCell align="right">Лайки</TableCell>
                     <TableCell align="right">Forwards</TableCell>
                     <TableCell align="right">Comments</TableCell>
+                    <TableCell align="right">Preview value</TableCell>
                     <TableCell align="right">Snapshots</TableCell>
-                    <TableCell>Виральность</TableCell>
+                    <TableCell>Текущий статус</TableCell>
+                    <TableCell>Preview</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {visiblePosts.map((post) => {
+                  {previewPosts.map((post) => {
                     const postUrl = buildPostUrl(selectedSource, post);
 
                     return (
@@ -482,12 +661,20 @@ const Analytics = () => {
                         <TableCell align="right">{formatNumber(post.reaction_count_last)}</TableCell>
                         <TableCell align="right">{formatNumber(post.forward_count_last)}</TableCell>
                         <TableCell align="right">{formatNumber(post.comment_count_last)}</TableCell>
+                        <TableCell align="right">{formatNumber(post.previewValue)}</TableCell>
                         <TableCell align="right">{formatNumber(post.snapshots_count)}</TableCell>
                         <TableCell>
                           <Chip
                             size="small"
                             label={post.current_is_viral ? 'viral' : 'normal'}
                             color={post.current_is_viral ? 'error' : 'default'}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            label={post.previewIsViral ? 'viral' : 'normal'}
+                            color={post.previewIsViral ? 'secondary' : 'default'}
                           />
                         </TableCell>
                       </TableRow>
