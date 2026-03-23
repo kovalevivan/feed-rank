@@ -42,4 +42,15 @@ router.get('/sources/:sourceId/posts', async (req, res) => {
   }
 });
 
+router.get('/posts/:postId/snapshots', async (req, res) => {
+  try {
+    const limit = Number.parseInt(req.query.limit, 10) || 200;
+    const snapshots = await telegramAnalyticsService.getPostSnapshots(req.params.postId, limit);
+    res.json(snapshots);
+  } catch (error) {
+    console.error(`Error getting Telegram analytics snapshots for ${req.params.postId}:`, error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 module.exports = router;

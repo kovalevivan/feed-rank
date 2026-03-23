@@ -7,6 +7,10 @@ import {
   Card,
   CardContent,
   Chip,
+  CircularProgress,
+  Dialog,
+  DialogContent,
+  DialogTitle,
   FormControl,
   Grid,
   IconButton,
@@ -23,6 +27,7 @@ import {
   Typography
 } from '@mui/material';
 import {
+  Close as CloseIcon,
   Launch as LaunchIcon,
   PhotoLibrary as SnapshotIcon,
   Refresh as RefreshIcon,
@@ -32,8 +37,10 @@ import {
 } from '@mui/icons-material';
 import {
   clearError,
+  clearSelectedPostSnapshots,
   clearSelectedSourcePosts,
   fetchAnalyticsOverview,
+  fetchAnalyticsPostSnapshots,
   fetchAnalyticsSourcePosts,
   fetchAnalyticsSources
 } from '../../redux/slices/analyticsSlice';
@@ -80,12 +87,16 @@ const Analytics = () => {
     overview,
     sources,
     selectedSourcePosts,
+    selectedPostSnapshots,
+    selectedPostId,
     overviewLoading,
     sourcesLoading,
     postsLoading,
+    snapshotsLoading,
     error
   } = useSelector((state) => state.analytics);
   const [selectedSourceId, setSelectedSourceId] = useState('');
+  const [detailsPost, setDetailsPost] = useState(null);
 
   useEffect(() => {
     dispatch(fetchAnalyticsOverview());
@@ -207,6 +218,29 @@ const Analytics = () => {
 
     return `https://t.me/${normalizeUsername(source.username)}/${post.message_id}`;
   };
+
+  const openPostDetails = (post) => {
+    setDetailsPost(post);
+    dispatch(fetchAnalyticsPostSnapshots({ postId: post.id, limit: 200 }));
+  };
+
+  const closePostDetails = () => {
+    setDetailsPost(null);
+    dispatch(clearSelectedPostSnapshots());
+  };
+
+  const snapshotRows = useMemo(() => {
+    return selectedPostSnapshots.map((snapshot, index) => {
+      const previous = index > 0 ? selectedPostSnapshots[index - 1] : null;
+      return {
+        ...snapshot,
+        view_delta: previous ? Number(snapshot.view_count || 0) - Number(previous.view_count || 0) : null,
+        reaction_delta: previous ? Number(snapshot.reaction_count || 0) - Number(previous.reaction_count || 0) : null,
+        forward_delta: previous ? Number(snapshot.forward_count || 0) - Number(previous.forward_count || 0) : null,
+        comment_delta: previous ? Number(snapshot.comment_count || 0) - Number(previous.comment_count || 0) : null
+      };
+    });
+  }, [selectedPostSnapshots]);
 
   return (
     <Box>
@@ -439,6 +473,9 @@ const Analytics = () => {
                           ) : (
                             `#${post.message_id}`
                           )}
+                          <Button size="small" onClick={() => openPostDetails(post)}>
+                            Замеры
+                          </Button>
                         </TableCell>
                         <TableCell>{formatDateTime(post.published_at)}</TableCell>
                         <TableCell align="right">{formatNumber(post.view_count_last)}</TableCell>
@@ -462,6 +499,97 @@ const Analytics = () => {
           </Paper>
         </Grid>
       </Grid>
+
+      <Dialog open={Boolean(detailsPost)} onClose={closePostDetails} maxWidth="lg" fullWidth>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pr: 1 }}>
+          <Box>
+            <Typography variant="h6">
+              {detailsPost ? `Замеры поста #${detailsPost.message_id}` : 'Замеры поста'}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {detailsPost ? formatDateTime(detailsPost.published_at) : '—'}
+            </Typography>
+          </Box>
+          <IconButton onClick={closePostDetails}>
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
+          {detailsPost && (
+            <Box sx={{ mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              <Chip label={`Views: ${formatNumber(detailsPost.view_count_last)}`} />
+              <Chip label={`Лайки: ${formatNumber(detailsPost.reaction_count_last)}`} />
+              <Chip label={`Forwards: ${formatNumber(detailsPost.forward_count_last)}`} />
+              <Chip label={`Comments: ${formatNumber(detailsPost.comment_count_last)}`} />
+              <Chip label={`Snapshots: ${formatNumber(detailsPost.snapshots_count)}`} />
+              {buildPostUrl(selectedSource, detailsPost) && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  href={buildPostUrl(selectedSource, detailsPost)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  endIcon={<LaunchIcon />}
+                >
+                  Открыть пост
+                </Button>
+              )}
+            </Box>
+          )}
+
+          {snapshotsLoading && selectedPostId === detailsPost?.id ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Время замера</TableCell>
+                    <TableCell align="right">Возраст, мин</TableCell>
+                    <TableCell align="right">Views</TableCell>
+                    <TableCell align="right">Δ views</TableCell>
+                    <TableCell align="right">Лайки</TableCell>
+                    <TableCell align="right">Δ лайки</TableCell>
+                    <TableCell align="right">Forwards</TableCell>
+                    <TableCell align="right">Comments</TableCell>
+                    <TableCell>Статус</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {snapshotRows.map((snapshot) => (
+                    <TableRow key={snapshot.id}>
+                      <TableCell>{formatDateTime(snapshot.snapshot_at)}</TableCell>
+                      <TableCell align="right">{formatNumber(snapshot.age_minutes)}</TableCell>
+                      <TableCell align="right">{formatNumber(snapshot.view_count)}</TableCell>
+                      <TableCell align="right">{snapshot.view_delta === null ? '—' : formatNumber(snapshot.view_delta)}</TableCell>
+                      <TableCell align="right">{formatNumber(snapshot.reaction_count)}</TableCell>
+                      <TableCell align="right">{snapshot.reaction_delta === null ? '—' : formatNumber(snapshot.reaction_delta)}</TableCell>
+                      <TableCell align="right">{formatNumber(snapshot.forward_count)}</TableCell>
+                      <TableCell align="right">{formatNumber(snapshot.comment_count)}</TableCell>
+                      <TableCell>
+                        <Chip
+                          size="small"
+                          label={snapshot.is_viral ? 'viral' : 'normal'}
+                          color={snapshot.is_viral ? 'error' : 'default'}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {!snapshotsLoading && snapshotRows.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={9} align="center">
+                        Нет замеров по этому посту.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </DialogContent>
+      </Dialog>
     </Box>
   );
 };

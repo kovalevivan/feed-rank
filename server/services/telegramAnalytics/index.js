@@ -593,6 +593,36 @@ const getSourcePosts = async (mongoSourceId, limit = 100) => {
   return result.rows;
 };
 
+const getPostSnapshots = async (postId, limit = 200) => {
+  if (!enabled || !pool) {
+    return [];
+  }
+
+  const result = await pool.query(
+    `
+      SELECT
+        s.id,
+        s.snapshot_at,
+        s.age_minutes,
+        s.view_count,
+        s.forward_count,
+        s.reaction_count,
+        s.comment_count,
+        s.reply_count,
+        s.engagement_score,
+        s.is_viral,
+        s.threshold_used
+      FROM tg_post_snapshots s
+      WHERE s.post_id = $1
+      ORDER BY s.snapshot_at ASC
+      LIMIT $2
+    `,
+    [toInteger(postId, 0), toInteger(limit, 200)]
+  );
+
+  return result.rows;
+};
+
 const backfillFromMongo = async () => {
   if (!enabled || !pool) {
     return {
@@ -687,5 +717,6 @@ module.exports = {
   backfillFromMongo,
   getOverview,
   getSourcesOverview,
-  getSourcePosts
+  getSourcePosts,
+  getPostSnapshots
 };

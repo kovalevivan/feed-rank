@@ -39,15 +39,33 @@ export const fetchAnalyticsSourcePosts = createAsyncThunk(
   }
 );
 
+export const fetchAnalyticsPostSnapshots = createAsyncThunk(
+  'analytics/fetchPostSnapshots',
+  async ({ postId, limit = 200 }, { rejectWithValue }) => {
+    try {
+      const response = await axios.get(`${API_URL}/telegram-analytics/posts/${postId}/snapshots?limit=${limit}`);
+      return {
+        postId,
+        snapshots: response.data
+      };
+    } catch (error) {
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
 const analyticsSlice = createSlice({
   name: 'analytics',
   initialState: {
     overview: null,
     sources: [],
     selectedSourcePosts: [],
+    selectedPostSnapshots: [],
+    selectedPostId: null,
     overviewLoading: false,
     sourcesLoading: false,
     postsLoading: false,
+    snapshotsLoading: false,
     error: null
   },
   reducers: {
@@ -56,6 +74,10 @@ const analyticsSlice = createSlice({
     },
     clearSelectedSourcePosts: (state) => {
       state.selectedSourcePosts = [];
+    },
+    clearSelectedPostSnapshots: (state) => {
+      state.selectedPostSnapshots = [];
+      state.selectedPostId = null;
     }
   },
   extraReducers: (builder) => {
@@ -96,9 +118,24 @@ const analyticsSlice = createSlice({
         state.postsLoading = false;
         state.selectedSourcePosts = [];
         state.error = action.payload;
+      })
+      .addCase(fetchAnalyticsPostSnapshots.pending, (state, action) => {
+        state.snapshotsLoading = true;
+        state.selectedPostId = action.meta.arg.postId;
+        state.error = null;
+      })
+      .addCase(fetchAnalyticsPostSnapshots.fulfilled, (state, action) => {
+        state.snapshotsLoading = false;
+        state.selectedPostId = action.payload.postId;
+        state.selectedPostSnapshots = action.payload.snapshots;
+      })
+      .addCase(fetchAnalyticsPostSnapshots.rejected, (state, action) => {
+        state.snapshotsLoading = false;
+        state.selectedPostSnapshots = [];
+        state.error = action.payload;
       });
   }
 });
 
-export const { clearError, clearSelectedSourcePosts } = analyticsSlice.actions;
+export const { clearError, clearSelectedSourcePosts, clearSelectedPostSnapshots } = analyticsSlice.actions;
 export default analyticsSlice.reducer;
