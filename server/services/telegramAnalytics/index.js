@@ -571,6 +571,7 @@ const getSourcePosts = async (mongoSourceId, limit = 100) => {
         p.message_id,
         p.published_at,
         p.latest_observed_at,
+        p.original_post_url,
         p.view_count_last,
         p.forward_count_last,
         p.reaction_count_last,

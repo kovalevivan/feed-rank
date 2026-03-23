@@ -66,6 +66,14 @@ const formatDateTime = (value) => {
   }).format(date);
 };
 
+const normalizeUsername = (username) => {
+  if (!username) {
+    return '';
+  }
+
+  return username.replace(/^@+/, '');
+};
+
 const Analytics = () => {
   const dispatch = useDispatch();
   const {
@@ -103,6 +111,35 @@ const Analytics = () => {
     () => sources.find((source) => source.mongo_source_id === selectedSourceId) || null,
     [sources, selectedSourceId]
   );
+
+  const visiblePosts = useMemo(() => {
+    const postsByPublishedAt = new Map();
+
+    selectedSourcePosts.forEach((post) => {
+      const key = post.published_at || String(post.message_id);
+      const existing = postsByPublishedAt.get(key);
+
+      if (!existing) {
+        postsByPublishedAt.set(key, post);
+        return;
+      }
+
+      const existingScore =
+        (Number(existing.reaction_count_last) || 0) * 1000000 +
+        (Number(existing.comment_count_last) || 0) * 10000 +
+        (Number(existing.view_count_last) || 0);
+      const nextScore =
+        (Number(post.reaction_count_last) || 0) * 1000000 +
+        (Number(post.comment_count_last) || 0) * 10000 +
+        (Number(post.view_count_last) || 0);
+
+      if (nextScore > existingScore) {
+        postsByPublishedAt.set(key, post);
+      }
+    });
+
+    return Array.from(postsByPublishedAt.values());
+  }, [selectedSourcePosts]);
 
   const runStats = useMemo(() => {
     const initial = { running: 0, completed: 0, failed: 0 };
@@ -160,11 +197,15 @@ const Analytics = () => {
   };
 
   const buildPostUrl = (source, post) => {
+    if (post?.original_post_url) {
+      return post.original_post_url;
+    }
+
     if (!source?.username) {
       return null;
     }
 
-    return `https://t.me/${source.username}/${post.message_id}`;
+    return `https://t.me/${normalizeUsername(source.username)}/${post.message_id}`;
   };
 
   return (
@@ -329,7 +370,7 @@ const Analytics = () => {
                           />
                         </Box>
                       </TableCell>
-                      <TableCell>{source.username ? `@${source.username}` : '—'}</TableCell>
+                      <TableCell>{source.username ? `@${normalizeUsername(source.username)}` : '—'}</TableCell>
                       <TableCell align="right">{formatNumber(source.posts_count)}</TableCell>
                       <TableCell align="right">{formatNumber(source.snapshots_count)}</TableCell>
                       <TableCell>{formatDateTime(source.last_snapshot_at)}</TableCell>
@@ -347,14 +388,14 @@ const Analytics = () => {
                   {selectedSource ? `Посты канала: ${selectedSource.title}` : 'Посты канала'}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Последние 50 постов с текущими метриками и числом snapshots.
+                  Последние посты без дублей альбомов, с текущими метриками и числом snapshots.
                 </Typography>
               </Box>
               {selectedSource?.username && (
                 <Button
                   size="small"
                   variant="outlined"
-                  href={`https://t.me/${selectedSource.username}`}
+                  href={`https://t.me/${normalizeUsername(selectedSource.username)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   endIcon={<LaunchIcon />}
@@ -371,7 +412,7 @@ const Analytics = () => {
                     <TableCell>Пост</TableCell>
                     <TableCell>Опубликован</TableCell>
                     <TableCell align="right">Views</TableCell>
-                    <TableCell align="right">Reactions</TableCell>
+                    <TableCell align="right">Лайки</TableCell>
                     <TableCell align="right">Forwards</TableCell>
                     <TableCell align="right">Comments</TableCell>
                     <TableCell align="right">Snapshots</TableCell>
@@ -379,7 +420,7 @@ const Analytics = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {selectedSourcePosts.map((post) => {
+                  {visiblePosts.map((post) => {
                     const postUrl = buildPostUrl(selectedSource, post);
 
                     return (
