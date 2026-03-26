@@ -129,6 +129,7 @@ const Analytics = () => {
   const [previewMaxAgeMinutes, setPreviewMaxAgeMinutes] = useState('60');
   const [selectedStrategyProfile, setSelectedStrategyProfile] = useState('balanced');
   const [previewMode, setPreviewMode] = useState('source');
+  const [strategyWindowMinutes, setStrategyWindowMinutes] = useState('auto');
 
   useEffect(() => {
     dispatch(fetchAnalyticsOverview());
@@ -145,6 +146,7 @@ const Analytics = () => {
     dispatch(clearRecommendedStrategy());
     setPreviewMode('source');
     setSelectedStrategyProfile('balanced');
+    setStrategyWindowMinutes('auto');
   }, [dispatch, selectedSourceId]);
 
   useEffect(() => {
@@ -306,7 +308,10 @@ const Analytics = () => {
       return;
     }
 
-    dispatch(fetchAnalyticsRecommendedStrategy({ sourceId: selectedSourceId }));
+    dispatch(fetchAnalyticsRecommendedStrategy({
+      sourceId: selectedSourceId,
+      windowMinutes: strategyWindowMinutes
+    }));
   };
 
   const handleApplyRecommendedStrategy = async () => {
@@ -315,7 +320,11 @@ const Analytics = () => {
     }
 
     const strategyToApply = strategyProfiles[selectedStrategyProfile] || recommendedStrategy;
-    await dispatch(applyAnalyticsRecommendedStrategy({ sourceId: selectedSourceId, profileKey: selectedStrategyProfile }));
+    await dispatch(applyAnalyticsRecommendedStrategy({
+      sourceId: selectedSourceId,
+      profileKey: selectedStrategyProfile,
+      windowMinutes: strategyWindowMinutes
+    }));
     setPreviewMetric(strategyToApply.metric);
     setPreviewThreshold(String(strategyToApply.threshold));
     setPreviewMinAgeMinutes('0');
@@ -595,6 +604,24 @@ const Analytics = () => {
                 Система может сама подобрать ранний сигнал виральности по уже собранным snapshots, а затем сразу применить его к источнику.
               </Typography>
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+                <FormControl size="small" sx={{ minWidth: 180 }}>
+                  <InputLabel>Окно стратегии</InputLabel>
+                  <Select
+                    value={strategyWindowMinutes}
+                    label="Окно стратегии"
+                    onChange={(event) => setStrategyWindowMinutes(event.target.value)}
+                  >
+                    <MenuItem value="auto">Авто</MenuItem>
+                    <MenuItem value="15">15 мин</MenuItem>
+                    <MenuItem value="30">30 мин</MenuItem>
+                    <MenuItem value="45">45 мин</MenuItem>
+                    <MenuItem value="60">60 мин</MenuItem>
+                    <MenuItem value="90">90 мин</MenuItem>
+                    <MenuItem value="120">120 мин</MenuItem>
+                    <MenuItem value="180">180 мин</MenuItem>
+                    <MenuItem value="1440">24 часа</MenuItem>
+                  </Select>
+                </FormControl>
                 <Button
                   variant="contained"
                   onClick={handleRecommendStrategy}
@@ -614,6 +641,9 @@ const Analytics = () => {
                 <Alert severity="info" sx={{ mb: 2 }}>
                   <strong>Рекомендация:</strong> {recommendedStrategy.strategyTitle || metricLabelMap[recommendedStrategy.metric] || recommendedStrategy.metric}, порог{' '}
                   {formatNumber(recommendedStrategy.threshold)}, окно {formatNumber(recommendedStrategy.maxNewsAgeMinutes)} мин.
+                  {recommendedStrategy.strategyWindowMinutes && (
+                    <> {' '}Горизонт расчёта: {formatNumber(recommendedStrategy.strategyWindowMinutes)} мин.</>
+                  )}
                   {' '}Точность {formatRate(recommendedStrategy.precision)},
                   {' '}Полнота {formatRate(recommendedStrategy.recall)},
                   {' '}F1 {formatRate(recommendedStrategy.f1Score)}.

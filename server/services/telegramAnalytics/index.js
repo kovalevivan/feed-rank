@@ -125,6 +125,15 @@ const roundMetric = (value) => {
   return Math.max(0, Math.round(numericValue));
 };
 
+const getStrategyWindows = (options = {}) => {
+  const requestedWindow = Number.parseInt(options.windowMinutes, 10);
+  if (Number.isFinite(requestedWindow) && requestedWindow > 0) {
+    return [requestedWindow];
+  }
+
+  return STRATEGY_WINDOWS_MINUTES;
+};
+
 const annotateStrategy = (strategy, profileKey) => {
   if (!strategy) {
     return null;
@@ -848,6 +857,7 @@ const getSourceStrategyRecommendation = async (mongoSourceId, options = {}) => {
     commentWeight: Number(options.commentWeight) || 2,
     forwardWeight: Number(options.forwardWeight) || 3
   };
+  const strategyWindows = getStrategyWindows(options);
 
   const result = await pool.query(
     `
@@ -897,7 +907,7 @@ const getSourceStrategyRecommendation = async (mongoSourceId, options = {}) => {
   const candidates = [];
 
   STRATEGY_DEFINITIONS.forEach((strategyDefinition) => {
-    STRATEGY_WINDOWS_MINUTES.forEach((windowMinutes) => {
+    strategyWindows.forEach((windowMinutes) => {
       const metric = strategyDefinition.metric;
       const strategyWeights = strategyDefinition.weights || weights;
       const eligiblePosts = posts
@@ -1064,6 +1074,7 @@ const getSourceStrategyRecommendation = async (mongoSourceId, options = {}) => {
     strategyProfiles: strategies,
     candidates: sortedCandidates.slice(0, 5),
     postsAvailable: posts.length,
+    strategyWindowMinutes: strategyWindows.length === 1 ? strategyWindows[0] : null,
     message: bestBalanced
       ? 'Умные стратегии рассчитаны'
       : 'Не удалось найти устойчивую стратегию на текущих данных'

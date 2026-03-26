@@ -75,9 +75,15 @@ export const fetchAnalyticsPostSnapshots = createAsyncThunk(
 
 export const fetchAnalyticsRecommendedStrategy = createAsyncThunk(
   'analytics/fetchRecommendedStrategy',
-  async ({ sourceId }, { rejectWithValue }) => {
+  async ({ sourceId, windowMinutes = null }, { rejectWithValue }) => {
     try {
-      const response = await axios.get(`${API_URL}/telegram-analytics/sources/${sourceId}/recommend-strategy`);
+      const query = new URLSearchParams();
+      if (windowMinutes !== null && windowMinutes !== undefined && windowMinutes !== '' && windowMinutes !== 'auto') {
+        query.set('windowMinutes', String(windowMinutes));
+      }
+      const response = await axios.get(
+        `${API_URL}/telegram-analytics/sources/${sourceId}/recommend-strategy${query.toString() ? `?${query.toString()}` : ''}`
+      );
       return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data || error.message);
@@ -87,9 +93,13 @@ export const fetchAnalyticsRecommendedStrategy = createAsyncThunk(
 
 export const applyAnalyticsRecommendedStrategy = createAsyncThunk(
   'analytics/applyRecommendedStrategy',
-  async ({ sourceId, profileKey = 'balanced' }, { rejectWithValue }) => {
+  async ({ sourceId, profileKey = 'balanced', windowMinutes = null }, { rejectWithValue }) => {
     try {
-      const response = await axios.post(`${API_URL}/telegram-analytics/sources/${sourceId}/apply-recommended-strategy`, { profileKey });
+      const payload = { profileKey };
+      if (windowMinutes !== null && windowMinutes !== undefined && windowMinutes !== '' && windowMinutes !== 'auto') {
+        payload.windowMinutes = Number(windowMinutes);
+      }
+      const response = await axios.post(`${API_URL}/telegram-analytics/sources/${sourceId}/apply-recommended-strategy`, payload);
       return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data || error.message);

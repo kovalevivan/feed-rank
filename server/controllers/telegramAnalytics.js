@@ -62,6 +62,7 @@ router.get('/sources/:sourceId/recommend-strategy', async (req, res) => {
     }
 
     const recommendation = await telegramAnalyticsService.getSourceStrategyRecommendation(req.params.sourceId, {
+      windowMinutes: req.query.windowMinutes,
       reactionWeight: source.reactionWeight,
       commentWeight: source.commentWeight,
       forwardWeight: source.forwardWeight
@@ -82,6 +83,7 @@ router.post('/sources/:sourceId/apply-recommended-strategy', async (req, res) =>
     }
 
     const recommendationResult = await telegramAnalyticsService.getSourceStrategyRecommendation(req.params.sourceId, {
+      windowMinutes: req.body?.windowMinutes,
       reactionWeight: source.reactionWeight,
       commentWeight: source.commentWeight,
       forwardWeight: source.forwardWeight
