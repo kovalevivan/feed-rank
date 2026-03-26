@@ -12,6 +12,7 @@ const os = require('os');
 
 // Temporary directory for downloaded videos
 const tempDir = os.tmpdir();
+const DISPLAY_TIMEZONE = process.env.DISPLAY_TIMEZONE || process.env.TZ || 'Europe/Moscow';
 
 // Initialize Telegram Bot
 let bot;
@@ -607,7 +608,8 @@ const forwardPost = async (post, source, channel, options = {}) => {
         year: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
-        hour12: false
+        hour12: false,
+        timeZone: DISPLAY_TIMEZONE
       });
     };
     
