@@ -63,7 +63,30 @@ const getMediaTypes = (attachments = []) => {
 };
 
 const STRATEGY_WINDOWS_MINUTES = [15, 30, 45, 60, 90, 120, 180];
-const STRATEGY_METRICS = ['views', 'reactions', 'comments', 'forwards', 'engagement_score'];
+const STRATEGY_DEFINITIONS = [
+  { id: 'views', metric: 'views', title: 'Просмотры' },
+  { id: 'reactions', metric: 'reactions', title: 'Лайки' },
+  { id: 'comments', metric: 'comments', title: 'Комментарии' },
+  { id: 'forwards', metric: 'forwards', title: 'Пересылки' },
+  {
+    id: 'engagement_balanced',
+    metric: 'engagement_score',
+    title: 'Смешанная вовлеченность',
+    weights: { reactionWeight: 1, commentWeight: 2, forwardWeight: 3 }
+  },
+  {
+    id: 'engagement_discussion',
+    metric: 'engagement_score',
+    title: 'Дискуссионный сигнал',
+    weights: { reactionWeight: 1, commentWeight: 4, forwardWeight: 2 }
+  },
+  {
+    id: 'engagement_distribution',
+    metric: 'engagement_score',
+    title: 'Сигнал распространения',
+    weights: { reactionWeight: 1, commentWeight: 1.5, forwardWeight: 4 }
+  }
+];
 const STRATEGY_THRESHOLD_PERCENTILES = [70, 75, 80, 85, 90, 95];
 const STRATEGY_TARGET_PERCENTILE = 85;
 
@@ -135,9 +158,9 @@ const annotateStrategy = (strategy, profileKey) => {
     profileTitle: profileMeta.title,
     profileDescription: profileMeta.description,
     explanation:
-      `${profileMeta.title}: ${strategy.metric} в первые ${strategy.maxNewsAgeMinutes} мин, ` +
-      `порог ${strategy.threshold}. Precision ${(strategy.precision * 100).toFixed(1)}%, ` +
-      `recall ${(strategy.recall * 100).toFixed(1)}%, F1 ${(strategy.f1Score * 100).toFixed(1)}%.`
+      `${profileMeta.title}: ${strategy.strategyTitle || strategy.metric} в первые ${strategy.maxNewsAgeMinutes} мин, ` +
+      `порог ${strategy.threshold}. Точность ${(strategy.precision * 100).toFixed(1)}%, ` +
+      `полнота ${(strategy.recall * 100).toFixed(1)}%, F1 ${(strategy.f1Score * 100).toFixed(1)}%.`
   };
 };
 
@@ -147,15 +170,39 @@ const sameStrategy = (left, right) => {
   }
 
   return (
-    left.metric === right.metric &&
+    left.strategyId === right.strategyId &&
     left.threshold === right.threshold &&
     left.maxNewsAgeMinutes === right.maxNewsAgeMinutes
   );
 };
 
-const pickDistinctStrategy = (candidates, scorer, excluded = []) => {
+const sameStrategyFamily = (left, right) => {
+  if (!left || !right) {
+    return false;
+  }
+
+  return left.strategyId === right.strategyId;
+};
+
+const pickDistinctStrategy = (candidates, scorer, excluded = [], options = {}) => {
+  const {
+    distinctByFamily = false
+  } = options;
+
+  const isExcluded = (candidate, excludedCandidate) => {
+    if (sameStrategy(candidate, excludedCandidate)) {
+      return true;
+    }
+
+    if (distinctByFamily && sameStrategyFamily(candidate, excludedCandidate)) {
+      return true;
+    }
+
+    return false;
+  };
+
   const available = candidates.filter((candidate) => (
-    !excluded.some((excludedCandidate) => sameStrategy(candidate, excludedCandidate))
+    !excluded.some((excludedCandidate) => isExcluded(candidate, excludedCandidate))
   ));
 
   if (available.length === 0) {
@@ -849,8 +896,10 @@ const getSourceStrategyRecommendation = async (mongoSourceId, options = {}) => {
 
   const candidates = [];
 
-  STRATEGY_METRICS.forEach((metric) => {
+  STRATEGY_DEFINITIONS.forEach((strategyDefinition) => {
     STRATEGY_WINDOWS_MINUTES.forEach((windowMinutes) => {
+      const metric = strategyDefinition.metric;
+      const strategyWeights = strategyDefinition.weights || weights;
       const eligiblePosts = posts
         .map((post) => {
           const inWindowSnapshots = post.snapshots.filter((snapshot) => Number(snapshot.age_minutes) <= windowMinutes);
@@ -864,10 +913,10 @@ const getSourceStrategyRecommendation = async (mongoSourceId, options = {}) => {
           }
 
           const earlyValue = Math.max(
-            ...inWindowSnapshots.map((snapshot) => getMetricFromCounts(snapshot, metric, weights))
+            ...inWindowSnapshots.map((snapshot) => getMetricFromCounts(snapshot, metric, strategyWeights))
           );
           const finalValue = Math.max(
-            ...post.snapshots.map((snapshot) => getMetricFromCounts(snapshot, metric, weights))
+            ...post.snapshots.map((snapshot) => getMetricFromCounts(snapshot, metric, strategyWeights))
           );
 
           return {
@@ -944,6 +993,8 @@ const getSourceStrategyRecommendation = async (mongoSourceId, options = {}) => {
         );
 
         candidates.push({
+          strategyId: strategyDefinition.id,
+          strategyTitle: strategyDefinition.title,
           metric,
           threshold,
           maxNewsAgeMinutes: windowMinutes,
@@ -961,9 +1012,9 @@ const getSourceStrategyRecommendation = async (mongoSourceId, options = {}) => {
           actualPositiveCount,
           predictedRate,
           actualPositiveRate,
-          reactionWeight: weights.reactionWeight,
-          commentWeight: weights.commentWeight,
-          forwardWeight: weights.forwardWeight
+          reactionWeight: strategyWeights.reactionWeight,
+          commentWeight: strategyWeights.commentWeight,
+          forwardWeight: strategyWeights.forwardWeight
         });
       });
     });
@@ -992,12 +1043,14 @@ const getSourceStrategyRecommendation = async (mongoSourceId, options = {}) => {
   const bestAggressive = pickDistinctStrategy(
     aggressiveCandidates.length > 0 ? aggressiveCandidates : sortedCandidates,
     (candidate) => candidate.recall * 0.75 + candidate.f1Score * 0.2 - candidate.thresholdPercentile * 0.002,
-    bestBalanced ? [bestBalanced] : []
+    bestBalanced ? [bestBalanced] : [],
+    { distinctByFamily: true }
   ) || bestBalanced;
   const bestStrict = pickDistinctStrategy(
     strictCandidates.length > 0 ? strictCandidates : sortedCandidates,
     (candidate) => candidate.precision * 0.75 + candidate.f1Score * 0.2 + candidate.thresholdPercentile * 0.002,
-    [bestBalanced, bestAggressive].filter(Boolean)
+    [bestBalanced, bestAggressive].filter(Boolean),
+    { distinctByFamily: true }
   ) || bestBalanced;
 
   const strategies = {

@@ -103,6 +103,8 @@ router.post('/sources/:sourceId/apply-recommended-strategy', async (req, res) =>
     source.smartStrategy = {
       profileKey: strategy.profileKey,
       profileTitle: strategy.profileTitle,
+      strategyId: strategy.strategyId,
+      strategyTitle: strategy.strategyTitle,
       metric: strategy.metric,
       threshold: strategy.threshold,
       maxNewsAgeMinutes: strategy.maxNewsAgeMinutes,
@@ -126,6 +128,10 @@ router.post('/sources/:sourceId/apply-recommended-strategy', async (req, res) =>
       source.minCommentsForViral = strategy.threshold;
     } else if (strategy.metric === 'reactions') {
       source.minReactionsForViral = strategy.threshold;
+    } else if (strategy.metric === 'engagement_score') {
+      source.reactionWeight = strategy.reactionWeight;
+      source.commentWeight = strategy.commentWeight;
+      source.forwardWeight = strategy.forwardWeight;
     }
 
     await source.save();

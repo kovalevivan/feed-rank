@@ -95,6 +95,8 @@ const metricLabelMap = {
   engagement_score: 'engagement score'
 };
 
+const formatRate = (value) => `${(Number(value || 0) * 100).toFixed(1)}%`;
+
 const Analytics = () => {
   const dispatch = useDispatch();
   const {
@@ -126,6 +128,7 @@ const Analytics = () => {
   const [previewMinAgeMinutes, setPreviewMinAgeMinutes] = useState('0');
   const [previewMaxAgeMinutes, setPreviewMaxAgeMinutes] = useState('60');
   const [selectedStrategyProfile, setSelectedStrategyProfile] = useState('balanced');
+  const [previewMode, setPreviewMode] = useState('source');
 
   useEffect(() => {
     dispatch(fetchAnalyticsOverview());
@@ -140,6 +143,8 @@ const Analytics = () => {
 
   useEffect(() => {
     dispatch(clearRecommendedStrategy());
+    setPreviewMode('source');
+    setSelectedStrategyProfile('balanced');
   }, [dispatch, selectedSourceId]);
 
   useEffect(() => {
@@ -222,6 +227,10 @@ const Analytics = () => {
       return;
     }
 
+    if (previewMode !== 'source') {
+      return;
+    }
+
     const metric = selectedSourceConfig.viralDetectionMetric || 'reactions';
     setPreviewMetric(metric);
     setPreviewThreshold(String(getDefaultPreviewThreshold(selectedSourceConfig, metric)));
@@ -230,7 +239,7 @@ const Analytics = () => {
     setPreviewForwardWeight(String(selectedSourceConfig.forwardWeight ?? 3));
     setPreviewMinAgeMinutes('0');
     setPreviewMaxAgeMinutes(String(selectedSourceConfig.maxNewsAgeMinutes ?? 60));
-  }, [selectedSourceConfig]);
+  }, [selectedSourceConfig, previewMode]);
 
   const runStats = useMemo(() => {
     const initial = { running: 0, completed: 0, failed: 0 };
@@ -307,11 +316,15 @@ const Analytics = () => {
 
     const strategyToApply = strategyProfiles[selectedStrategyProfile] || recommendedStrategy;
     await dispatch(applyAnalyticsRecommendedStrategy({ sourceId: selectedSourceId, profileKey: selectedStrategyProfile }));
-    dispatch(fetchAnalyticsSourceConfig({ sourceId: selectedSourceId }));
     setPreviewMetric(strategyToApply.metric);
     setPreviewThreshold(String(strategyToApply.threshold));
     setPreviewMinAgeMinutes('0');
     setPreviewMaxAgeMinutes(String(strategyToApply.maxNewsAgeMinutes));
+    setPreviewReactionWeight(String(strategyToApply.reactionWeight ?? 1));
+    setPreviewCommentWeight(String(strategyToApply.commentWeight ?? 2));
+    setPreviewForwardWeight(String(strategyToApply.forwardWeight ?? 3));
+    setPreviewMode('strategy');
+    dispatch(fetchAnalyticsSourceConfig({ sourceId: selectedSourceId }));
   };
 
   const buildPostUrl = (source, post) => {
@@ -374,6 +387,7 @@ const Analytics = () => {
     setPreviewForwardWeight(String(selectedSourceConfig.forwardWeight ?? 3));
     setPreviewMinAgeMinutes('0');
     setPreviewMaxAgeMinutes(String(selectedSourceConfig.maxNewsAgeMinutes ?? 60));
+    setPreviewMode('source');
   };
 
   const openPostDetails = (post) => {
@@ -598,13 +612,15 @@ const Analytics = () => {
               </Box>
               {recommendedStrategy && (
                 <Alert severity="info" sx={{ mb: 2 }}>
-                  <strong>Рекомендация:</strong> {metricLabelMap[recommendedStrategy.metric] || recommendedStrategy.metric}, порог{' '}
+                  <strong>Рекомендация:</strong> {recommendedStrategy.strategyTitle || metricLabelMap[recommendedStrategy.metric] || recommendedStrategy.metric}, порог{' '}
                   {formatNumber(recommendedStrategy.threshold)}, окно {formatNumber(recommendedStrategy.maxNewsAgeMinutes)} мин.
-                  {' '}Точность {`${(Number(recommendedStrategy.precision || 0) * 100).toFixed(1)}%`},
-                  {' '}Полнота {`${(Number(recommendedStrategy.recall || 0) * 100).toFixed(1)}%`},
-                  {' '}F1 {`${(Number(recommendedStrategy.f1Score || 0) * 100).toFixed(1)}%`}.
+                  {' '}Точность {formatRate(recommendedStrategy.precision)},
+                  {' '}Полнота {formatRate(recommendedStrategy.recall)},
+                  {' '}F1 {formatRate(recommendedStrategy.f1Score)}.
                   <br />
-                  TP {formatNumber(recommendedStrategy.truePositive)} / FP {formatNumber(recommendedStrategy.falsePositive)} / FN {formatNumber(recommendedStrategy.falseNegative)}
+                  Правильно поймано вирусных: {formatNumber(recommendedStrategy.truePositive)} / Ложных срабатываний: {formatNumber(recommendedStrategy.falsePositive)} / Пропущено вирусных: {formatNumber(recommendedStrategy.falseNegative)}
+                  <br />
+                  Это значит: система нашла {formatNumber(recommendedStrategy.truePositive)} действительно сильных постов, ошибочно отметила {formatNumber(recommendedStrategy.falsePositive)} обычных постов и пропустила {formatNumber(recommendedStrategy.falseNegative)} сильных постов.
                   <br />
                   {recommendedStrategy.explanation}
                 </Alert>
@@ -622,10 +638,14 @@ const Analytics = () => {
                         }}
                         onClick={() => {
                           setSelectedStrategyProfile(strategy.profileKey);
+                          setPreviewMode('strategy');
                           setPreviewMetric(strategy.metric);
                           setPreviewThreshold(String(strategy.threshold));
                           setPreviewMinAgeMinutes('0');
                           setPreviewMaxAgeMinutes(String(strategy.maxNewsAgeMinutes));
+                          setPreviewReactionWeight(String(strategy.reactionWeight ?? 1));
+                          setPreviewCommentWeight(String(strategy.commentWeight ?? 2));
+                          setPreviewForwardWeight(String(strategy.forwardWeight ?? 3));
                         }}
                       >
                         <Typography variant="subtitle2" gutterBottom>
@@ -635,16 +655,16 @@ const Analytics = () => {
                           {strategy.profileDescription}
                         </Typography>
                         <Typography variant="body2">
-                          {metricLabelMap[strategy.metric] || strategy.metric}: {formatNumber(strategy.threshold)}
+                          {strategy.strategyTitle || metricLabelMap[strategy.metric] || strategy.metric}: {formatNumber(strategy.threshold)}
                         </Typography>
                         <Typography variant="body2">
                           Окно: {formatNumber(strategy.maxNewsAgeMinutes)} мин
                         </Typography>
                         <Typography variant="body2">
-                          Точность {`${(Number(strategy.precision || 0) * 100).toFixed(1)}%`} / Полнота {`${(Number(strategy.recall || 0) * 100).toFixed(1)}%`}
+                          Точность {formatRate(strategy.precision)} / Полнота {formatRate(strategy.recall)}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                          TP {formatNumber(strategy.truePositive)} / FP {formatNumber(strategy.falsePositive)} / FN {formatNumber(strategy.falseNegative)}
+                          Найдено вирусных: {formatNumber(strategy.truePositive)} / Ложных: {formatNumber(strategy.falsePositive)} / Пропущено: {formatNumber(strategy.falseNegative)}
                         </Typography>
                       </Paper>
                     </Grid>
@@ -655,15 +675,15 @@ const Analytics = () => {
                 <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
                   {strategyCandidates.slice(0, 4).map((candidate) => (
                     <Chip
-                      key={`${candidate.metric}-${candidate.maxNewsAgeMinutes}-${candidate.threshold}`}
-                      label={`${metricLabelMap[candidate.metric] || candidate.metric}: ${formatNumber(candidate.threshold)} / ${formatNumber(candidate.maxNewsAgeMinutes)}м`}
+                      key={`${candidate.strategyId}-${candidate.maxNewsAgeMinutes}-${candidate.threshold}`}
+                      label={`${candidate.strategyTitle || metricLabelMap[candidate.metric] || candidate.metric}: ${formatNumber(candidate.threshold)} / ${formatNumber(candidate.maxNewsAgeMinutes)}м`}
                       variant="outlined"
                     />
                   ))}
                 </Box>
               )}
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Ниже можно локально проверить стратегию на таблице постов. Текущий статус виральности в таблице скрыт, чтобы не путать с этим sandbox.
+                Ниже можно локально проверить стратегию на таблице постов. Параметры источника больше не должны перетирать выбранную карточку стратегии, пока вы не нажмёте сброс.
               </Typography>
               <Grid container spacing={2} alignItems="center">
                 <Grid item xs={12} md={4}>
