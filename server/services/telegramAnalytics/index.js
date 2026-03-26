@@ -1070,6 +1070,140 @@ const getSourceStrategyRecommendation = async (mongoSourceId, options = {}) => {
   };
 };
 
+const relabelSourceByStrategy = async (mongoSourceId, strategy) => {
+  if (!enabled || !pool) {
+    throw new Error('Telegram analytics is not enabled');
+  }
+
+  if (!strategy?.metric || !Number.isFinite(Number(strategy.threshold))) {
+    throw new Error('Valid strategy is required for relabeling');
+  }
+
+  const channelResult = await pool.query(
+    'SELECT id, title FROM tg_channels WHERE mongo_source_id = $1 LIMIT 1',
+    [mongoSourceId]
+  );
+
+  if (channelResult.rows.length === 0) {
+    throw new Error(`Analytics channel not found for source ${mongoSourceId}`);
+  }
+
+  const channel = channelResult.rows[0];
+  const snapshotsResult = await pool.query(
+    `
+      SELECT
+        p.id AS post_id,
+        s.id AS snapshot_id,
+        s.snapshot_at,
+        s.age_minutes,
+        s.view_count,
+        s.forward_count,
+        s.reaction_count,
+        s.comment_count
+      FROM tg_posts p
+      JOIN tg_post_snapshots s ON s.post_id = p.id
+      WHERE p.channel_id = $1
+      ORDER BY p.id ASC, s.snapshot_at ASC
+    `,
+    [channel.id]
+  );
+
+  const postsMap = new Map();
+  snapshotsResult.rows.forEach((row) => {
+    const post = postsMap.get(row.post_id) || {
+      postId: row.post_id,
+      snapshots: []
+    };
+    post.snapshots.push(row);
+    postsMap.set(row.post_id, post);
+  });
+
+  const snapshotUpdates = [];
+  const postUpdates = [];
+
+  postsMap.forEach((post) => {
+    let firstViralSnapshot = null;
+
+    post.snapshots.forEach((snapshot) => {
+      const metricValue = getMetricFromCounts(snapshot, strategy.metric, strategy);
+      const isViral = Number(snapshot.age_minutes || 0) <= Number(strategy.maxNewsAgeMinutes || 0)
+        && metricValue >= Number(strategy.threshold || 0);
+
+      if (isViral && !firstViralSnapshot) {
+        firstViralSnapshot = snapshot;
+      }
+
+      snapshotUpdates.push({
+        snapshotId: snapshot.snapshot_id,
+        isViral
+      });
+    });
+
+    postUpdates.push({
+      postId: post.postId,
+      isViral: Boolean(firstViralSnapshot),
+      firstBecameViralAt: firstViralSnapshot ? firstViralSnapshot.snapshot_at : null
+    });
+  });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    if (snapshotUpdates.length > 0) {
+      await client.query(
+        `
+          UPDATE tg_post_snapshots AS snapshots
+          SET is_viral = relabel.is_viral,
+              threshold_used = $3
+          FROM UNNEST($1::BIGINT[], $2::BOOLEAN[]) AS relabel(snapshot_id, is_viral)
+          WHERE snapshots.id = relabel.snapshot_id
+        `,
+        [
+          snapshotUpdates.map((snapshotUpdate) => snapshotUpdate.snapshotId),
+          snapshotUpdates.map((snapshotUpdate) => snapshotUpdate.isViral),
+          Number(strategy.threshold || 0)
+        ]
+      );
+    }
+
+    if (postUpdates.length > 0) {
+      await client.query(
+        `
+          UPDATE tg_posts AS posts
+          SET current_is_viral = relabel.is_viral,
+              first_became_viral_at = relabel.first_became_viral_at,
+              threshold_used = $4,
+              updated_at = NOW()
+          FROM UNNEST($1::BIGINT[], $2::BOOLEAN[], $3::TIMESTAMPTZ[]) AS relabel(post_id, is_viral, first_became_viral_at)
+          WHERE posts.id = relabel.post_id
+        `,
+        [
+          postUpdates.map((postUpdate) => postUpdate.postId),
+          postUpdates.map((postUpdate) => postUpdate.isViral),
+          postUpdates.map((postUpdate) => postUpdate.firstBecameViralAt ? new Date(postUpdate.firstBecameViralAt) : null),
+          Number(strategy.threshold || 0)
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  return {
+    channelId: channel.id,
+    channelTitle: channel.title,
+    postsRelabeled: postUpdates.length,
+    snapshotsRelabeled: snapshotUpdates.length,
+    viralPosts: postUpdates.filter((post) => post.isViral).length
+  };
+};
+
 const backfillFromMongo = async () => {
   if (!enabled || !pool) {
     return {
@@ -1166,5 +1300,6 @@ module.exports = {
   getSourcesOverview,
   getSourcePosts,
   getPostSnapshots,
-  getSourceStrategyRecommendation
+  getSourceStrategyRecommendation,
+  relabelSourceByStrategy
 };
