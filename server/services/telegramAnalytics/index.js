@@ -102,6 +102,45 @@ const roundMetric = (value) => {
   return Math.max(0, Math.round(numericValue));
 };
 
+const annotateStrategy = (strategy, profileKey) => {
+  if (!strategy) {
+    return null;
+  }
+
+  const profileMeta = {
+    aggressive: {
+      key: 'aggressive',
+      title: 'Агрессивная',
+      description: 'Ловит больше потенциально вирусных постов, допускает больше ложных срабатываний.'
+    },
+    balanced: {
+      key: 'balanced',
+      title: 'Сбалансированная',
+      description: 'Компромисс между полнотой и точностью.'
+    },
+    strict: {
+      key: 'strict',
+      title: 'Строгая',
+      description: 'Меньше ложных срабатываний, но может пропускать часть вирусных постов.'
+    }
+  }[profileKey] || {
+    key: profileKey,
+    title: profileKey,
+    description: ''
+  };
+
+  return {
+    ...strategy,
+    profileKey: profileMeta.key,
+    profileTitle: profileMeta.title,
+    profileDescription: profileMeta.description,
+    explanation:
+      `${profileMeta.title}: ${strategy.metric} в первые ${strategy.maxNewsAgeMinutes} мин, ` +
+      `порог ${strategy.threshold}. Precision ${(strategy.precision * 100).toFixed(1)}%, ` +
+      `recall ${(strategy.recall * 100).toFixed(1)}%, F1 ${(strategy.f1Score * 100).toFixed(1)}%.`
+  };
+};
+
 const getMetricFromCounts = (counts = {}, metric, weights = {}) => {
   const reactions = Number(counts.reaction_count ?? counts.reactionCount ?? 0) || 0;
   const comments = Number(counts.comment_count ?? counts.commentCount ?? 0) || 0;
@@ -900,22 +939,37 @@ const getSourceStrategyRecommendation = async (mongoSourceId, options = {}) => {
     return left.threshold - right.threshold;
   });
 
-  const best = sortedCandidates[0] || null;
+  const bestBalanced = sortedCandidates[0] || null;
+  const bestAggressive = [...sortedCandidates].sort((left, right) => {
+    const leftScore = left.recall * 0.7 + left.precision * 0.3 - Math.abs(left.predictedRate - left.actualPositiveRate) * 0.1;
+    const rightScore = right.recall * 0.7 + right.precision * 0.3 - Math.abs(right.predictedRate - right.actualPositiveRate) * 0.1;
+    if (rightScore !== leftScore) {
+      return rightScore - leftScore;
+    }
+    return right.recall - left.recall;
+  })[0] || null;
+  const bestStrict = [...sortedCandidates].sort((left, right) => {
+    const leftScore = left.precision * 0.7 + left.recall * 0.3 - Math.abs(left.predictedRate - left.actualPositiveRate) * 0.1;
+    const rightScore = right.precision * 0.7 + right.recall * 0.3 - Math.abs(right.predictedRate - right.actualPositiveRate) * 0.1;
+    if (rightScore !== leftScore) {
+      return rightScore - leftScore;
+    }
+    return right.precision - left.precision;
+  })[0] || null;
+
+  const strategies = {
+    aggressive: annotateStrategy(bestAggressive, 'aggressive'),
+    balanced: annotateStrategy(bestBalanced, 'balanced'),
+    strict: annotateStrategy(bestStrict, 'strict')
+  };
 
   return {
-    recommendedStrategy: best
-      ? {
-          ...best,
-          explanation:
-            `Лучший ранний сигнал: ${best.metric} в первые ${best.maxNewsAgeMinutes} мин. ` +
-            `Порог ${best.threshold} даёт precision ${(best.precision * 100).toFixed(1)}%, ` +
-            `recall ${(best.recall * 100).toFixed(1)}% и F1 ${(best.f1Score * 100).toFixed(1)}%.`
-        }
-      : null,
+    recommendedStrategy: strategies.balanced,
+    strategyProfiles: strategies,
     candidates: sortedCandidates.slice(0, 5),
     postsAvailable: posts.length,
-    message: best
-      ? 'Умная стратегия рассчитана'
+    message: bestBalanced
+      ? 'Умные стратегии рассчитаны'
       : 'Не удалось найти устойчивую стратегию на текущих данных'
   };
 };

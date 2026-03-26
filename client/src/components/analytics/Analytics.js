@@ -105,6 +105,7 @@ const Analytics = () => {
     selectedPostSnapshots,
     selectedPostId,
     recommendedStrategy,
+    strategyProfiles,
     strategyCandidates,
     overviewLoading,
     sourcesLoading,
@@ -124,6 +125,7 @@ const Analytics = () => {
   const [previewForwardWeight, setPreviewForwardWeight] = useState('3');
   const [previewMinAgeMinutes, setPreviewMinAgeMinutes] = useState('0');
   const [previewMaxAgeMinutes, setPreviewMaxAgeMinutes] = useState('60');
+  const [selectedStrategyProfile, setSelectedStrategyProfile] = useState('balanced');
 
   useEffect(() => {
     dispatch(fetchAnalyticsOverview());
@@ -303,12 +305,13 @@ const Analytics = () => {
       return;
     }
 
-    await dispatch(applyAnalyticsRecommendedStrategy({ sourceId: selectedSourceId }));
+    const strategyToApply = strategyProfiles[selectedStrategyProfile] || recommendedStrategy;
+    await dispatch(applyAnalyticsRecommendedStrategy({ sourceId: selectedSourceId, profileKey: selectedStrategyProfile }));
     dispatch(fetchAnalyticsSourceConfig({ sourceId: selectedSourceId }));
-    setPreviewMetric(recommendedStrategy.metric);
-    setPreviewThreshold(String(recommendedStrategy.threshold));
+    setPreviewMetric(strategyToApply.metric);
+    setPreviewThreshold(String(strategyToApply.threshold));
     setPreviewMinAgeMinutes('0');
-    setPreviewMaxAgeMinutes(String(recommendedStrategy.maxNewsAgeMinutes));
+    setPreviewMaxAgeMinutes(String(strategyToApply.maxNewsAgeMinutes));
   };
 
   const buildPostUrl = (source, post) => {
@@ -603,6 +606,45 @@ const Analytics = () => {
                   <br />
                   {recommendedStrategy.explanation}
                 </Alert>
+              )}
+              {Object.values(strategyProfiles).filter(Boolean).length > 0 && (
+                <Grid container spacing={2} sx={{ mb: 2 }}>
+                  {Object.values(strategyProfiles).filter(Boolean).map((strategy) => (
+                    <Grid item xs={12} md={4} key={strategy.profileKey}>
+                      <Paper
+                        variant="outlined"
+                        sx={{
+                          p: 2,
+                          borderColor: selectedStrategyProfile === strategy.profileKey ? 'primary.main' : 'divider',
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => {
+                          setSelectedStrategyProfile(strategy.profileKey);
+                          setPreviewMetric(strategy.metric);
+                          setPreviewThreshold(String(strategy.threshold));
+                          setPreviewMinAgeMinutes('0');
+                          setPreviewMaxAgeMinutes(String(strategy.maxNewsAgeMinutes));
+                        }}
+                      >
+                        <Typography variant="subtitle2" gutterBottom>
+                          {strategy.profileTitle}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                          {strategy.profileDescription}
+                        </Typography>
+                        <Typography variant="body2">
+                          {metricLabelMap[strategy.metric] || strategy.metric}: {formatNumber(strategy.threshold)}
+                        </Typography>
+                        <Typography variant="body2">
+                          Окно: {formatNumber(strategy.maxNewsAgeMinutes)} мин
+                        </Typography>
+                        <Typography variant="body2">
+                          P {`${(Number(strategy.precision || 0) * 100).toFixed(1)}%`} / R {`${(Number(strategy.recall || 0) * 100).toFixed(1)}%`}
+                        </Typography>
+                      </Paper>
+                    </Grid>
+                  ))}
+                </Grid>
               )}
               {strategyCandidates.length > 1 && (
                 <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>

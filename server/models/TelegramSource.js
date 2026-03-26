@@ -170,6 +170,8 @@ const TelegramSourceSchema = new mongoose.Schema({
     default: 'manual'
   },
   smartStrategy: {
+    profileKey: String,
+    profileTitle: String,
     metric: {
       type: String,
       enum: ['views', 'reactions', 'comments', 'forwards', 'engagement_score']

@@ -87,7 +87,8 @@ router.post('/sources/:sourceId/apply-recommended-strategy', async (req, res) =>
       forwardWeight: source.forwardWeight
     });
 
-    const strategy = recommendationResult?.recommendedStrategy;
+    const requestedProfile = typeof req.body?.profileKey === 'string' ? req.body.profileKey : 'balanced';
+    const strategy = recommendationResult?.strategyProfiles?.[requestedProfile] || recommendationResult?.recommendedStrategy;
     if (!strategy) {
       return res.status(400).json({
         message: 'Could not calculate a reliable strategy for this source yet'
@@ -100,6 +101,8 @@ router.post('/sources/:sourceId/apply-recommended-strategy', async (req, res) =>
     source.viralDetectionMetric = strategy.metric;
     source.maxNewsAgeMinutes = strategy.maxNewsAgeMinutes;
     source.smartStrategy = {
+      profileKey: strategy.profileKey,
+      profileTitle: strategy.profileTitle,
       metric: strategy.metric,
       threshold: strategy.threshold,
       maxNewsAgeMinutes: strategy.maxNewsAgeMinutes,

@@ -87,9 +87,9 @@ export const fetchAnalyticsRecommendedStrategy = createAsyncThunk(
 
 export const applyAnalyticsRecommendedStrategy = createAsyncThunk(
   'analytics/applyRecommendedStrategy',
-  async ({ sourceId }, { rejectWithValue }) => {
+  async ({ sourceId, profileKey = 'balanced' }, { rejectWithValue }) => {
     try {
-      const response = await axios.post(`${API_URL}/telegram-analytics/sources/${sourceId}/apply-recommended-strategy`);
+      const response = await axios.post(`${API_URL}/telegram-analytics/sources/${sourceId}/apply-recommended-strategy`, { profileKey });
       return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data || error.message);
@@ -107,6 +107,7 @@ const analyticsSlice = createSlice({
     selectedPostSnapshots: [],
     selectedPostId: null,
     recommendedStrategy: null,
+    strategyProfiles: {},
     strategyCandidates: [],
     overviewLoading: false,
     sourcesLoading: false,
@@ -133,6 +134,7 @@ const analyticsSlice = createSlice({
     },
     clearRecommendedStrategy: (state) => {
       state.recommendedStrategy = null;
+      state.strategyProfiles = {};
       state.strategyCandidates = [];
     }
   },
@@ -210,11 +212,13 @@ const analyticsSlice = createSlice({
       .addCase(fetchAnalyticsRecommendedStrategy.fulfilled, (state, action) => {
         state.strategyLoading = false;
         state.recommendedStrategy = action.payload?.recommendedStrategy || null;
+        state.strategyProfiles = action.payload?.strategyProfiles || {};
         state.strategyCandidates = action.payload?.candidates || [];
       })
       .addCase(fetchAnalyticsRecommendedStrategy.rejected, (state, action) => {
         state.strategyLoading = false;
         state.recommendedStrategy = null;
+        state.strategyProfiles = {};
         state.strategyCandidates = [];
         state.error = action.payload;
       })

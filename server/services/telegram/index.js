@@ -107,16 +107,19 @@ const buildSelectionReason = (post, source) => {
 
   const ageText = ageMinutes === null ? `в окне ${maxNewsAgeMinutes} мин` : `за ${ageMinutes} мин`;
   const strategyPrefix = source.strategyMode === 'smart' ? '🤖 Почему выбран: ' : '📌 Почему выбран: ';
+  const strategyName = source.strategyMode === 'smart' && source.smartStrategy?.profileTitle
+    ? `${source.smartStrategy.profileTitle.toLowerCase()} стратегия, `
+    : '';
 
   if (metric === 'engagement_score') {
     return (
-      `${strategyPrefix}${ageText} пост набрал engagement score ${metricValue} ` +
+      `${strategyPrefix}${strategyName}${ageText} пост набрал engagement score ${metricValue} ` +
       `при пороге ${threshold}. Лимит окна: ${maxNewsAgeMinutes} мин.`
     );
   }
 
   return (
-    `${strategyPrefix}${ageText} пост набрал ${metricValue} ${getMetricLabel(metric)} ` +
+    `${strategyPrefix}${strategyName}${ageText} пост набрал ${metricValue} ${getMetricLabel(metric)} ` +
     `при пороге ${threshold}. Лимит окна: ${maxNewsAgeMinutes} мин.`
   );
 };
