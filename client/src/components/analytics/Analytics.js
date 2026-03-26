@@ -847,6 +847,7 @@ const Analytics = () => {
                     <TableCell align="right">Лайки в окне</TableCell>
                     <TableCell align="right">Forwards в окне</TableCell>
                     <TableCell align="right">Comments в окне</TableCell>
+                    <TableCell>Текущий статус</TableCell>
                     <TableCell align="right">Preview value</TableCell>
                     <TableCell align="right">Точек в окне</TableCell>
                     <TableCell align="right">Snapshots</TableCell>
@@ -889,6 +890,13 @@ const Analytics = () => {
                         </TableCell>
                         <TableCell align="right">
                           {Number(post.range_snapshots_count) > 0 ? formatNumber(post.range_comment_count_max) : '—'}
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            size="small"
+                            label={post.current_is_viral ? 'viral' : 'normal'}
+                            color={post.current_is_viral ? 'error' : 'default'}
+                          />
                         </TableCell>
                         <TableCell align="right">{formatNumber(post.previewValue)}</TableCell>
                         <TableCell align="right">{formatNumber(post.range_snapshots_count)}</TableCell>
