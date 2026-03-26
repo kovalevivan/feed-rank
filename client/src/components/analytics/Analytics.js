@@ -37,12 +37,15 @@ import {
   Sync as SyncIcon
 } from '@mui/icons-material';
 import {
+  applyAnalyticsRecommendedStrategy,
   clearError,
+  clearRecommendedStrategy,
   clearSelectedPostSnapshots,
   clearSelectedSourceConfig,
   clearSelectedSourcePosts,
   fetchAnalyticsOverview,
   fetchAnalyticsPostSnapshots,
+  fetchAnalyticsRecommendedStrategy,
   fetchAnalyticsSourceConfig,
   fetchAnalyticsSourcePosts,
   fetchAnalyticsSources
@@ -84,6 +87,14 @@ const normalizeUsername = (username) => {
   return username.replace(/^@+/, '');
 };
 
+const metricLabelMap = {
+  views: 'просмотры',
+  reactions: 'лайки',
+  comments: 'комментарии',
+  forwards: 'пересылки',
+  engagement_score: 'engagement score'
+};
+
 const Analytics = () => {
   const dispatch = useDispatch();
   const {
@@ -93,11 +104,15 @@ const Analytics = () => {
     selectedSourceConfig,
     selectedPostSnapshots,
     selectedPostId,
+    recommendedStrategy,
+    strategyCandidates,
     overviewLoading,
     sourcesLoading,
     postsLoading,
     sourceConfigLoading,
     snapshotsLoading,
+    strategyLoading,
+    strategyApplying,
     error
   } = useSelector((state) => state.analytics);
   const [selectedSourceId, setSelectedSourceId] = useState('');
@@ -122,6 +137,10 @@ const Analytics = () => {
   }, [sources, selectedSourceId]);
 
   useEffect(() => {
+    dispatch(clearRecommendedStrategy());
+  }, [dispatch, selectedSourceId]);
+
+  useEffect(() => {
     if (selectedSourceId) {
       dispatch(fetchAnalyticsSourcePosts({
         sourceId: selectedSourceId,
@@ -135,6 +154,7 @@ const Analytics = () => {
 
     dispatch(clearSelectedSourcePosts());
     dispatch(clearSelectedSourceConfig());
+    dispatch(clearRecommendedStrategy());
   }, [dispatch, selectedSourceId, previewMinAgeMinutes, previewMaxAgeMinutes]);
 
   const selectedSource = useMemo(
@@ -268,6 +288,27 @@ const Analytics = () => {
         maxAgeMinutes: previewMaxAgeMinutes
       }));
     }
+  };
+
+  const handleRecommendStrategy = () => {
+    if (!selectedSourceId) {
+      return;
+    }
+
+    dispatch(fetchAnalyticsRecommendedStrategy({ sourceId: selectedSourceId }));
+  };
+
+  const handleApplyRecommendedStrategy = async () => {
+    if (!selectedSourceId || !recommendedStrategy) {
+      return;
+    }
+
+    await dispatch(applyAnalyticsRecommendedStrategy({ sourceId: selectedSourceId }));
+    dispatch(fetchAnalyticsSourceConfig({ sourceId: selectedSourceId }));
+    setPreviewMetric(recommendedStrategy.metric);
+    setPreviewThreshold(String(recommendedStrategy.threshold));
+    setPreviewMinAgeMinutes('0');
+    setPreviewMaxAgeMinutes(String(recommendedStrategy.maxNewsAgeMinutes));
   };
 
   const buildPostUrl = (source, post) => {
@@ -531,10 +572,51 @@ const Analytics = () => {
           <Paper sx={{ p: 3 }}>
             <Box sx={{ mb: 3 }}>
               <Typography variant="h6" gutterBottom>
-                Тест параметров виральности
+                Умная стратегия
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Меняйте параметры локально и сразу смотрите, какие посты будут считаться viral. Настройки источника при этом не сохраняются.
+                Система может сама подобрать ранний сигнал виральности по уже собранным snapshots, а затем сразу применить его к источнику.
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+                <Button
+                  variant="contained"
+                  onClick={handleRecommendStrategy}
+                  disabled={!selectedSourceId || strategyLoading}
+                >
+                  Рассчитать стратегию
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={handleApplyRecommendedStrategy}
+                  disabled={!recommendedStrategy || strategyApplying}
+                >
+                  Применить к источнику
+                </Button>
+              </Box>
+              {recommendedStrategy && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <strong>Рекомендация:</strong> {metricLabelMap[recommendedStrategy.metric] || recommendedStrategy.metric}, порог{' '}
+                  {formatNumber(recommendedStrategy.threshold)}, окно {formatNumber(recommendedStrategy.maxNewsAgeMinutes)} мин.
+                  {' '}Precision {`${(Number(recommendedStrategy.precision || 0) * 100).toFixed(1)}%`},
+                  {' '}Recall {`${(Number(recommendedStrategy.recall || 0) * 100).toFixed(1)}%`},
+                  {' '}F1 {`${(Number(recommendedStrategy.f1Score || 0) * 100).toFixed(1)}%`}.
+                  <br />
+                  {recommendedStrategy.explanation}
+                </Alert>
+              )}
+              {strategyCandidates.length > 1 && (
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+                  {strategyCandidates.slice(0, 4).map((candidate) => (
+                    <Chip
+                      key={`${candidate.metric}-${candidate.maxNewsAgeMinutes}-${candidate.threshold}`}
+                      label={`${metricLabelMap[candidate.metric] || candidate.metric}: ${formatNumber(candidate.threshold)} / ${formatNumber(candidate.maxNewsAgeMinutes)}м`}
+                      variant="outlined"
+                    />
+                  ))}
+                </Box>
+              )}
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Ниже можно локально проверить стратегию на таблице постов. Текущий статус виральности в таблице скрыт, чтобы не путать с этим sandbox.
               </Typography>
               <Grid container spacing={2} alignItems="center">
                 <Grid item xs={12} md={4}>
@@ -671,7 +753,6 @@ const Analytics = () => {
                     <TableCell align="right">Preview value</TableCell>
                     <TableCell align="right">Точек в окне</TableCell>
                     <TableCell align="right">Snapshots</TableCell>
-                    <TableCell>Текущий статус</TableCell>
                     <TableCell>Preview</TableCell>
                   </TableRow>
                 </TableHead>
@@ -715,13 +796,6 @@ const Analytics = () => {
                         <TableCell align="right">{formatNumber(post.previewValue)}</TableCell>
                         <TableCell align="right">{formatNumber(post.range_snapshots_count)}</TableCell>
                         <TableCell align="right">{formatNumber(post.snapshots_count)}</TableCell>
-                        <TableCell>
-                          <Chip
-                            size="small"
-                            label={post.current_is_viral ? 'viral' : 'normal'}
-                            color={post.current_is_viral ? 'error' : 'default'}
-                          />
-                        </TableCell>
                         <TableCell>
                           <Chip
                             size="small"

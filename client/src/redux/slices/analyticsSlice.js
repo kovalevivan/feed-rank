@@ -73,6 +73,30 @@ export const fetchAnalyticsPostSnapshots = createAsyncThunk(
   }
 );
 
+export const fetchAnalyticsRecommendedStrategy = createAsyncThunk(
+  'analytics/fetchRecommendedStrategy',
+  async ({ sourceId }, { rejectWithValue }) => {
+    try {
+      const response = await axios.get(`${API_URL}/telegram-analytics/sources/${sourceId}/recommend-strategy`);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
+export const applyAnalyticsRecommendedStrategy = createAsyncThunk(
+  'analytics/applyRecommendedStrategy',
+  async ({ sourceId }, { rejectWithValue }) => {
+    try {
+      const response = await axios.post(`${API_URL}/telegram-analytics/sources/${sourceId}/apply-recommended-strategy`);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+);
+
 const analyticsSlice = createSlice({
   name: 'analytics',
   initialState: {
@@ -82,11 +106,15 @@ const analyticsSlice = createSlice({
     selectedSourceConfig: null,
     selectedPostSnapshots: [],
     selectedPostId: null,
+    recommendedStrategy: null,
+    strategyCandidates: [],
     overviewLoading: false,
     sourcesLoading: false,
     postsLoading: false,
     sourceConfigLoading: false,
     snapshotsLoading: false,
+    strategyLoading: false,
+    strategyApplying: false,
     error: null
   },
   reducers: {
@@ -102,6 +130,10 @@ const analyticsSlice = createSlice({
     },
     clearSelectedSourceConfig: (state) => {
       state.selectedSourceConfig = null;
+    },
+    clearRecommendedStrategy: (state) => {
+      state.recommendedStrategy = null;
+      state.strategyCandidates = [];
     }
   },
   extraReducers: (builder) => {
@@ -170,6 +202,48 @@ const analyticsSlice = createSlice({
         state.snapshotsLoading = false;
         state.selectedPostSnapshots = [];
         state.error = action.payload;
+      })
+      .addCase(fetchAnalyticsRecommendedStrategy.pending, (state) => {
+        state.strategyLoading = true;
+        state.error = null;
+      })
+      .addCase(fetchAnalyticsRecommendedStrategy.fulfilled, (state, action) => {
+        state.strategyLoading = false;
+        state.recommendedStrategy = action.payload?.recommendedStrategy || null;
+        state.strategyCandidates = action.payload?.candidates || [];
+      })
+      .addCase(fetchAnalyticsRecommendedStrategy.rejected, (state, action) => {
+        state.strategyLoading = false;
+        state.recommendedStrategy = null;
+        state.strategyCandidates = [];
+        state.error = action.payload;
+      })
+      .addCase(applyAnalyticsRecommendedStrategy.pending, (state) => {
+        state.strategyApplying = true;
+        state.error = null;
+      })
+      .addCase(applyAnalyticsRecommendedStrategy.fulfilled, (state, action) => {
+        state.strategyApplying = false;
+        if (action.payload?.strategy) {
+          state.recommendedStrategy = action.payload.strategy;
+        }
+        if (action.payload?.source) {
+          state.selectedSourceConfig = action.payload.source;
+          state.sources = state.sources.map((source) => (
+            source.mongo_source_id === action.payload.source._id
+              ? {
+                  ...source,
+                  title: action.payload.source.name,
+                  username: action.payload.source.username,
+                  active: action.payload.source.active
+                }
+              : source
+          ));
+        }
+      })
+      .addCase(applyAnalyticsRecommendedStrategy.rejected, (state, action) => {
+        state.strategyApplying = false;
+        state.error = action.payload;
       });
   }
 });
@@ -178,6 +252,7 @@ export const {
   clearError,
   clearSelectedSourcePosts,
   clearSelectedPostSnapshots,
-  clearSelectedSourceConfig
+  clearSelectedSourceConfig,
+  clearRecommendedStrategy
 } = analyticsSlice.actions;
 export default analyticsSlice.reducer;

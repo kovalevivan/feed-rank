@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const telegramAnalyticsService = require('../services/telegramAnalytics');
+const TelegramSource = require('../models/TelegramSource');
 
 router.get('/health', async (req, res) => {
   try {
@@ -49,6 +50,90 @@ router.get('/sources/:sourceId/posts', async (req, res) => {
     res.json(posts);
   } catch (error) {
     console.error(`Error getting Telegram analytics posts for ${req.params.sourceId}:`, error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+router.get('/sources/:sourceId/recommend-strategy', async (req, res) => {
+  try {
+    const source = await TelegramSource.findById(req.params.sourceId);
+    if (!source) {
+      return res.status(404).json({ message: 'Telegram source not found' });
+    }
+
+    const recommendation = await telegramAnalyticsService.getSourceStrategyRecommendation(req.params.sourceId, {
+      reactionWeight: source.reactionWeight,
+      commentWeight: source.commentWeight,
+      forwardWeight: source.forwardWeight
+    });
+
+    res.json(recommendation);
+  } catch (error) {
+    console.error(`Error recommending strategy for ${req.params.sourceId}:`, error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+router.post('/sources/:sourceId/apply-recommended-strategy', async (req, res) => {
+  try {
+    const source = await TelegramSource.findById(req.params.sourceId);
+    if (!source) {
+      return res.status(404).json({ message: 'Telegram source not found' });
+    }
+
+    const recommendationResult = await telegramAnalyticsService.getSourceStrategyRecommendation(req.params.sourceId, {
+      reactionWeight: source.reactionWeight,
+      commentWeight: source.commentWeight,
+      forwardWeight: source.forwardWeight
+    });
+
+    const strategy = recommendationResult?.recommendedStrategy;
+    if (!strategy) {
+      return res.status(400).json({
+        message: 'Could not calculate a reliable strategy for this source yet'
+      });
+    }
+
+    source.strategyMode = 'smart';
+    source.thresholdType = 'manual';
+    source.manualThreshold = strategy.threshold;
+    source.viralDetectionMetric = strategy.metric;
+    source.maxNewsAgeMinutes = strategy.maxNewsAgeMinutes;
+    source.smartStrategy = {
+      metric: strategy.metric,
+      threshold: strategy.threshold,
+      maxNewsAgeMinutes: strategy.maxNewsAgeMinutes,
+      thresholdPercentile: strategy.thresholdPercentile,
+      labelPercentile: strategy.labelPercentile,
+      precision: strategy.precision,
+      recall: strategy.recall,
+      f1Score: strategy.f1Score,
+      postsEvaluated: strategy.postsEvaluated,
+      predictedCount: strategy.predictedCount,
+      actualPositiveCount: strategy.actualPositiveCount,
+      explanation: strategy.explanation,
+      appliedAt: new Date()
+    };
+
+    if (strategy.metric === 'views') {
+      source.minViewsForViral = strategy.threshold;
+    } else if (strategy.metric === 'forwards') {
+      source.minForwardsForViral = strategy.threshold;
+    } else if (strategy.metric === 'comments') {
+      source.minCommentsForViral = strategy.threshold;
+    } else if (strategy.metric === 'reactions') {
+      source.minReactionsForViral = strategy.threshold;
+    }
+
+    await source.save();
+
+    res.json({
+      message: 'Smart strategy applied to source',
+      source,
+      strategy
+    });
+  } catch (error) {
+    console.error(`Error applying strategy for ${req.params.sourceId}:`, error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });

@@ -62,6 +62,71 @@ const getMediaTypes = (attachments = []) => {
   )];
 };
 
+const STRATEGY_WINDOWS_MINUTES = [15, 30, 45, 60, 90, 120, 180];
+const STRATEGY_METRICS = ['views', 'reactions', 'comments', 'forwards', 'engagement_score'];
+const STRATEGY_THRESHOLD_PERCENTILES = [70, 75, 80, 85, 90, 95];
+const STRATEGY_TARGET_PERCENTILE = 85;
+
+const percentile = (values, percentileValue) => {
+  const numericValues = values
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value))
+    .sort((a, b) => a - b);
+
+  if (numericValues.length === 0) {
+    return 0;
+  }
+
+  if (numericValues.length === 1) {
+    return numericValues[0];
+  }
+
+  const rank = (Math.max(0, Math.min(100, percentileValue)) / 100) * (numericValues.length - 1);
+  const lowerIndex = Math.floor(rank);
+  const upperIndex = Math.ceil(rank);
+
+  if (lowerIndex === upperIndex) {
+    return numericValues[lowerIndex];
+  }
+
+  const weight = rank - lowerIndex;
+  return numericValues[lowerIndex] + (numericValues[upperIndex] - numericValues[lowerIndex]) * weight;
+};
+
+const roundMetric = (value) => {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.round(numericValue));
+};
+
+const getMetricFromCounts = (counts = {}, metric, weights = {}) => {
+  const reactions = Number(counts.reaction_count ?? counts.reactionCount ?? 0) || 0;
+  const comments = Number(counts.comment_count ?? counts.commentCount ?? 0) || 0;
+  const forwards = Number(counts.forward_count ?? counts.forwardCount ?? 0) || 0;
+  const views = Number(counts.view_count ?? counts.viewCount ?? 0) || 0;
+
+  switch (metric) {
+    case 'views':
+      return views;
+    case 'comments':
+      return comments;
+    case 'forwards':
+      return forwards;
+    case 'engagement_score':
+      return (
+        reactions * (Number(weights.reactionWeight) || 1) +
+        comments * (Number(weights.commentWeight) || 2) +
+        forwards * (Number(weights.forwardWeight) || 3)
+      );
+    case 'reactions':
+    default:
+      return reactions;
+  }
+};
+
 const bootstrapSchema = async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tg_channels (
@@ -647,6 +712,214 @@ const getPostSnapshots = async (postId, limit = 200) => {
   return result.rows;
 };
 
+const getSourceStrategyRecommendation = async (mongoSourceId, options = {}) => {
+  if (!enabled || !pool) {
+    return null;
+  }
+
+  const weights = {
+    reactionWeight: Number(options.reactionWeight) || 1,
+    commentWeight: Number(options.commentWeight) || 2,
+    forwardWeight: Number(options.forwardWeight) || 3
+  };
+
+  const result = await pool.query(
+    `
+      SELECT
+        p.id,
+        p.message_id,
+        p.published_at,
+        p.original_post_url,
+        s.snapshot_at,
+        s.age_minutes,
+        s.view_count,
+        s.forward_count,
+        s.reaction_count,
+        s.comment_count
+      FROM tg_posts p
+      JOIN tg_channels c ON c.id = p.channel_id
+      JOIN tg_post_snapshots s ON s.post_id = p.id
+      WHERE c.mongo_source_id = $1
+      ORDER BY p.id ASC, s.age_minutes ASC, s.snapshot_at ASC
+    `,
+    [mongoSourceId]
+  );
+
+  const postsMap = new Map();
+  result.rows.forEach((row) => {
+    const existing = postsMap.get(row.id) || {
+      id: row.id,
+      messageId: row.message_id,
+      publishedAt: row.published_at,
+      originalPostUrl: row.original_post_url,
+      snapshots: []
+    };
+    existing.snapshots.push(row);
+    postsMap.set(row.id, existing);
+  });
+
+  const posts = Array.from(postsMap.values()).filter((post) => post.snapshots.length >= 2);
+  if (posts.length < 12) {
+    return {
+      recommendedStrategy: null,
+      candidates: [],
+      postsAvailable: posts.length,
+      message: 'Недостаточно данных для расчёта умной стратегии'
+    };
+  }
+
+  const candidates = [];
+
+  STRATEGY_METRICS.forEach((metric) => {
+    STRATEGY_WINDOWS_MINUTES.forEach((windowMinutes) => {
+      const eligiblePosts = posts
+        .map((post) => {
+          const inWindowSnapshots = post.snapshots.filter((snapshot) => Number(snapshot.age_minutes) <= windowMinutes);
+          if (inWindowSnapshots.length === 0) {
+            return null;
+          }
+
+          const maxObservedAge = Math.max(...post.snapshots.map((snapshot) => Number(snapshot.age_minutes) || 0));
+          if (maxObservedAge < windowMinutes) {
+            return null;
+          }
+
+          const earlyValue = Math.max(
+            ...inWindowSnapshots.map((snapshot) => getMetricFromCounts(snapshot, metric, weights))
+          );
+          const finalValue = Math.max(
+            ...post.snapshots.map((snapshot) => getMetricFromCounts(snapshot, metric, weights))
+          );
+
+          return {
+            id: post.id,
+            earlyValue,
+            finalValue
+          };
+        })
+        .filter(Boolean)
+        .filter((post) => Number.isFinite(post.earlyValue) && Number.isFinite(post.finalValue) && post.finalValue > 0);
+
+      if (eligiblePosts.length < 12) {
+        return;
+      }
+
+      const finalValues = eligiblePosts.map((post) => post.finalValue);
+      const labelThreshold = percentile(finalValues, STRATEGY_TARGET_PERCENTILE);
+      const actualPositiveCount = eligiblePosts.filter((post) => post.finalValue >= labelThreshold).length;
+
+      if (actualPositiveCount < 3) {
+        return;
+      }
+
+      const earlyValues = eligiblePosts.map((post) => post.earlyValue);
+      const actualPositiveRate = actualPositiveCount / eligiblePosts.length;
+
+      STRATEGY_THRESHOLD_PERCENTILES.forEach((thresholdPercentile) => {
+        const threshold = roundMetric(percentile(earlyValues, thresholdPercentile));
+        if (threshold <= 0) {
+          return;
+        }
+
+        let truePositive = 0;
+        let falsePositive = 0;
+        let falseNegative = 0;
+        let predictedCount = 0;
+
+        eligiblePosts.forEach((post) => {
+          const predicted = post.earlyValue >= threshold;
+          const actual = post.finalValue >= labelThreshold;
+
+          if (predicted) {
+            predictedCount += 1;
+          }
+
+          if (predicted && actual) {
+            truePositive += 1;
+          } else if (predicted && !actual) {
+            falsePositive += 1;
+          } else if (!predicted && actual) {
+            falseNegative += 1;
+          }
+        });
+
+        if (predictedCount === 0) {
+          return;
+        }
+
+        const predictedRate = predictedCount / eligiblePosts.length;
+        if (predictedRate < 0.03 || predictedRate > 0.5) {
+          return;
+        }
+
+        const precision = truePositive / Math.max(1, truePositive + falsePositive);
+        const recall = truePositive / Math.max(1, truePositive + falseNegative);
+        const f1Score = precision + recall > 0
+          ? (2 * precision * recall) / (precision + recall)
+          : 0;
+
+        const score = (
+          f1Score -
+          Math.abs(predictedRate - actualPositiveRate) * 0.15 -
+          windowMinutes * 0.0002
+        );
+
+        candidates.push({
+          metric,
+          threshold,
+          maxNewsAgeMinutes: windowMinutes,
+          thresholdPercentile,
+          labelPercentile: STRATEGY_TARGET_PERCENTILE,
+          precision,
+          recall,
+          f1Score,
+          score,
+          postsEvaluated: eligiblePosts.length,
+          predictedCount,
+          actualPositiveCount,
+          predictedRate,
+          actualPositiveRate,
+          reactionWeight: weights.reactionWeight,
+          commentWeight: weights.commentWeight,
+          forwardWeight: weights.forwardWeight
+        });
+      });
+    });
+  });
+
+  const sortedCandidates = candidates.sort((left, right) => {
+    if (right.score !== left.score) {
+      return right.score - left.score;
+    }
+    if (right.precision !== left.precision) {
+      return right.precision - left.precision;
+    }
+    if (left.maxNewsAgeMinutes !== right.maxNewsAgeMinutes) {
+      return left.maxNewsAgeMinutes - right.maxNewsAgeMinutes;
+    }
+    return left.threshold - right.threshold;
+  });
+
+  const best = sortedCandidates[0] || null;
+
+  return {
+    recommendedStrategy: best
+      ? {
+          ...best,
+          explanation:
+            `Лучший ранний сигнал: ${best.metric} в первые ${best.maxNewsAgeMinutes} мин. ` +
+            `Порог ${best.threshold} даёт precision ${(best.precision * 100).toFixed(1)}%, ` +
+            `recall ${(best.recall * 100).toFixed(1)}% и F1 ${(best.f1Score * 100).toFixed(1)}%.`
+        }
+      : null,
+    candidates: sortedCandidates.slice(0, 5),
+    postsAvailable: posts.length,
+    message: best
+      ? 'Умная стратегия рассчитана'
+      : 'Не удалось найти устойчивую стратегию на текущих данных'
+  };
+};
+
 const backfillFromMongo = async () => {
   if (!enabled || !pool) {
     return {
@@ -742,5 +1015,6 @@ module.exports = {
   getOverview,
   getSourcesOverview,
   getSourcePosts,
-  getPostSnapshots
+  getPostSnapshots,
+  getSourceStrategyRecommendation
 };

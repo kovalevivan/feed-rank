@@ -38,6 +38,89 @@ const getPostAgeLimitDecision = (post, source) => {
   };
 };
 
+const getMetricLabel = (metric) => {
+  switch (metric) {
+    case 'views':
+      return 'просмотров';
+    case 'comments':
+      return 'комментариев';
+    case 'forwards':
+      return 'пересылок';
+    case 'engagement_score':
+      return 'engagement score';
+    case 'reactions':
+    default:
+      return 'лайков';
+  }
+};
+
+const getMetricValueForPost = (post, source) => {
+  const metric = source?.viralDetectionMetric || 'reactions';
+  const reactions = Number(post?.reactionCount || 0);
+  const comments = Number(post?.commentCount || 0);
+  const forwards = Number(post?.forwardCount || 0);
+  const views = Number(post?.viewCount || 0);
+
+  switch (metric) {
+    case 'views':
+      return views;
+    case 'comments':
+      return comments;
+    case 'forwards':
+      return forwards;
+    case 'engagement_score':
+      return (
+        reactions * (Number(source?.reactionWeight) || 1) +
+        comments * (Number(source?.commentWeight) || 2) +
+        forwards * (Number(source?.forwardWeight) || 3)
+      );
+    case 'reactions':
+    default:
+      return reactions;
+  }
+};
+
+const getThresholdValueForSource = (source) => {
+  if (!source) {
+    return 0;
+  }
+
+  if (source.thresholdType === 'manual') {
+    return Number(source.manualThreshold || 0);
+  }
+
+  return Number(source.calculatedThreshold || 0);
+};
+
+const buildSelectionReason = (post, source) => {
+  if (!source) {
+    return null;
+  }
+
+  const metric = source.viralDetectionMetric || 'reactions';
+  const metricValue = Math.round(getMetricValueForPost(post, source));
+  const threshold = Math.round(getThresholdValueForSource(source));
+  const maxNewsAgeMinutes = Math.max(1, Number(source.maxNewsAgeMinutes || 60));
+  const ageMinutes = post?.publishedAt
+    ? Math.max(0, Math.round((Date.now() - new Date(post.publishedAt).getTime()) / 60000))
+    : null;
+
+  const ageText = ageMinutes === null ? `в окне ${maxNewsAgeMinutes} мин` : `за ${ageMinutes} мин`;
+  const strategyPrefix = source.strategyMode === 'smart' ? '🤖 Почему выбран: ' : '📌 Почему выбран: ';
+
+  if (metric === 'engagement_score') {
+    return (
+      `${strategyPrefix}${ageText} пост набрал engagement score ${metricValue} ` +
+      `при пороге ${threshold}. Лимит окна: ${maxNewsAgeMinutes} мин.`
+    );
+  }
+
+  return (
+    `${strategyPrefix}${ageText} пост набрал ${metricValue} ${getMetricLabel(metric)} ` +
+    `при пороге ${threshold}. Лимит окна: ${maxNewsAgeMinutes} мин.`
+  );
+};
+
 /**
  * Initializes the Telegram Bot
  */
@@ -643,6 +726,11 @@ const forwardPost = async (post, source, channel, options = {}) => {
       if (post.forwardCount > 0) {
         caption += `🔄 Пересылки: <b>${post.forwardCount.toLocaleString()}</b>\n`;
       }
+    }
+
+    const selectionReason = buildSelectionReason(post, sourceData);
+    if (selectionReason) {
+      caption += `${selectionReason}\n`;
     }
     
     // Publication date

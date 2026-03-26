@@ -84,6 +84,7 @@ router.post(
     body('reactionWeight').optional().isNumeric().withMessage('Reaction weight must be a number'),
     body('commentWeight').optional().isNumeric().withMessage('Comment weight must be a number'),
     body('forwardWeight').optional().isNumeric().withMessage('Forward weight must be a number'),
+    body('strategyMode').optional().isIn(['manual', 'smart']).withMessage('Invalid strategy mode'),
     body('thresholdMethod').optional().isIn(['statistical', 'percentile']).withMessage('Invalid threshold method'),
     body('statisticalMultiplier').optional().isNumeric().withMessage('Statistical multiplier must be a number')
   ],
@@ -100,7 +101,7 @@ router.post(
         name, chatId, username, thresholdType, manualThreshold, checkFrequency, postsToCheck, maxNewsAgeMinutes, minViewsForViral,
         // Viral detection settings
         viralDetectionMetric, minReactionsForViral, minCommentsForViral, minForwardsForViral,
-        reactionWeight, commentWeight, forwardWeight, thresholdMethod, statisticalMultiplier
+        reactionWeight, commentWeight, forwardWeight, strategyMode, thresholdMethod, statisticalMultiplier
       } = req.body;
 
       username = normalizeTelegramUsername(username);
@@ -290,6 +291,9 @@ router.put(
       
       if (manualThreshold !== undefined) {
         source.manualThreshold = manualThreshold;
+        if (strategyMode === undefined) {
+          source.strategyMode = 'manual';
+        }
         if ((viralDetectionMetric || source.viralDetectionMetric) === 'views') {
           source.minViewsForViral = manualThreshold;
         } else if ((viralDetectionMetric || source.viralDetectionMetric) === 'forwards') {
@@ -307,6 +311,9 @@ router.put(
 
       if (maxNewsAgeMinutes !== undefined) {
         source.maxNewsAgeMinutes = Math.max(1, maxNewsAgeMinutes);
+        if (strategyMode === undefined) {
+          source.strategyMode = 'manual';
+        }
       }
       
       if (minViewsForViral !== undefined) {
@@ -316,6 +323,9 @@ router.put(
       // Update viral detection settings
       if (viralDetectionMetric !== undefined) {
         source.viralDetectionMetric = viralDetectionMetric;
+        if (strategyMode === undefined) {
+          source.strategyMode = 'manual';
+        }
       }
       
       if (minReactionsForViral !== undefined) {
@@ -340,6 +350,10 @@ router.put(
       
       if (forwardWeight !== undefined) {
         source.forwardWeight = forwardWeight;
+      }
+
+      if (strategyMode !== undefined) {
+        source.strategyMode = strategyMode;
       }
       
       if (thresholdMethod !== undefined) {
