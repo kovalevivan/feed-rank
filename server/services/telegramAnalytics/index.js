@@ -141,6 +141,46 @@ const annotateStrategy = (strategy, profileKey) => {
   };
 };
 
+const sameStrategy = (left, right) => {
+  if (!left || !right) {
+    return false;
+  }
+
+  return (
+    left.metric === right.metric &&
+    left.threshold === right.threshold &&
+    left.maxNewsAgeMinutes === right.maxNewsAgeMinutes
+  );
+};
+
+const pickDistinctStrategy = (candidates, scorer, excluded = []) => {
+  const available = candidates.filter((candidate) => (
+    !excluded.some((excludedCandidate) => sameStrategy(candidate, excludedCandidate))
+  ));
+
+  if (available.length === 0) {
+    return null;
+  }
+
+  return [...available].sort((left, right) => {
+    const leftScore = scorer(left);
+    const rightScore = scorer(right);
+    if (rightScore !== leftScore) {
+      return rightScore - leftScore;
+    }
+    if (right.precision !== left.precision) {
+      return right.precision - left.precision;
+    }
+    if (right.recall !== left.recall) {
+      return right.recall - left.recall;
+    }
+    if (left.maxNewsAgeMinutes !== right.maxNewsAgeMinutes) {
+      return left.maxNewsAgeMinutes - right.maxNewsAgeMinutes;
+    }
+    return left.threshold - right.threshold;
+  })[0];
+};
+
 const getMetricFromCounts = (counts = {}, metric, weights = {}) => {
   const reactions = Number(counts.reaction_count ?? counts.reactionCount ?? 0) || 0;
   const comments = Number(counts.comment_count ?? counts.commentCount ?? 0) || 0;
@@ -913,6 +953,9 @@ const getSourceStrategyRecommendation = async (mongoSourceId, options = {}) => {
           recall,
           f1Score,
           score,
+          truePositive,
+          falsePositive,
+          falseNegative,
           postsEvaluated: eligiblePosts.length,
           predictedCount,
           actualPositiveCount,
@@ -939,23 +982,23 @@ const getSourceStrategyRecommendation = async (mongoSourceId, options = {}) => {
     return left.threshold - right.threshold;
   });
 
-  const bestBalanced = sortedCandidates[0] || null;
-  const bestAggressive = [...sortedCandidates].sort((left, right) => {
-    const leftScore = left.recall * 0.7 + left.precision * 0.3 - Math.abs(left.predictedRate - left.actualPositiveRate) * 0.1;
-    const rightScore = right.recall * 0.7 + right.precision * 0.3 - Math.abs(right.predictedRate - right.actualPositiveRate) * 0.1;
-    if (rightScore !== leftScore) {
-      return rightScore - leftScore;
-    }
-    return right.recall - left.recall;
-  })[0] || null;
-  const bestStrict = [...sortedCandidates].sort((left, right) => {
-    const leftScore = left.precision * 0.7 + left.recall * 0.3 - Math.abs(left.predictedRate - left.actualPositiveRate) * 0.1;
-    const rightScore = right.precision * 0.7 + right.recall * 0.3 - Math.abs(right.predictedRate - right.actualPositiveRate) * 0.1;
-    if (rightScore !== leftScore) {
-      return rightScore - leftScore;
-    }
-    return right.precision - left.precision;
-  })[0] || null;
+  const aggressiveCandidates = sortedCandidates.filter((candidate) => candidate.predictedRate >= 0.12);
+  const strictCandidates = sortedCandidates.filter((candidate) => candidate.predictedRate <= 0.18);
+
+  const bestBalanced = pickDistinctStrategy(
+    sortedCandidates,
+    (candidate) => candidate.f1Score * 0.8 + candidate.precision * 0.1 + candidate.recall * 0.1
+  );
+  const bestAggressive = pickDistinctStrategy(
+    aggressiveCandidates.length > 0 ? aggressiveCandidates : sortedCandidates,
+    (candidate) => candidate.recall * 0.75 + candidate.f1Score * 0.2 - candidate.thresholdPercentile * 0.002,
+    bestBalanced ? [bestBalanced] : []
+  ) || bestBalanced;
+  const bestStrict = pickDistinctStrategy(
+    strictCandidates.length > 0 ? strictCandidates : sortedCandidates,
+    (candidate) => candidate.precision * 0.75 + candidate.f1Score * 0.2 + candidate.thresholdPercentile * 0.002,
+    [bestBalanced, bestAggressive].filter(Boolean)
+  ) || bestBalanced;
 
   const strategies = {
     aggressive: annotateStrategy(bestAggressive, 'aggressive'),

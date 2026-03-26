@@ -600,9 +600,11 @@ const Analytics = () => {
                 <Alert severity="info" sx={{ mb: 2 }}>
                   <strong>Рекомендация:</strong> {metricLabelMap[recommendedStrategy.metric] || recommendedStrategy.metric}, порог{' '}
                   {formatNumber(recommendedStrategy.threshold)}, окно {formatNumber(recommendedStrategy.maxNewsAgeMinutes)} мин.
-                  {' '}Precision {`${(Number(recommendedStrategy.precision || 0) * 100).toFixed(1)}%`},
-                  {' '}Recall {`${(Number(recommendedStrategy.recall || 0) * 100).toFixed(1)}%`},
+                  {' '}Точность {`${(Number(recommendedStrategy.precision || 0) * 100).toFixed(1)}%`},
+                  {' '}Полнота {`${(Number(recommendedStrategy.recall || 0) * 100).toFixed(1)}%`},
                   {' '}F1 {`${(Number(recommendedStrategy.f1Score || 0) * 100).toFixed(1)}%`}.
+                  <br />
+                  TP {formatNumber(recommendedStrategy.truePositive)} / FP {formatNumber(recommendedStrategy.falsePositive)} / FN {formatNumber(recommendedStrategy.falseNegative)}
                   <br />
                   {recommendedStrategy.explanation}
                 </Alert>
@@ -639,7 +641,10 @@ const Analytics = () => {
                           Окно: {formatNumber(strategy.maxNewsAgeMinutes)} мин
                         </Typography>
                         <Typography variant="body2">
-                          P {`${(Number(strategy.precision || 0) * 100).toFixed(1)}%`} / R {`${(Number(strategy.recall || 0) * 100).toFixed(1)}%`}
+                          Точность {`${(Number(strategy.precision || 0) * 100).toFixed(1)}%`} / Полнота {`${(Number(strategy.recall || 0) * 100).toFixed(1)}%`}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          TP {formatNumber(strategy.truePositive)} / FP {formatNumber(strategy.falsePositive)} / FN {formatNumber(strategy.falseNegative)}
                         </Typography>
                       </Paper>
                     </Grid>
