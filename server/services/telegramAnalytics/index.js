@@ -555,7 +555,9 @@ const recordPostObservation = async ({
         const mediaTypes = getMediaTypes(messageData.attachments);
         const engagementScore = calculateEngagementScore(messageData, source);
         const ageMinutes = calculateAgeMinutes(messageData.publishedAt, observedAt);
-        const isViral = Boolean(post.isViral);
+        // Analytics labels are owned by offline relabel jobs. Live forwarding decisions
+        // can use a different strategy and must not overwrite training labels.
+        const analyticsIsViral = false;
 
         const postResult = await client.query(
           `
@@ -604,12 +606,9 @@ const recordPostObservation = async ({
               reaction_count_last = EXCLUDED.reaction_count_last,
               comment_count_last = EXCLUDED.comment_count_last,
               reply_count_last = EXCLUDED.reply_count_last,
-              current_is_viral = EXCLUDED.current_is_viral,
-              first_became_viral_at = COALESCE(
-                tg_posts.first_became_viral_at,
-                CASE WHEN EXCLUDED.current_is_viral THEN EXCLUDED.latest_observed_at ELSE NULL END
-              ),
-              threshold_used = EXCLUDED.threshold_used,
+              current_is_viral = tg_posts.current_is_viral,
+              first_became_viral_at = tg_posts.first_became_viral_at,
+              threshold_used = tg_posts.threshold_used,
               original_post_url = EXCLUDED.original_post_url,
               updated_at = NOW()
             RETURNING id
@@ -630,8 +629,8 @@ const recordPostObservation = async ({
             toInteger(messageData.reactionCount, 0),
             toInteger(messageData.commentCount, 0),
             toInteger(messageData.replyCount, 0),
-            isViral,
-            isViral ? observedAt : null,
+            analyticsIsViral,
+            null,
             Number(thresholdUsed || post.thresholdUsed || 0),
             messageData.url || post.originalPostUrl || null
           ]
@@ -663,8 +662,8 @@ const recordPostObservation = async ({
               comment_count = EXCLUDED.comment_count,
               reply_count = EXCLUDED.reply_count,
               engagement_score = EXCLUDED.engagement_score,
-              is_viral = EXCLUDED.is_viral,
-              threshold_used = EXCLUDED.threshold_used
+              is_viral = tg_post_snapshots.is_viral,
+              threshold_used = tg_post_snapshots.threshold_used
           `,
           [
             postResult.rows[0].id,
@@ -677,7 +676,7 @@ const recordPostObservation = async ({
             toInteger(messageData.commentCount, 0),
             toInteger(messageData.replyCount, 0),
             engagementScore,
-            isViral,
+            analyticsIsViral,
             Number(thresholdUsed || post.thresholdUsed || 0)
           ]
         );
