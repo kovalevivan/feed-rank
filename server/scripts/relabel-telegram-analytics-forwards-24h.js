@@ -1,0 +1,249 @@
+const path = require('path');
+const dotenv = require('dotenv');
+const { Client } = require('pg');
+
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config();
+
+const HORIZON_MINUTES = 24 * 60;
+const MIN_MATURE_POSTS = 8;
+const MAX_RETRIES = 5;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const percentile = (values, percentileValue) => {
+  const numericValues = values
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value))
+    .sort((left, right) => left - right);
+
+  if (numericValues.length === 0) {
+    return 0;
+  }
+
+  if (numericValues.length === 1) {
+    return numericValues[0];
+  }
+
+  const rank = (Math.max(0, Math.min(100, percentileValue)) / 100) * (numericValues.length - 1);
+  const lowerIndex = Math.floor(rank);
+  const upperIndex = Math.ceil(rank);
+
+  if (lowerIndex === upperIndex) {
+    return numericValues[lowerIndex];
+  }
+
+  const weight = rank - lowerIndex;
+  return numericValues[lowerIndex] + (numericValues[upperIndex] - numericValues[lowerIndex]) * weight;
+};
+
+const choosePercentile = (sampleSize) => {
+  if (sampleSize >= 50) {
+    return 85;
+  }
+
+  if (sampleSize >= 20) {
+    return 80;
+  }
+
+  return 75;
+};
+
+const getForwards24h = (post) => Math.max(
+  ...post.snapshots
+    .filter((snapshot) => snapshot.ageMinutes <= HORIZON_MINUTES)
+    .map((snapshot) => snapshot.forwards),
+  0
+);
+
+const relabelChannel = async (pg, channel) => {
+  const snapshotResult = await pg.query(
+    `
+      SELECT
+        p.id AS post_id,
+        s.id AS snapshot_id,
+        s.snapshot_at,
+        s.age_minutes,
+        s.forward_count
+      FROM tg_posts p
+      JOIN tg_post_snapshots s ON s.post_id = p.id
+      WHERE p.channel_id = $1
+      ORDER BY p.id ASC, s.snapshot_at ASC
+    `,
+    [channel.id]
+  );
+
+  const postsMap = new Map();
+  snapshotResult.rows.forEach((row) => {
+    const post = postsMap.get(row.post_id) || {
+      id: row.post_id,
+      snapshots: []
+    };
+
+    post.snapshots.push({
+      id: row.snapshot_id,
+      snapshotAt: row.snapshot_at,
+      ageMinutes: Number(row.age_minutes) || 0,
+      forwards: Number(row.forward_count) || 0
+    });
+
+    postsMap.set(row.post_id, post);
+  });
+
+  const allPosts = Array.from(postsMap.values());
+  const maturePosts = allPosts
+    .filter((post) => Math.max(...post.snapshots.map((snapshot) => snapshot.ageMinutes), 0) >= HORIZON_MINUTES)
+    .map((post) => ({
+      ...post,
+      forwards24h: getForwards24h(post)
+    }))
+    .filter((post) => post.forwards24h > 0);
+
+  if (maturePosts.length < MIN_MATURE_POSTS) {
+    return {
+      skipped: true,
+      reason: `Not enough mature 24h posts with forwards: ${maturePosts.length}`,
+      posts: allPosts.length,
+      maturePosts: maturePosts.length
+    };
+  }
+
+  const percentileValue = choosePercentile(maturePosts.length);
+  const threshold = Math.max(1, Math.ceil(percentile(
+    maturePosts.map((post) => post.forwards24h),
+    percentileValue
+  )));
+  const viralPostIds = new Set(
+    maturePosts
+      .filter((post) => post.forwards24h >= threshold)
+      .map((post) => post.id)
+  );
+
+  const snapshotIds = [];
+  const snapshotFlags = [];
+  const postIds = [];
+  const postFlags = [];
+  const firstViralAt = [];
+
+  allPosts.forEach((post) => {
+    const isPostViral = viralPostIds.has(post.id);
+    let firstViralSnapshot = null;
+
+    post.snapshots.forEach((snapshot) => {
+      const isSnapshotViral = isPostViral &&
+        snapshot.ageMinutes <= HORIZON_MINUTES &&
+        snapshot.forwards >= threshold;
+
+      if (isSnapshotViral && !firstViralSnapshot) {
+        firstViralSnapshot = snapshot;
+      }
+
+      snapshotIds.push(snapshot.id);
+      snapshotFlags.push(isSnapshotViral);
+    });
+
+    postIds.push(post.id);
+    postFlags.push(isPostViral);
+    firstViralAt.push(firstViralSnapshot ? new Date(firstViralSnapshot.snapshotAt) : null);
+  });
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt += 1) {
+    try {
+      await pg.query('BEGIN');
+      await pg.query(`SET LOCAL lock_timeout = '10s'`);
+      await pg.query(`SET LOCAL statement_timeout = '120s'`);
+
+      await pg.query(
+        `
+          UPDATE tg_posts AS posts
+          SET current_is_viral = relabel.is_viral,
+              first_became_viral_at = relabel.first_became_viral_at,
+              threshold_used = $4,
+              updated_at = NOW()
+          FROM UNNEST($1::BIGINT[], $2::BOOLEAN[], $3::TIMESTAMPTZ[]) AS relabel(post_id, is_viral, first_became_viral_at)
+          WHERE posts.id = relabel.post_id
+        `,
+        [postIds, postFlags, firstViralAt, threshold]
+      );
+
+      await pg.query(
+        `
+          UPDATE tg_post_snapshots AS snapshots
+          SET is_viral = relabel.is_viral,
+              threshold_used = $3
+          FROM UNNEST($1::BIGINT[], $2::BOOLEAN[]) AS relabel(snapshot_id, is_viral)
+          WHERE snapshots.id = relabel.snapshot_id
+        `,
+        [snapshotIds, snapshotFlags, threshold]
+      );
+
+      await pg.query('COMMIT');
+      break;
+    } catch (error) {
+      await pg.query('ROLLBACK').catch(() => {});
+
+      if ((error.code === '40P01' || error.code === '55P03') && attempt < MAX_RETRIES) {
+        await sleep(1000 * attempt);
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  return {
+    posts: allPosts.length,
+    maturePosts: maturePosts.length,
+    horizonMinutes: HORIZON_MINUTES,
+    percentile: percentileValue,
+    threshold,
+    viralPosts: postFlags.filter(Boolean).length,
+    viralSnapshots: snapshotFlags.filter(Boolean).length,
+    p50Forwards: percentile(maturePosts.map((post) => post.forwards24h), 50),
+    p75Forwards: percentile(maturePosts.map((post) => post.forwards24h), 75),
+    p85Forwards: percentile(maturePosts.map((post) => post.forwards24h), 85),
+    p90Forwards: percentile(maturePosts.map((post) => post.forwards24h), 90)
+  };
+};
+
+const main = async () => {
+  if (!process.env.ANALYTICS_DATABASE_URL) {
+    throw new Error('ANALYTICS_DATABASE_URL is not configured');
+  }
+
+  const pg = new Client({
+    connectionString: process.env.ANALYTICS_DATABASE_URL,
+    ssl: process.env.ANALYTICS_DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined
+  });
+
+  await pg.connect();
+
+  const channelsResult = await pg.query('SELECT id, title, username FROM tg_channels ORDER BY title ASC');
+  const summary = [];
+
+  for (const channel of channelsResult.rows) {
+    summary.push({
+      channel: channel.title,
+      username: channel.username,
+      ...(await relabelChannel(pg, channel))
+    });
+  }
+
+  const totals = await pg.query(`
+    SELECT COUNT(*) FILTER (WHERE current_is_viral)::INT AS viral_posts,
+           COUNT(*)::INT AS total_posts
+    FROM tg_posts
+  `);
+
+  console.log(JSON.stringify({
+    finalTotals: totals.rows[0],
+    summary
+  }, null, 2));
+
+  await pg.end();
+};
+
+main().catch((error) => {
+  console.error('Failed to relabel Telegram analytics by forwards 24h:', error);
+  process.exit(1);
+});
