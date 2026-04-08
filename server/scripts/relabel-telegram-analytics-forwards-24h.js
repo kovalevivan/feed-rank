@@ -7,8 +7,8 @@ const TelegramSource = require('../models/TelegramSource');
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 dotenv.config();
 
-const HORIZON_MINUTES = 24 * 60;
-const MIN_MATURE_POSTS = 8;
+const HORIZON_OPTIONS = [24 * 60, 36 * 60, 48 * 60];
+const MIN_MATURE_POSTS = 5;
 const MAX_RETRIES = 5;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -40,20 +40,24 @@ const percentile = (values, percentileValue) => {
 };
 
 const choosePercentile = (sampleSize) => {
-  if (sampleSize >= 50) {
-    return 85;
-  }
-
-  if (sampleSize >= 20) {
+  if (sampleSize >= 40) {
     return 80;
   }
 
-  return 75;
+  if (sampleSize >= 20) {
+    return 75;
+  }
+
+  if (sampleSize >= 10) {
+    return 70;
+  }
+
+  return 65;
 };
 
-const getForwards24h = (post) => Math.max(
+const getForwardsWithin = (post, horizonMinutes) => Math.max(
   ...post.snapshots
-    .filter((snapshot) => snapshot.ageMinutes <= HORIZON_MINUTES)
+    .filter((snapshot) => snapshot.ageMinutes <= horizonMinutes)
     .map((snapshot) => snapshot.forwards),
   0
 );
@@ -182,7 +186,7 @@ const relabelChannel = async (pg, channel) => {
     const bucket = groupedPosts.get(bucketKey) || [];
     bucket.push({
       ...post,
-      forwards24h: getForwards24h(post),
+      maxObservedAge: Math.max(...post.snapshots.map((snapshot) => snapshot.ageMinutes), 0),
       views24h: Math.max(...post.snapshots.map((snapshot) => Number(snapshot.views || 0)), post.viewCountLast || 0)
     });
     groupedPosts.set(bucketKey, bucket);
@@ -190,9 +194,25 @@ const relabelChannel = async (pg, channel) => {
 
   const canonicalPosts = Array.from(groupedPosts.values()).map((bucket) => chooseCanonicalPost(bucket));
   const canonicalPostIds = new Set(canonicalPosts.map((post) => post.id));
-  const maturePosts = canonicalPosts
-    .filter((post) => Math.max(...post.snapshots.map((snapshot) => snapshot.ageMinutes), 0) >= HORIZON_MINUTES)
-    .filter((post) => post.forwards24h > 0);
+  const horizonStats = HORIZON_OPTIONS.map((horizonMinutes) => {
+    const maturePosts = canonicalPosts
+      .map((post) => ({
+        ...post,
+        forwardsWithinHorizon: getForwardsWithin(post, horizonMinutes)
+      }))
+      .filter((post) => Number(post.maxObservedAge || 0) >= horizonMinutes)
+      .filter((post) => post.forwardsWithinHorizon > 0);
+
+    return {
+      horizonMinutes,
+      maturePosts
+    };
+  });
+
+  const selectedHorizon = horizonStats.find((item) => item.maturePosts.length >= MIN_MATURE_POSTS)
+    || horizonStats[horizonStats.length - 1];
+  const maturePosts = selectedHorizon.maturePosts;
+  const horizonMinutes = selectedHorizon.horizonMinutes;
 
   if (maturePosts.length < MIN_MATURE_POSTS) {
     await clearChannelLabels(pg, channel.id);
@@ -206,12 +226,12 @@ const relabelChannel = async (pg, channel) => {
 
   const percentileValue = choosePercentile(maturePosts.length);
   const threshold = Math.max(1, Math.ceil(percentile(
-    maturePosts.map((post) => post.forwards24h),
+    maturePosts.map((post) => post.forwardsWithinHorizon),
     percentileValue
   )));
   const viralPostIds = new Set(
     maturePosts
-      .filter((post) => post.forwards24h >= threshold)
+      .filter((post) => post.forwardsWithinHorizon >= threshold)
       .map((post) => post.id)
   );
 
@@ -231,7 +251,7 @@ const relabelChannel = async (pg, channel) => {
       if (isPostViral) {
         if (viralAlreadyTriggered) {
           isSnapshotViral = true;
-        } else if (snapshot.ageMinutes <= HORIZON_MINUTES && snapshot.forwards >= threshold) {
+        } else if (snapshot.ageMinutes <= horizonMinutes && snapshot.forwards >= threshold) {
           isSnapshotViral = true;
         }
       }
@@ -297,15 +317,15 @@ const relabelChannel = async (pg, channel) => {
   return {
     posts: allPosts.length,
     maturePosts: maturePosts.length,
-    horizonMinutes: HORIZON_MINUTES,
+    horizonMinutes,
     percentile: percentileValue,
     threshold,
     viralPosts: postFlags.filter(Boolean).length,
     viralSnapshots: snapshotFlags.filter(Boolean).length,
-    p50Forwards: percentile(maturePosts.map((post) => post.forwards24h), 50),
-    p75Forwards: percentile(maturePosts.map((post) => post.forwards24h), 75),
-    p85Forwards: percentile(maturePosts.map((post) => post.forwards24h), 85),
-    p90Forwards: percentile(maturePosts.map((post) => post.forwards24h), 90)
+    p50Forwards: percentile(maturePosts.map((post) => post.forwardsWithinHorizon), 50),
+    p75Forwards: percentile(maturePosts.map((post) => post.forwardsWithinHorizon), 75),
+    p85Forwards: percentile(maturePosts.map((post) => post.forwardsWithinHorizon), 85),
+    p90Forwards: percentile(maturePosts.map((post) => post.forwardsWithinHorizon), 90)
   };
 };
 
@@ -342,14 +362,14 @@ const main = async () => {
       source.smartStrategy = {
         ...(source.smartStrategy || {}),
         profileKey: 'analytics_forwards_24h',
-        profileTitle: 'Аналитика 24h',
-        strategyId: 'analytics_forwards_24h',
-        strategyTitle: 'Пересылки за 24 часа',
+        profileTitle: `Аналитика ${Math.round(result.horizonMinutes / 60)}h`,
+        strategyId: `analytics_forwards_${result.horizonMinutes}m`,
+        strategyTitle: `Пересылки за ${Math.round(result.horizonMinutes / 60)} часа`,
         metric: 'forwards',
         threshold: result.threshold,
-        maxNewsAgeMinutes: HORIZON_MINUTES,
+        maxNewsAgeMinutes: result.horizonMinutes,
         thresholdPercentile: result.percentile,
-        explanation: `Пост становится viral, если в первые 24 часа достигает порога по пересылкам: ${result.threshold}. После первой viral-точки все следующие snapshot тоже помечаются viral.`,
+        explanation: `Пост становится viral, если достигает порога по пересылкам ${result.threshold} в течение ${Math.round(result.horizonMinutes / 60)} часов. После первой viral-точки все следующие snapshot тоже помечаются viral.`,
         appliedAt: new Date(),
         forwardWeight: 1,
         commentWeight: 0,
