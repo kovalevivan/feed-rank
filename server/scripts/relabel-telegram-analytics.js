@@ -20,7 +20,7 @@ const mongooseOptions = {
   replicaSet: undefined
 };
 
-const applyStrictStrategyToSource = async (source, strategy) => {
+const applyStrategyToSource = async (source, strategy) => {
   source.strategyMode = 'smart';
   source.thresholdType = 'manual';
   source.manualThreshold = strategy.threshold;
@@ -82,32 +82,33 @@ const main = async () => {
       forwardWeight: source.forwardWeight
     });
 
-    const strictStrategy = recommendation?.strategyProfiles?.strict;
-    if (!strictStrategy) {
+    const balancedStrategy = recommendation?.recommendedStrategy || recommendation?.strategyProfiles?.balanced;
+    if (!balancedStrategy) {
       console.log(`Skipping ${source.name}: ${recommendation?.message || 'No strict strategy'}`);
       summary.push({
         source: source.name,
         sourceId: String(source._id),
         skipped: true,
-        reason: recommendation?.message || 'No strict strategy'
+        reason: recommendation?.message || 'No balanced strategy'
       });
       continue;
     }
 
-    await applyStrictStrategyToSource(source, strictStrategy);
-    const relabelResult = await telegramAnalyticsService.relabelSourceByStrategy(String(source._id), strictStrategy);
+    await applyStrategyToSource(source, balancedStrategy);
+    const relabelResult = await telegramAnalyticsService.relabelSourceByStrategy(String(source._id), balancedStrategy);
     console.log(`Relabeled ${source.name}: ${relabelResult.postsRelabeled} posts, ${relabelResult.snapshotsRelabeled} snapshots`);
 
     summary.push({
       source: source.name,
       sourceId: String(source._id),
-      metric: strictStrategy.metric,
-      strategyTitle: strictStrategy.strategyTitle,
-      threshold: strictStrategy.threshold,
-      maxNewsAgeMinutes: strictStrategy.maxNewsAgeMinutes,
-      precision: strictStrategy.precision,
-      recall: strictStrategy.recall,
-      f1Score: strictStrategy.f1Score,
+      metric: balancedStrategy.metric,
+      strategyTitle: balancedStrategy.strategyTitle,
+      profileKey: balancedStrategy.profileKey,
+      threshold: balancedStrategy.threshold,
+      maxNewsAgeMinutes: balancedStrategy.maxNewsAgeMinutes,
+      precision: balancedStrategy.precision,
+      recall: balancedStrategy.recall,
+      f1Score: balancedStrategy.f1Score,
       postsRelabeled: relabelResult.postsRelabeled,
       snapshotsRelabeled: relabelResult.snapshotsRelabeled,
       viralPosts: relabelResult.viralPosts
