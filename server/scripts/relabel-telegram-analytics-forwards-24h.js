@@ -1,6 +1,8 @@
 const path = require('path');
 const dotenv = require('dotenv');
 const { Client } = require('pg');
+const mongoose = require('mongoose');
+const TelegramSource = require('../models/TelegramSource');
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 dotenv.config();
@@ -128,14 +130,21 @@ const relabelChannel = async (pg, channel) => {
   allPosts.forEach((post) => {
     const isPostViral = viralPostIds.has(post.id);
     let firstViralSnapshot = null;
+    let viralAlreadyTriggered = false;
 
     post.snapshots.forEach((snapshot) => {
-      const isSnapshotViral = isPostViral &&
-        snapshot.ageMinutes <= HORIZON_MINUTES &&
-        snapshot.forwards >= threshold;
+      let isSnapshotViral = false;
+      if (isPostViral) {
+        if (viralAlreadyTriggered) {
+          isSnapshotViral = true;
+        } else if (snapshot.ageMinutes <= HORIZON_MINUTES && snapshot.forwards >= threshold) {
+          isSnapshotViral = true;
+        }
+      }
 
       if (isSnapshotViral && !firstViralSnapshot) {
         firstViralSnapshot = snapshot;
+        viralAlreadyTriggered = true;
       }
 
       snapshotIds.push(snapshot.id);
@@ -207,9 +216,19 @@ const relabelChannel = async (pg, channel) => {
 };
 
 const main = async () => {
-  if (!process.env.ANALYTICS_DATABASE_URL) {
-    throw new Error('ANALYTICS_DATABASE_URL is not configured');
+  if (!process.env.ANALYTICS_DATABASE_URL || !process.env.MONGODB_URI) {
+    throw new Error('ANALYTICS_DATABASE_URL and MONGODB_URI are required');
   }
+
+  await mongoose.connect(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    serverSelectionTimeoutMS: 15000,
+    socketTimeoutMS: 45000,
+    connectTimeoutMS: 30000,
+    directConnection: true,
+    replicaSet: undefined
+  });
 
   const pg = new Client({
     connectionString: process.env.ANALYTICS_DATABASE_URL,
@@ -218,14 +237,37 @@ const main = async () => {
 
   await pg.connect();
 
-  const channelsResult = await pg.query('SELECT id, title, username FROM tg_channels ORDER BY title ASC');
+  const channelsResult = await pg.query('SELECT id, title, username, mongo_source_id FROM tg_channels ORDER BY title ASC');
   const summary = [];
 
   for (const channel of channelsResult.rows) {
+    const result = await relabelChannel(pg, channel);
+    const source = await TelegramSource.findById(channel.mongo_source_id).catch(() => null);
+
+    if (source && !result.skipped) {
+      source.smartStrategy = {
+        ...(source.smartStrategy || {}),
+        profileKey: 'analytics_forwards_24h',
+        profileTitle: 'Аналитика 24h',
+        strategyId: 'analytics_forwards_24h',
+        strategyTitle: 'Пересылки за 24 часа',
+        metric: 'forwards',
+        threshold: result.threshold,
+        maxNewsAgeMinutes: HORIZON_MINUTES,
+        thresholdPercentile: result.percentile,
+        explanation: `Пост становится viral, если в первые 24 часа достигает порога по пересылкам: ${result.threshold}. После первой viral-точки все следующие snapshot тоже помечаются viral.`,
+        appliedAt: new Date(),
+        forwardWeight: 1,
+        commentWeight: 0,
+        reactionWeight: 0
+      };
+      await source.save();
+    }
+
     summary.push({
       channel: channel.title,
       username: channel.username,
-      ...(await relabelChannel(pg, channel))
+      ...result
     });
   }
 
@@ -241,6 +283,7 @@ const main = async () => {
   }, null, 2));
 
   await pg.end();
+  await mongoose.disconnect();
 };
 
 main().catch((error) => {

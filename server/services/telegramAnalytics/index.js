@@ -262,6 +262,28 @@ const getMetricFromCounts = (counts = {}, metric, weights = {}) => {
   }
 };
 
+const getAnalyticsSmartStrategy = (source = {}) => {
+  const strategy = source?.smartStrategy;
+  if (!strategy?.metric) {
+    return null;
+  }
+
+  const threshold = Number(strategy.threshold);
+  const maxNewsAgeMinutes = Number(strategy.maxNewsAgeMinutes);
+  if (!Number.isFinite(threshold) || !Number.isFinite(maxNewsAgeMinutes)) {
+    return null;
+  }
+
+  return {
+    metric: strategy.metric,
+    threshold,
+    maxNewsAgeMinutes,
+    reactionWeight: Number(strategy.reactionWeight ?? source.reactionWeight ?? 1) || 1,
+    commentWeight: Number(strategy.commentWeight ?? source.commentWeight ?? 2) || 2,
+    forwardWeight: Number(strategy.forwardWeight ?? source.forwardWeight ?? 3) || 3
+  };
+};
+
 const bootstrapSchema = async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tg_channels (
@@ -555,9 +577,35 @@ const recordPostObservation = async ({
         const mediaTypes = getMediaTypes(messageData.attachments);
         const engagementScore = calculateEngagementScore(messageData, source);
         const ageMinutes = calculateAgeMinutes(messageData.publishedAt, observedAt);
-        // Analytics labels are owned by offline relabel jobs. Live forwarding decisions
-        // can use a different strategy and must not overwrite training labels.
-        const analyticsIsViral = false;
+        const existingPostResult = await client.query(
+          `
+            SELECT id, current_is_viral, first_became_viral_at, threshold_used
+            FROM tg_posts
+            WHERE channel_id = $1 AND message_id = $2
+            LIMIT 1
+          `,
+          [channelId, post.originalPostId.toString()]
+        );
+        const existingAnalyticsPost = existingPostResult.rows[0] || null;
+        const analyticsStrategy = getAnalyticsSmartStrategy(source);
+        const analyticsMetricValue = analyticsStrategy
+          ? getMetricFromCounts({
+            viewCount: messageData.viewCount,
+            reactionCount: messageData.reactionCount,
+            commentCount: messageData.commentCount,
+            forwardCount: messageData.forwardCount
+          }, analyticsStrategy.metric, analyticsStrategy)
+          : 0;
+        const analyticsIsViral = Boolean(existingAnalyticsPost?.current_is_viral) || Boolean(
+          analyticsStrategy &&
+          ageMinutes <= analyticsStrategy.maxNewsAgeMinutes &&
+          analyticsMetricValue >= analyticsStrategy.threshold
+        );
+        const analyticsFirstBecameViralAt = existingAnalyticsPost?.first_became_viral_at
+          || (analyticsIsViral ? observedAt : null);
+        const analyticsThresholdUsed = existingAnalyticsPost?.threshold_used
+          ?? analyticsStrategy?.threshold
+          ?? Number(thresholdUsed || post.thresholdUsed || 0);
 
         const postResult = await client.query(
           `
@@ -606,9 +654,9 @@ const recordPostObservation = async ({
               reaction_count_last = EXCLUDED.reaction_count_last,
               comment_count_last = EXCLUDED.comment_count_last,
               reply_count_last = EXCLUDED.reply_count_last,
-              current_is_viral = tg_posts.current_is_viral,
-              first_became_viral_at = tg_posts.first_became_viral_at,
-              threshold_used = tg_posts.threshold_used,
+              current_is_viral = EXCLUDED.current_is_viral,
+              first_became_viral_at = COALESCE(tg_posts.first_became_viral_at, EXCLUDED.first_became_viral_at),
+              threshold_used = COALESCE(tg_posts.threshold_used, EXCLUDED.threshold_used),
               original_post_url = EXCLUDED.original_post_url,
               updated_at = NOW()
             RETURNING id
@@ -630,8 +678,8 @@ const recordPostObservation = async ({
             toInteger(messageData.commentCount, 0),
             toInteger(messageData.replyCount, 0),
             analyticsIsViral,
-            null,
-            Number(thresholdUsed || post.thresholdUsed || 0),
+            analyticsFirstBecameViralAt,
+            analyticsThresholdUsed,
             messageData.url || post.originalPostUrl || null
           ]
         );
@@ -662,8 +710,8 @@ const recordPostObservation = async ({
               comment_count = EXCLUDED.comment_count,
               reply_count = EXCLUDED.reply_count,
               engagement_score = EXCLUDED.engagement_score,
-              is_viral = tg_post_snapshots.is_viral,
-              threshold_used = tg_post_snapshots.threshold_used
+              is_viral = EXCLUDED.is_viral,
+              threshold_used = COALESCE(tg_post_snapshots.threshold_used, EXCLUDED.threshold_used)
           `,
           [
             postResult.rows[0].id,
@@ -677,7 +725,7 @@ const recordPostObservation = async ({
             toInteger(messageData.replyCount, 0),
             engagementScore,
             analyticsIsViral,
-            Number(thresholdUsed || post.thresholdUsed || 0)
+            analyticsThresholdUsed
           ]
         );
 
@@ -1133,14 +1181,22 @@ const relabelSourceByStrategy = async (mongoSourceId, strategy) => {
 
   postsMap.forEach((post) => {
     let firstViralSnapshot = null;
+    let viralAlreadyTriggered = false;
 
     post.snapshots.forEach((snapshot) => {
-      const metricValue = getMetricFromCounts(snapshot, strategy.metric, strategy);
-      const isViral = Number(snapshot.age_minutes || 0) <= Number(strategy.maxNewsAgeMinutes || 0)
-        && metricValue >= Number(strategy.threshold || 0);
+      let isViral = false;
+
+      if (viralAlreadyTriggered) {
+        isViral = true;
+      } else {
+        const metricValue = getMetricFromCounts(snapshot, strategy.metric, strategy);
+        isViral = Number(snapshot.age_minutes || 0) <= Number(strategy.maxNewsAgeMinutes || 0)
+          && metricValue >= Number(strategy.threshold || 0);
+      }
 
       if (isViral && !firstViralSnapshot) {
         firstViralSnapshot = snapshot;
+        viralAlreadyTriggered = true;
       }
 
       snapshotUpdates.push({
