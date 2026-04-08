@@ -58,14 +58,93 @@ const getForwards24h = (post) => Math.max(
   0
 );
 
+const getClusterKey = (publishedAt) => {
+  if (!publishedAt) {
+    return null;
+  }
+
+  const date = publishedAt instanceof Date ? publishedAt : new Date(publishedAt);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toISOString();
+};
+
+const chooseCanonicalPost = (posts = []) => {
+  return [...posts].sort((left, right) => {
+    if (right.forwards24h !== left.forwards24h) {
+      return right.forwards24h - left.forwards24h;
+    }
+
+    if (right.views24h !== left.views24h) {
+      return right.views24h - left.views24h;
+    }
+
+    return Number(left.messageId || 0) - Number(right.messageId || 0);
+  })[0];
+};
+
+const clearChannelLabels = async (pg, channelId) => {
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt += 1) {
+    try {
+      await pg.query('BEGIN');
+      await pg.query(`SET LOCAL lock_timeout = '10s'`);
+      await pg.query(`SET LOCAL statement_timeout = '120s'`);
+
+      await pg.query(
+        `
+          UPDATE tg_posts
+          SET current_is_viral = false,
+              first_became_viral_at = NULL,
+              threshold_used = NULL,
+              updated_at = NOW()
+          WHERE channel_id = $1
+        `,
+        [channelId]
+      );
+
+      await pg.query(
+        `
+          UPDATE tg_post_snapshots
+          SET is_viral = false,
+              threshold_used = NULL
+          WHERE post_id IN (
+            SELECT id
+            FROM tg_posts
+            WHERE channel_id = $1
+          )
+        `,
+        [channelId]
+      );
+
+      await pg.query('COMMIT');
+      return;
+    } catch (error) {
+      await pg.query('ROLLBACK').catch(() => {});
+
+      if ((error.code === '40P01' || error.code === '55P03') && attempt < MAX_RETRIES) {
+        await sleep(1000 * attempt);
+        continue;
+      }
+
+      throw error;
+    }
+  }
+};
+
 const relabelChannel = async (pg, channel) => {
   const snapshotResult = await pg.query(
     `
       SELECT
         p.id AS post_id,
+        p.message_id,
+        p.published_at,
+        p.view_count_last,
         s.id AS snapshot_id,
         s.snapshot_at,
         s.age_minutes,
+        s.view_count,
         s.forward_count
       FROM tg_posts p
       JOIN tg_post_snapshots s ON s.post_id = p.id
@@ -79,6 +158,9 @@ const relabelChannel = async (pg, channel) => {
   snapshotResult.rows.forEach((row) => {
     const post = postsMap.get(row.post_id) || {
       id: row.post_id,
+      messageId: row.message_id,
+      publishedAt: row.published_at,
+      viewCountLast: Number(row.view_count_last) || 0,
       snapshots: []
     };
 
@@ -86,6 +168,7 @@ const relabelChannel = async (pg, channel) => {
       id: row.snapshot_id,
       snapshotAt: row.snapshot_at,
       ageMinutes: Number(row.age_minutes) || 0,
+      views: Number(row.view_count) || 0,
       forwards: Number(row.forward_count) || 0
     });
 
@@ -93,15 +176,26 @@ const relabelChannel = async (pg, channel) => {
   });
 
   const allPosts = Array.from(postsMap.values());
-  const maturePosts = allPosts
-    .filter((post) => Math.max(...post.snapshots.map((snapshot) => snapshot.ageMinutes), 0) >= HORIZON_MINUTES)
-    .map((post) => ({
+  const groupedPosts = new Map();
+  allPosts.forEach((post) => {
+    const bucketKey = getClusterKey(post.publishedAt) || `post:${post.id}`;
+    const bucket = groupedPosts.get(bucketKey) || [];
+    bucket.push({
       ...post,
-      forwards24h: getForwards24h(post)
-    }))
+      forwards24h: getForwards24h(post),
+      views24h: Math.max(...post.snapshots.map((snapshot) => Number(snapshot.views || 0)), post.viewCountLast || 0)
+    });
+    groupedPosts.set(bucketKey, bucket);
+  });
+
+  const canonicalPosts = Array.from(groupedPosts.values()).map((bucket) => chooseCanonicalPost(bucket));
+  const canonicalPostIds = new Set(canonicalPosts.map((post) => post.id));
+  const maturePosts = canonicalPosts
+    .filter((post) => Math.max(...post.snapshots.map((snapshot) => snapshot.ageMinutes), 0) >= HORIZON_MINUTES)
     .filter((post) => post.forwards24h > 0);
 
   if (maturePosts.length < MIN_MATURE_POSTS) {
+    await clearChannelLabels(pg, channel.id);
     return {
       skipped: true,
       reason: `Not enough mature 24h posts with forwards: ${maturePosts.length}`,
@@ -128,7 +222,7 @@ const relabelChannel = async (pg, channel) => {
   const firstViralAt = [];
 
   allPosts.forEach((post) => {
-    const isPostViral = viralPostIds.has(post.id);
+    const isPostViral = canonicalPostIds.has(post.id) && viralPostIds.has(post.id);
     let firstViralSnapshot = null;
     let viralAlreadyTriggered = false;
 

@@ -284,6 +284,67 @@ const getAnalyticsSmartStrategy = (source = {}) => {
   };
 };
 
+const getClusterKey = (publishedAt) => {
+  if (!publishedAt) {
+    return null;
+  }
+
+  const date = publishedAt instanceof Date ? publishedAt : new Date(publishedAt);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toISOString();
+};
+
+const chooseCanonicalClusterPost = (posts = [], metricSelector) => {
+  if (posts.length === 0) {
+    return null;
+  }
+
+  return [...posts].sort((left, right) => {
+    const rightMetric = Number(metricSelector(right) || 0);
+    const leftMetric = Number(metricSelector(left) || 0);
+    if (rightMetric !== leftMetric) {
+      return rightMetric - leftMetric;
+    }
+
+    const rightViews = Number(right.view_count_last || right.viewCountLast || 0);
+    const leftViews = Number(left.view_count_last || left.viewCountLast || 0);
+    if (rightViews !== leftViews) {
+      return rightViews - leftViews;
+    }
+
+    return Number(left.message_id || left.messageId || 0) - Number(right.message_id || right.messageId || 0);
+  })[0];
+};
+
+const buildClusteredPosts = (posts = [], metricSelector) => {
+  const clusters = new Map();
+
+  posts.forEach((post) => {
+    const clusterKey = getClusterKey(post.published_at || post.publishedAt);
+    const key = clusterKey || `post:${post.id || post.postId}`;
+    const cluster = clusters.get(key) || [];
+    cluster.push(post);
+    clusters.set(key, cluster);
+  });
+
+  const canonicalPostIds = new Set();
+
+  clusters.forEach((clusterPosts) => {
+    const canonical = chooseCanonicalClusterPost(clusterPosts, metricSelector);
+    const canonicalId = Number(canonical?.id || canonical?.postId || 0);
+    if (canonicalId) {
+      canonicalPostIds.add(canonicalId);
+    }
+  });
+
+  return {
+    canonicalPostIds
+  };
+};
+
 const bootstrapSchema = async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tg_channels (
@@ -579,7 +640,8 @@ const recordPostObservation = async ({
         const ageMinutes = calculateAgeMinutes(messageData.publishedAt, observedAt);
         const existingPostResult = await client.query(
           `
-            SELECT id, current_is_viral, first_became_viral_at, threshold_used
+            SELECT id, message_id, published_at, current_is_viral, first_became_viral_at, threshold_used,
+                   forward_count_last, reaction_count_last, comment_count_last, view_count_last
             FROM tg_posts
             WHERE channel_id = $1 AND message_id = $2
             LIMIT 1
@@ -727,6 +789,53 @@ const recordPostObservation = async ({
             analyticsIsViral,
             analyticsThresholdUsed
           ]
+        );
+
+        const clusterResult = await client.query(
+          `
+            SELECT id, message_id, published_at, forward_count_last, reaction_count_last, comment_count_last, view_count_last
+            FROM tg_posts
+            WHERE channel_id = $1 AND published_at = $2
+          `,
+          [channelId, new Date(messageData.publishedAt)]
+        );
+
+        const { canonicalPostIds } = buildClusteredPosts(
+          clusterResult.rows,
+          (clusterPost) => getMetricFromCounts({
+            view_count_last: clusterPost.view_count_last,
+            forward_count_last: clusterPost.forward_count_last,
+            reaction_count_last: clusterPost.reaction_count_last,
+            comment_count_last: clusterPost.comment_count_last
+          }, analyticsStrategy?.metric || 'forwards', analyticsStrategy || source)
+        );
+        const canonicalPostId = canonicalPostIds.size > 0 ? [...canonicalPostIds][0] : postResult.rows[0].id;
+
+        await client.query(
+          `
+            UPDATE tg_posts
+            SET current_is_viral = CASE WHEN id = $3 THEN current_is_viral ELSE FALSE END,
+                first_became_viral_at = CASE WHEN id = $3 THEN first_became_viral_at ELSE NULL END,
+                updated_at = NOW()
+            WHERE channel_id = $1
+              AND published_at = $2
+          `,
+          [channelId, new Date(messageData.publishedAt), canonicalPostId]
+        );
+
+        await client.query(
+          `
+            UPDATE tg_post_snapshots
+            SET is_viral = false
+            WHERE post_id IN (
+              SELECT id
+              FROM tg_posts
+              WHERE channel_id = $1
+                AND published_at = $2
+                AND id <> $3
+            )
+          `,
+          [channelId, new Date(messageData.publishedAt), canonicalPostId]
         );
 
         await client.query('COMMIT');
@@ -1151,6 +1260,8 @@ const relabelSourceByStrategy = async (mongoSourceId, strategy) => {
     `
       SELECT
         p.id AS post_id,
+        p.message_id,
+        p.published_at,
         s.id AS snapshot_id,
         s.snapshot_at,
         s.age_minutes,
@@ -1170,23 +1281,43 @@ const relabelSourceByStrategy = async (mongoSourceId, strategy) => {
   snapshotsResult.rows.forEach((row) => {
     const post = postsMap.get(row.post_id) || {
       postId: row.post_id,
+      messageId: row.message_id,
+      publishedAt: row.published_at,
       snapshots: []
     };
     post.snapshots.push(row);
     postsMap.set(row.post_id, post);
   });
 
+  const { canonicalPostIds } = buildClusteredPosts(
+    Array.from(postsMap.values()).map((post) => ({
+      id: post.postId,
+      messageId: post.messageId,
+      publishedAt: post.publishedAt,
+      maxMetricValue: Math.max(
+        ...post.snapshots
+          .filter((snapshot) => Number(snapshot.age_minutes || 0) <= Number(strategy.maxNewsAgeMinutes || 0))
+          .map((snapshot) => getMetricFromCounts(snapshot, strategy.metric, strategy)),
+        0
+      )
+    })),
+    (post) => post.maxMetricValue
+  );
+
   const snapshotUpdates = [];
   const postUpdates = [];
 
   postsMap.forEach((post) => {
+    const isCanonicalPost = canonicalPostIds.has(Number(post.postId));
     let firstViralSnapshot = null;
     let viralAlreadyTriggered = false;
 
     post.snapshots.forEach((snapshot) => {
       let isViral = false;
 
-      if (viralAlreadyTriggered) {
+      if (!isCanonicalPost) {
+        isViral = false;
+      } else if (viralAlreadyTriggered) {
         isViral = true;
       } else {
         const metricValue = getMetricFromCounts(snapshot, strategy.metric, strategy);
