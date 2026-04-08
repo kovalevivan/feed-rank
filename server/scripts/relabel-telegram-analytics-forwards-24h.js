@@ -359,8 +359,8 @@ const main = async () => {
     const source = await TelegramSource.findById(channel.mongo_source_id).catch(() => null);
 
     if (source && !result.skipped) {
-      source.smartStrategy = {
-        ...(source.smartStrategy || {}),
+      source.analyticsLabelStrategy = {
+        ...(source.analyticsLabelStrategy || {}),
         profileKey: 'analytics_forwards_24h',
         profileTitle: `Аналитика ${Math.round(result.horizonMinutes / 60)}h`,
         strategyId: `analytics_forwards_${result.horizonMinutes}m`,

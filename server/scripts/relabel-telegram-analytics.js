@@ -20,13 +20,8 @@ const mongooseOptions = {
   replicaSet: undefined
 };
 
-const applyStrategyToSource = async (source, strategy) => {
-  source.strategyMode = 'smart';
-  source.thresholdType = 'manual';
-  source.manualThreshold = strategy.threshold;
-  source.viralDetectionMetric = strategy.metric;
-  source.maxNewsAgeMinutes = strategy.maxNewsAgeMinutes;
-  source.smartStrategy = {
+const applyAnalyticsLabelStrategyToSource = async (source, strategy) => {
+  source.analyticsLabelStrategy = {
     profileKey: strategy.profileKey,
     profileTitle: strategy.profileTitle,
     strategyId: strategy.strategyId,
@@ -45,20 +40,6 @@ const applyStrategyToSource = async (source, strategy) => {
     explanation: strategy.explanation,
     appliedAt: new Date()
   };
-
-  if (strategy.metric === 'views') {
-    source.minViewsForViral = strategy.threshold;
-  } else if (strategy.metric === 'forwards') {
-    source.minForwardsForViral = strategy.threshold;
-  } else if (strategy.metric === 'comments') {
-    source.minCommentsForViral = strategy.threshold;
-  } else if (strategy.metric === 'reactions') {
-    source.minReactionsForViral = strategy.threshold;
-  } else if (strategy.metric === 'engagement_score') {
-    source.reactionWeight = strategy.reactionWeight;
-    source.commentWeight = strategy.commentWeight;
-    source.forwardWeight = strategy.forwardWeight;
-  }
 
   await source.save();
 };
@@ -94,7 +75,7 @@ const main = async () => {
       continue;
     }
 
-    await applyStrategyToSource(source, balancedStrategy);
+    await applyAnalyticsLabelStrategyToSource(source, balancedStrategy);
     const relabelResult = await telegramAnalyticsService.relabelSourceByStrategy(String(source._id), balancedStrategy);
     console.log(`Relabeled ${source.name}: ${relabelResult.postsRelabeled} posts, ${relabelResult.snapshotsRelabeled} snapshots`);
 

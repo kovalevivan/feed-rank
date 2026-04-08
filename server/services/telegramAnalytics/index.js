@@ -263,7 +263,7 @@ const getMetricFromCounts = (counts = {}, metric, weights = {}) => {
 };
 
 const getAnalyticsSmartStrategy = (source = {}) => {
-  const strategy = source?.smartStrategy;
+  const strategy = source?.analyticsLabelStrategy || source?.smartStrategy;
   if (!strategy?.metric) {
     return null;
   }

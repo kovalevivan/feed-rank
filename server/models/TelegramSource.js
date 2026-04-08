@@ -191,6 +191,28 @@ const TelegramSourceSchema = new mongoose.Schema({
     explanation: String,
     appliedAt: Date
   },
+  analyticsLabelStrategy: {
+    profileKey: String,
+    profileTitle: String,
+    strategyId: String,
+    strategyTitle: String,
+    metric: {
+      type: String,
+      enum: ['views', 'reactions', 'comments', 'forwards', 'engagement_score']
+    },
+    threshold: Number,
+    maxNewsAgeMinutes: Number,
+    thresholdPercentile: Number,
+    labelPercentile: Number,
+    precision: Number,
+    recall: Number,
+    f1Score: Number,
+    postsEvaluated: Number,
+    predictedCount: Number,
+    actualPositiveCount: Number,
+    explanation: String,
+    appliedAt: Date
+  },
   // Metadata
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
