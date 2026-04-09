@@ -263,7 +263,9 @@ const init = async () => {
     
     const apiId = parseInt(process.env.TELEGRAM_API_ID);
     const apiHash = process.env.TELEGRAM_API_HASH;
-    const session = new StringSession(process.env.TELEGRAM_SESSION || '');
+    const sessionString = (process.env.TELEGRAM_SESSION || '').trim();
+    const session = new StringSession(sessionString);
+    const hasSession = Boolean(sessionString);
     const proxy = getTelegramProxyConfig();
 
     if (proxy) {
@@ -284,25 +286,30 @@ const init = async () => {
       proxy
     });
     
-    // Start the client
-    await client.start({
-      phoneNumber: async () => {
-        if (!process.env.TELEGRAM_PHONE) {
-          throw new Error('TELEGRAM_PHONE not set. Please set your phone number in .env');
-        }
-        return process.env.TELEGRAM_PHONE;
-      },
-      password: async () => {
-        if (process.env.TELEGRAM_PASSWORD) {
-          return process.env.TELEGRAM_PASSWORD;
-        }
-        throw new Error('Two-factor authentication required. Please set TELEGRAM_PASSWORD in .env');
-      },
-      phoneCode: async () => {
-        throw new Error('Phone verification required. Please run setup script first.');
-      },
-      onError: (err) => console.error('Telegram Client Error:', err),
-    });
+    if (hasSession) {
+      console.log('🔐 Initializing Telegram client from saved session');
+      await client.connect();
+    } else {
+      console.log('🔐 No saved Telegram session found, falling back to interactive start');
+      await client.start({
+        phoneNumber: async () => {
+          if (!process.env.TELEGRAM_PHONE) {
+            throw new Error('TELEGRAM_PHONE not set. Please set your phone number in .env');
+          }
+          return process.env.TELEGRAM_PHONE;
+        },
+        password: async () => {
+          if (process.env.TELEGRAM_PASSWORD) {
+            return process.env.TELEGRAM_PASSWORD;
+          }
+          throw new Error('Two-factor authentication required. Please set TELEGRAM_PASSWORD in .env');
+        },
+        phoneCode: async () => {
+          throw new Error('Phone verification required. Please run setup script first.');
+        },
+        onError: (err) => console.error('Telegram Client Error:', err),
+      });
+    }
     
     // Save session for future use
     if (client.session.save()) {
