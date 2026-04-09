@@ -122,6 +122,33 @@ const ENTITY_CACHE_TTL_MS = Math.max(
   Number.parseInt(process.env.TELEGRAM_ENTITY_CACHE_TTL_MS || `${30 * 60 * 1000}`, 10) || 30 * 60 * 1000
 );
 
+const getTelegramProxyConfig = () => {
+  const proxyType = (process.env.TELEGRAM_PROXY_TYPE || '').trim().toLowerCase();
+  const proxyHost = (process.env.TELEGRAM_PROXY_HOST || '').trim();
+  const proxyPort = Number.parseInt(process.env.TELEGRAM_PROXY_PORT || '', 10);
+
+  if (!proxyType || !proxyHost || !Number.isFinite(proxyPort) || proxyPort <= 0) {
+    return null;
+  }
+
+  if (proxyType !== 'socks5' && proxyType !== 'socks4') {
+    console.warn(`⚠️ Unsupported TELEGRAM_PROXY_TYPE="${proxyType}". Supported values: socks5, socks4`);
+    return null;
+  }
+
+  return {
+    ip: proxyHost,
+    port: proxyPort,
+    socksType: proxyType === 'socks4' ? 4 : 5,
+    username: (process.env.TELEGRAM_PROXY_USERNAME || '').trim() || undefined,
+    password: (process.env.TELEGRAM_PROXY_PASSWORD || '').trim() || undefined,
+    timeout: Math.max(
+      5,
+      Number.parseInt(process.env.TELEGRAM_PROXY_TIMEOUT_SECONDS || '10', 10) || 10
+    )
+  };
+};
+
 const withTelegramTimeout = async (operation, timeoutMs, label) => {
   let timeoutId;
   try {
@@ -237,6 +264,13 @@ const init = async () => {
     const apiId = parseInt(process.env.TELEGRAM_API_ID);
     const apiHash = process.env.TELEGRAM_API_HASH;
     const session = new StringSession(process.env.TELEGRAM_SESSION || '');
+    const proxy = getTelegramProxyConfig();
+
+    if (proxy) {
+      console.log(
+        `🌐 Telegram client will use ${proxy.socksType === 4 ? 'SOCKS4' : 'SOCKS5'} proxy ${proxy.ip}:${proxy.port}`
+      );
+    }
     
     client = new TelegramClient(session, apiId, apiHash, {
       connectionRetries: 10,
@@ -246,7 +280,8 @@ const init = async () => {
       downloadRetries: 2,
       floodSleepThreshold: 60,
       autoReconnect: true,
-      sequentialUpdates: true
+      sequentialUpdates: true,
+      proxy
     });
     
     // Start the client
