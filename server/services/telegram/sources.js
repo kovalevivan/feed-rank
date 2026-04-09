@@ -37,7 +37,7 @@ const withTimeout = (promise, timeoutMs, sourceName) => {
 const getSourceStateAgeMs = (map, sourceId) => {
   const startedAt = map.get(sourceId);
   if (!startedAt) {
-    return 0;
+    return null;
   }
   return Date.now() - startedAt;
 };
@@ -52,7 +52,20 @@ const clearSourceState = (sourceId) => {
 const recoverStaleSourceState = (sourceId, sourceName) => {
   const queuedAgeMs = getSourceStateAgeMs(queuedSourceTimestamps, sourceId);
   const activeAgeMs = getSourceStateAgeMs(activeSourceTimestamps, sourceId);
-  const maxAgeMs = Math.max(queuedAgeMs, activeAgeMs);
+  const isQueuedWithoutTimestamp = queuedSourceIds.has(sourceId) && queuedAgeMs === null;
+  const isActiveWithoutTimestamp = activeSourceIds.has(sourceId) && activeAgeMs === null;
+
+  if (isQueuedWithoutTimestamp || isActiveWithoutTimestamp) {
+    console.warn(
+      `♻️ Recovering Telegram source state without timestamp for ${sourceName} ` +
+      `(queued=${isQueuedWithoutTimestamp}, active=${isActiveWithoutTimestamp})`
+    );
+    clearSourceState(sourceId);
+    processingQueue = Promise.resolve();
+    return true;
+  }
+
+  const maxAgeMs = Math.max(queuedAgeMs || 0, activeAgeMs || 0);
 
   if (maxAgeMs <= SOURCE_STATE_STALE_MS) {
     return false;
@@ -170,6 +183,26 @@ const processMessagesFromSource = async (telegramSource) => {
   const sourceId = telegramSource._id.toString();
 
   recoverStaleSourceState(sourceId, telegramSource.name);
+
+  if (queuedSourceIds.has(sourceId)) {
+    console.log(`⏭️ Skipping Telegram source ${telegramSource.name}: already queued`);
+    return { processed: 0, created: 0, updated: 0, skipped: true };
+  }
+
+  if (activeSourceIds.has(sourceId)) {
+    const activeAgeMs = getSourceStateAgeMs(activeSourceTimestamps, sourceId);
+    if (activeAgeMs !== null && activeAgeMs < SOURCE_PROCESS_TIMEOUT_MS) {
+      console.log(`⏭️ Skipping Telegram source ${telegramSource.name}: already processing`);
+      return { processed: 0, created: 0, updated: 0, skipped: true };
+    }
+
+    console.warn(
+      `♻️ Forcing recovery for active Telegram source ${telegramSource.name} ` +
+      `(activeAgeMs=${activeAgeMs})`
+    );
+    clearSourceState(sourceId);
+    processingQueue = Promise.resolve();
+  }
 
   if (activeSourceIds.has(sourceId) || queuedSourceIds.has(sourceId)) {
     console.log(`⏭️ Skipping Telegram source ${telegramSource.name}: already queued or processing`);
@@ -360,6 +393,8 @@ module.exports = {
     queued: queuedSourceIds.size,
     active: activeSourceIds.size,
     queuedSourceIds: [...queuedSourceIds],
-    activeSourceIds: [...activeSourceIds]
+    activeSourceIds: [...activeSourceIds],
+    queuedSourceTimestamps: Object.fromEntries(queuedSourceTimestamps),
+    activeSourceTimestamps: Object.fromEntries(activeSourceTimestamps)
   })
 };
