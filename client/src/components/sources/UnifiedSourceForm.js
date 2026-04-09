@@ -13,9 +13,6 @@ import {
   Alert
 } from '@mui/material';
 import { useTranslation } from '../../translations/TranslationContext';
-import SourceForm from './SourceForm'; // VK Source Form
-import TelegramSourceForm from '../telegramSources/TelegramSourceForm';
-
 const UnifiedSourceForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -69,6 +66,17 @@ const UnifiedSourceForm = () => {
 
   const handleCancel = () => {
     navigate('/app/sources');
+  };
+
+  const handleContinue = () => {
+    if (sourceType === 'vk') {
+      navigate('/app/vk-sources/new');
+      return;
+    }
+
+    if (sourceType === 'telegram') {
+      navigate('/app/telegram-sources/new');
+    }
   };
 
   // If editing and loading, show loading state
@@ -167,11 +175,7 @@ const UnifiedSourceForm = () => {
                 </Button>
                 <Button 
                   variant="contained" 
-                  onClick={() => {
-                    if (sourceType) {
-                      // Continue with the selected type
-                    }
-                  }}
+                  onClick={handleContinue}
                   disabled={!sourceType}
                 >
                   {translate('Continue')}
@@ -182,13 +186,6 @@ const UnifiedSourceForm = () => {
         </Box>
       </Container>
     );
-  }
-
-  // Show the appropriate form based on selected type
-  if (sourceType === 'vk') {
-    return <SourceForm />;
-  } else if (sourceType === 'telegram') {
-    return <TelegramSourceForm />;
   }
 
   return null;
