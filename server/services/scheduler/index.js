@@ -160,12 +160,10 @@ const updateSourceSchedules = async () => {
       const cronExpression = calculateCronExpression(source.checkFrequency);
       
       if (cronJobs[sourceId]) {
-        if (cronJobs[sourceId].expression !== cronExpression) {
-          cronJobs[sourceId].job.stop();
-          delete cronJobs[sourceId];
-        } else {
-          continue;
-        }
+        // Recreate Telegram jobs on every reconcile to recover from silently
+        // dropped or stale cron state inside long-lived runtimes.
+        cronJobs[sourceId].job.stop();
+        delete cronJobs[sourceId];
       }
       
       // Create cron job for Telegram source

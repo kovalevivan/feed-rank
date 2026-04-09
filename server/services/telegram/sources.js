@@ -8,9 +8,15 @@ let bot;
 let processingQueue = Promise.resolve();
 const queuedSourceIds = new Set();
 const activeSourceIds = new Set();
+const queuedSourceTimestamps = new Map();
+const activeSourceTimestamps = new Map();
 const SOURCE_PROCESS_TIMEOUT_MS = Math.max(
   30 * 1000,
   Number.parseInt(process.env.TELEGRAM_SOURCE_PROCESS_TIMEOUT_MS || `${5 * 60 * 1000}`, 10) || 5 * 60 * 1000
+);
+const SOURCE_STATE_STALE_MS = Math.max(
+  SOURCE_PROCESS_TIMEOUT_MS,
+  Number.parseInt(process.env.TELEGRAM_SOURCE_STATE_STALE_MS || `${10 * 60 * 1000}`, 10) || (10 * 60 * 1000)
 );
 
 const withTimeout = (promise, timeoutMs, sourceName) => {
@@ -26,6 +32,39 @@ const withTimeout = (promise, timeoutMs, sourceName) => {
     promise.finally(() => clearTimeout(timeoutId)),
     timeoutPromise
   ]);
+};
+
+const getSourceStateAgeMs = (map, sourceId) => {
+  const startedAt = map.get(sourceId);
+  if (!startedAt) {
+    return 0;
+  }
+  return Date.now() - startedAt;
+};
+
+const clearSourceState = (sourceId) => {
+  queuedSourceIds.delete(sourceId);
+  activeSourceIds.delete(sourceId);
+  queuedSourceTimestamps.delete(sourceId);
+  activeSourceTimestamps.delete(sourceId);
+};
+
+const recoverStaleSourceState = (sourceId, sourceName) => {
+  const queuedAgeMs = getSourceStateAgeMs(queuedSourceTimestamps, sourceId);
+  const activeAgeMs = getSourceStateAgeMs(activeSourceTimestamps, sourceId);
+  const maxAgeMs = Math.max(queuedAgeMs, activeAgeMs);
+
+  if (maxAgeMs <= SOURCE_STATE_STALE_MS) {
+    return false;
+  }
+
+  console.warn(
+    `♻️ Recovering stale Telegram source state for ${sourceName} ` +
+    `(queued=${queuedAgeMs}ms, active=${activeAgeMs}ms, threshold=${SOURCE_STATE_STALE_MS}ms)`
+  );
+  clearSourceState(sourceId);
+  processingQueue = Promise.resolve();
+  return true;
 };
 
 /**
@@ -130,16 +169,21 @@ const getRecentMessages = async (chatId, limit = 100, fromMessageId = null) => {
 const processMessagesFromSource = async (telegramSource) => {
   const sourceId = telegramSource._id.toString();
 
+  recoverStaleSourceState(sourceId, telegramSource.name);
+
   if (activeSourceIds.has(sourceId) || queuedSourceIds.has(sourceId)) {
     console.log(`⏭️ Skipping Telegram source ${telegramSource.name}: already queued or processing`);
     return { processed: 0, created: 0, updated: 0, skipped: true };
   }
 
   queuedSourceIds.add(sourceId);
+  queuedSourceTimestamps.set(sourceId, Date.now());
 
   const runSource = async () => {
     queuedSourceIds.delete(sourceId);
+    queuedSourceTimestamps.delete(sourceId);
     activeSourceIds.add(sourceId);
+    activeSourceTimestamps.set(sourceId, Date.now());
 
     try {
       console.log(`🔄 Processing messages from Telegram source: ${telegramSource.name}`);
@@ -161,7 +205,7 @@ const processMessagesFromSource = async (telegramSource) => {
       console.error(`❌ Error processing Telegram source ${telegramSource.name}:`, error);
       throw error;
     } finally {
-      activeSourceIds.delete(sourceId);
+      clearSourceState(sourceId);
     }
   };
 
@@ -314,6 +358,8 @@ module.exports = {
   getBot: () => bot,
   getQueueState: () => ({
     queued: queuedSourceIds.size,
-    active: activeSourceIds.size
+    active: activeSourceIds.size,
+    queuedSourceIds: [...queuedSourceIds],
+    activeSourceIds: [...activeSourceIds]
   })
 };
