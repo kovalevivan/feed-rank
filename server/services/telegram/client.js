@@ -105,10 +105,20 @@ let isInitializing = false;
 let messageListenerSetup = false;
 let lastForcedResetAt = 0;
 const entityCache = new Map();
+const TELEGRAM_ENABLE_REALTIME_UPDATES = process.env.TELEGRAM_ENABLE_REALTIME_UPDATES === 'true';
 const DEFAULT_ANALYTICS_TRACKING_HOURS = Math.max(
   1,
   Number.parseInt(process.env.TELEGRAM_ANALYTICS_TRACKING_HOURS || '24', 10) || 24
 );
+const TELEGRAM_SYNC_MAX_RECENT_MESSAGES = Math.max(
+  5,
+  Number.parseInt(process.env.TELEGRAM_SYNC_MAX_RECENT_MESSAGES || '20', 10) || 20
+);
+const TELEGRAM_SYNC_TRACKED_POST_BATCH = Math.max(
+  5,
+  Number.parseInt(process.env.TELEGRAM_SYNC_TRACKED_POST_BATCH || '20', 10) || 20
+);
+const TELEGRAM_DOWNLOAD_MEDIA_IN_SYNC = process.env.TELEGRAM_DOWNLOAD_MEDIA_IN_SYNC === 'true';
 const CLIENT_RESET_COOLDOWN_MS = Math.max(
   10 * 1000,
   Number.parseInt(process.env.TELEGRAM_CLIENT_RESET_COOLDOWN_MS || '30000', 10) || 30000
@@ -372,6 +382,40 @@ const checkConnectionHealth = async () => {
   }
 };
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const ensureConnected = async (reason = 'unspecified') => {
+  if (client && isConnected) {
+    const healthy = await checkConnectionHealth();
+    if (healthy) {
+      return;
+    }
+  }
+
+  if (!isInitializing) {
+    console.log(`🔄 Telegram client not ready, initializing for ${reason}...`);
+    await init();
+  }
+
+  const deadline = Date.now() + TELEGRAM_OPERATION_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (client && isConnected) {
+      const healthy = await checkConnectionHealth();
+      if (healthy) {
+        return;
+      }
+    }
+
+    if (!isInitializing && !client) {
+      await init();
+    }
+
+    await sleep(500);
+  }
+
+  throw new Error('Telegram Client not connected');
+};
+
 // Run connection health check every 2 minutes and reinitialize if needed
 setInterval(async () => {
   const isHealthy = await checkConnectionHealth();
@@ -389,6 +433,11 @@ setInterval(async () => {
  * Setup real-time message listener for subscribed channels
  */
 const setupMessageListener = () => {
+  if (!TELEGRAM_ENABLE_REALTIME_UPDATES) {
+    console.log('📻 Real-time message listener disabled');
+    return;
+  }
+
   if (!client || !isConnected) return;
   
   // Prevent setting up multiple listeners (old client cleanup handles old listeners)
@@ -435,9 +484,7 @@ const setupMessageListener = () => {
  * Get user's subscribed channels and groups
  */
 const getUserSubscriptions = async () => {
-  if (!client || !isConnected) {
-    throw new Error('Telegram Client not connected');
-  }
+  await ensureConnected('getUserSubscriptions');
   
   try {
     console.log('🔍 Fetching user subscriptions...');
@@ -520,9 +567,7 @@ const getUserSubscriptions = async () => {
  * Get chat information by username or ID
  */
 const getChatInfo = async (identifier) => {
-  if (!client || !isConnected) {
-    throw new Error('Telegram Client not connected');
-  }
+  await ensureConnected(`getChatInfo:${identifier}`);
   
   try {
     const entity = await client.getEntity(identifier);
@@ -691,7 +736,7 @@ const processMessage = async (message, source, options = {}) => {
 
     // Extract message data
     const messageData = await extractMessageData(message, source, {
-      includeMedia: !existingPost
+      includeMedia: !existingPost && TELEGRAM_DOWNLOAD_MEDIA_IN_SYNC && options.includeMedia !== false
     });
     if (!messageData) {
       return null;
@@ -730,7 +775,7 @@ const processMessage = async (message, source, options = {}) => {
         
         await existingPost.save();
 
-        await telegramAnalyticsService.recordPostObservation({
+        const snapshotRecorded = await telegramAnalyticsService.recordPostObservation({
           source,
           post: existingPost,
           messageData,
@@ -759,10 +804,11 @@ const processMessage = async (message, source, options = {}) => {
         
         return {
           action: 'updated',
-          post: existingPost
+          post: existingPost,
+          snapshotRecorded
         };
       } else {
-        await telegramAnalyticsService.recordPostObservation({
+        const snapshotRecorded = await telegramAnalyticsService.recordPostObservation({
           source,
           post: existingPost,
           messageData,
@@ -772,7 +818,8 @@ const processMessage = async (message, source, options = {}) => {
         });
         return {
           action: 'observed',
-          post: existingPost
+          post: existingPost,
+          snapshotRecorded
         };
       }
     }
@@ -797,7 +844,7 @@ const processMessage = async (message, source, options = {}) => {
     
     await post.save();
 
-    await telegramAnalyticsService.recordPostObservation({
+    const snapshotRecorded = await telegramAnalyticsService.recordPostObservation({
       source,
       post,
       messageData,
@@ -828,7 +875,8 @@ const processMessage = async (message, source, options = {}) => {
     // Message processed (logging reduced)
     return {
       action: 'created',
-      post
+      post,
+      snapshotRecorded
     };
     
   } catch (error) {
@@ -1064,9 +1112,7 @@ const checkViralCriteria = (messageData, source) => {
  * Process all messages from a source
  */
 const processMessagesFromSource = async (telegramSource) => {
-  if (!client || !isConnected) {
-    throw new Error('Telegram Client not connected');
-  }
+  await ensureConnected(`processMessagesFromSource:${telegramSource?.name || telegramSource?._id || 'unknown'}`);
   
   let analyticsRunId = null;
   try {
@@ -1095,11 +1141,12 @@ const processMessagesFromSource = async (telegramSource) => {
     
     try {
       const postsToCheck = Math.max(1, Number.parseInt(telegramSource.postsToCheck || 50, 10) || 50);
+      const recentMessagesLimit = Math.min(postsToCheck, TELEGRAM_SYNC_MAX_RECENT_MESSAGES);
 
       // Fetch new messages since lastPostId
       newMessages = await getRecentMessages(
         telegramSource.chatId,
-        postsToCheck,
+        recentMessagesLimit,
         telegramSource.lastPostId || 0,
         telegramSource.username
       );
@@ -1155,7 +1202,9 @@ const processMessagesFromSource = async (telegramSource) => {
 
       trackedMessagesForUpdate = await getMessagesByIds(
         telegramSource.chatId,
-        trackedPosts.map((post) => post.originalPostId),
+        trackedPosts
+          .slice(0, TELEGRAM_SYNC_TRACKED_POST_BATCH)
+          .map((post) => post.originalPostId),
         telegramSource.username
       );
     } catch (error) {
@@ -1163,6 +1212,16 @@ const processMessagesFromSource = async (telegramSource) => {
       // Continue with empty array - don't fail the entire process
     }
     
+    const maxNewsAgeMinutes = Math.max(1, telegramSource?.maxNewsAgeMinutes || 60);
+    const maxNewMessageAgeMs = maxNewsAgeMinutes * 60 * 1000;
+    newMessages = newMessages.filter((message) => {
+      const messageDate = Number(message?.date || 0);
+      if (!messageDate) {
+        return true;
+      }
+      return (Date.now() - (messageDate * 1000)) <= maxNewMessageAgeMs;
+    });
+
     // Combine and deduplicate messages
     const allMessagesMap = new Map();
     
@@ -1189,6 +1248,7 @@ const processMessagesFromSource = async (telegramSource) => {
     let processedCount = 0;
     let createdCount = 0;
     let updatedCount = 0;
+    let snapshotsWrittenCount = 0;
     let latestMessageId = telegramSource.lastPostId || 0;
     
     // Process messages in reverse order (oldest first)
@@ -1200,6 +1260,10 @@ const processMessagesFromSource = async (telegramSource) => {
           createdCount++;
         } else if (result.action === 'updated') {
           updatedCount++;
+        }
+
+        if (result.snapshotRecorded) {
+          snapshotsWrittenCount++;
         }
       }
       
@@ -1220,7 +1284,7 @@ const processMessagesFromSource = async (telegramSource) => {
       messagesScanned: processedCount,
       postsCreated: createdCount,
       postsUpdated: updatedCount,
-      snapshotsWritten: processedCount
+      snapshotsWritten: snapshotsWrittenCount
     });
     
     console.log(`✅ Processed ${processedCount} messages, created ${createdCount} posts, updated ${updatedCount} posts for ${telegramSource.name}`);
