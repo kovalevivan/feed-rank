@@ -497,6 +497,7 @@ const Analytics = () => {
                 <TableHead>
                   <TableRow>
                     <TableCell>Канал</TableCell>
+                    <TableCell>Запуск</TableCell>
                     <TableCell>Статус</TableCell>
                     <TableCell align="right">Scanned</TableCell>
                     <TableCell align="right">Created</TableCell>
@@ -508,6 +509,16 @@ const Analytics = () => {
                   {(overview?.recentRuns || []).map((run) => (
                     <TableRow key={run.id}>
                       <TableCell>{run.channel_name || '—'}</TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {formatDateTime(run.started_at)}
+                        </Typography>
+                        {run.finished_at && (
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            до {formatDateTime(run.finished_at)}
+                          </Typography>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Chip
                           size="small"
