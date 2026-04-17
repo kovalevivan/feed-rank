@@ -8,11 +8,19 @@ const telegramAnalyticsService = require('../telegramAnalytics');
 const Post = require('../../models/Post');
 const Mapping = require('../../models/Mapping');
 const ViewHistory = require('../../models/ViewHistory');
+const mongoCache = require('../../utils/mongoCache');
 
 // Store active cron jobs
 const cronJobs = {};
 
+const SCHEDULER_SOURCE_CACHE_TTL_MS = Math.max(
+  5000,
+  Number.parseInt(process.env.SCHEDULER_SOURCE_CACHE_TTL_MS || '30000', 10) || 30000
+);
+
 const { getAllMappingsForSource } = require('../../utils/mappingUtils');
+
+const isMongoReady = () => ViewHistory.db?.readyState === 1;
 
 /**
  * Initializes the scheduler service
@@ -105,10 +113,18 @@ const init = () => {
 const updateSourceSchedules = async () => {
   try {
     // Get all active VK sources
-    const vkSources = await VkSource.find({ active: true });
+    const vkSources = await mongoCache.getOrSet(
+      'scheduler:vk-sources:active',
+      async () => VkSource.find({ active: true }).lean(),
+      SCHEDULER_SOURCE_CACHE_TTL_MS
+    );
     
     // Get all active Telegram sources  
-    const telegramSources = await TelegramSource.find({ active: true });
+    const telegramSources = await mongoCache.getOrSet(
+      'scheduler:telegram-sources:active',
+      async () => TelegramSource.find({ active: true }).lean(),
+      SCHEDULER_SOURCE_CACHE_TTL_MS
+    );
     
     const currentSourceIds = new Set();
     
@@ -160,8 +176,10 @@ const updateSourceSchedules = async () => {
       const cronExpression = calculateCronExpression(source.checkFrequency);
       
       if (cronJobs[sourceId]) {
-        // Recreate Telegram jobs on every reconcile to recover from silently
-        // dropped or stale cron state inside long-lived runtimes.
+        if (cronJobs[sourceId].expression === cronExpression) {
+          continue;
+        }
+
         cronJobs[sourceId].job.stop();
         delete cronJobs[sourceId];
       }
@@ -269,10 +287,14 @@ const refreshTelegramAnalyticsSnapshots = async () => {
     return { processedSources: 0 };
   }
 
-  const telegramSources = await TelegramSource.find({
-    active: true,
-    checkFrequency: { $gt: 15 }
-  });
+  const telegramSources = await mongoCache.getOrSet(
+    'scheduler:telegram-sources:analytics-refresh',
+    async () => TelegramSource.find({
+      active: true,
+      checkFrequency: { $gt: 15 }
+    }).lean(),
+    SCHEDULER_SOURCE_CACHE_TTL_MS
+  );
 
   let processedSources = 0;
 
@@ -373,6 +395,11 @@ const processHighDynamicsPosts = async () => {
  * Adjusted limits to support high dynamics detection
  */
 const performViewHistoryCleanup = async () => {
+  if (!isMongoReady()) {
+    console.warn('Skipping ViewHistory cleanup: MongoDB is not connected');
+    return;
+  }
+
   try {
     console.log('🧹 Starting automated ViewHistory cleanup...');
     
@@ -444,8 +471,10 @@ const monitorMemoryUsage = async () => {
       external: Math.round(memUsage.external / 1024 / 1024)
     };
     
-    // Get ViewHistory count
-    const viewHistoryCount = await ViewHistory.countDocuments();
+    // Get ViewHistory count only when Mongo is available.
+    const viewHistoryCount = isMongoReady()
+      ? await ViewHistory.countDocuments()
+      : 0;
     
     // Log memory usage every hour (6 * 10 minutes)
     const shouldLog = Math.floor(Date.now() / (10 * 60 * 1000)) % 6 === 0;

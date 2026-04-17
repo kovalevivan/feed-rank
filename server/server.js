@@ -35,27 +35,26 @@ const corsOptions = {
 app.use(cors(corsOptions));
 console.log('🌐 CORS configured with options:', corsOptions);
 
+const enableHttpRequestLogs = process.env.ENABLE_HTTP_REQUEST_LOGS === 'true';
+
 // Request logging middleware
-app.use((req, res, next) => {
-  const start = Date.now();
-  const originalSend = res.send;
-  
-  // Log request
-  console.log(`📥 REQUEST: ${req.method} ${req.originalUrl}`, 
-    req.body && Object.keys(req.body).length ? `\nBody: ${JSON.stringify(req.body, null, 2)}` : '');
-  
-  // Override res.send to intercept the response
-  res.send = function (body) {
-    const responseTime = Date.now() - start;
+if (enableHttpRequestLogs) {
+  app.use((req, res, next) => {
+    const start = Date.now();
+    const originalSend = res.send;
     
-    // Log response
-    console.log(`📤 RESPONSE: ${req.method} ${req.originalUrl} - Status: ${res.statusCode} - Time: ${responseTime}ms`);
+    console.log(`📥 REQUEST: ${req.method} ${req.originalUrl}`,
+      req.body && Object.keys(req.body).length ? `\nBody: ${JSON.stringify(req.body, null, 2)}` : '');
     
-    originalSend.call(this, body);
-  };
-  
-  next();
-});
+    res.send = function (body) {
+      const responseTime = Date.now() - start;
+      console.log(`📤 RESPONSE: ${req.method} ${req.originalUrl} - Status: ${res.statusCode} - Time: ${responseTime}ms`);
+      originalSend.call(this, body);
+    };
+    
+    next();
+  });
+}
 
 // Connect to MongoDB with modified connection options
 const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/feedrank';

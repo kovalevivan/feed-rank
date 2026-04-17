@@ -104,6 +104,9 @@ let isConnected = false;
 let isInitializing = false;
 let messageListenerSetup = false;
 let lastForcedResetAt = 0;
+let healthCheckInProgress = false;
+let lastHealthCheckAt = 0;
+let lastHealthCheckOk = false;
 const entityCache = new Map();
 const TELEGRAM_ENABLE_REALTIME_UPDATES = process.env.TELEGRAM_ENABLE_REALTIME_UPDATES === 'true';
 const DEFAULT_ANALYTICS_TRACKING_HOURS = Math.max(
@@ -117,6 +120,14 @@ const TELEGRAM_SYNC_MAX_RECENT_MESSAGES = Math.max(
 const TELEGRAM_SYNC_TRACKED_POST_BATCH = Math.max(
   5,
   Number.parseInt(process.env.TELEGRAM_SYNC_TRACKED_POST_BATCH || '20', 10) || 20
+);
+const TELEGRAM_HEALTH_CHECK_INTERVAL_MS = Math.max(
+  30 * 1000,
+  Number.parseInt(process.env.TELEGRAM_HEALTH_CHECK_INTERVAL_SECONDS || '300', 10) * 1000
+);
+const TELEGRAM_HEALTH_CHECK_CACHE_MS = Math.max(
+  5 * 1000,
+  Number.parseInt(process.env.TELEGRAM_HEALTH_CHECK_CACHE_SECONDS || '30', 10) * 1000
 );
 const TELEGRAM_DOWNLOAD_MEDIA_IN_SYNC = process.env.TELEGRAM_DOWNLOAD_MEDIA_IN_SYNC === 'true';
 const CLIENT_RESET_COOLDOWN_MS = Math.max(
@@ -362,30 +373,45 @@ const init = async () => {
 /**
  * Check and maintain connection health
  */
-const checkConnectionHealth = async () => {
+const checkConnectionHealth = async ({ force = false } = {}) => {
   if (!client) return false;
-  
+
+  if (!force && (Date.now() - lastHealthCheckAt) < TELEGRAM_HEALTH_CHECK_CACHE_MS) {
+    return lastHealthCheckOk;
+  }
+
+  if (healthCheckInProgress) {
+    return lastHealthCheckOk;
+  }
+
+  healthCheckInProgress = true;
+
   try {
-    // Simple health check - try to get current user info
     await client.getMe();
+    lastHealthCheckAt = Date.now();
+    lastHealthCheckOk = true;
     if (!isConnected) {
       isConnected = true;
       console.log('🔄 Telegram connection restored');
     }
     return true;
   } catch (error) {
+    lastHealthCheckAt = Date.now();
+    lastHealthCheckOk = false;
     if (isConnected) {
       isConnected = false;
       console.log('⚠️ Telegram connection lost, will auto-reconnect');
     }
     return false;
+  } finally {
+    healthCheckInProgress = false;
   }
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const ensureConnected = async (reason = 'unspecified') => {
-  if (client && isConnected) {
+  if (client && isConnected && !isInitializing) {
     const healthy = await checkConnectionHealth();
     if (healthy) {
       return;
@@ -418,8 +444,12 @@ const ensureConnected = async (reason = 'unspecified') => {
 
 // Run connection health check every 2 minutes and reinitialize if needed
 setInterval(async () => {
-  const isHealthy = await checkConnectionHealth();
-  if (!isHealthy && client) {
+  if (!client || isInitializing || healthCheckInProgress) {
+    return;
+  }
+
+  const isHealthy = await checkConnectionHealth({ force: true });
+  if (!isHealthy && client && !isInitializing) {
     console.log('🔄 Connection unhealthy, attempting reinitialization...');
     try {
       await init();
@@ -427,7 +457,7 @@ setInterval(async () => {
       console.error('❌ Reinitialization failed:', error.message);
     }
   }
-}, 2 * 60 * 1000);
+}, TELEGRAM_HEALTH_CHECK_INTERVAL_MS);
 
 /**
  * Setup real-time message listener for subscribed channels
@@ -744,12 +774,13 @@ const processMessage = async (message, source, options = {}) => {
 
     const maxNewsAgeMinutes = Math.max(1, source?.maxNewsAgeMinutes || 60);
     const messageAgeMs = Date.now() - new Date(messageData.publishedAt).getTime();
-    if (messageAgeMs > maxNewsAgeMinutes * 60 * 1000 && !existingPost && !options.ignoreAgeLimit) {
+    const isWithinOperationalAgeLimit = messageAgeMs <= maxNewsAgeMinutes * 60 * 1000;
+    if (!isWithinOperationalAgeLimit && !existingPost && !options.ignoreAgeLimit) {
       return null;
     }
     
-    // Check if message meets viral criteria
-    const meetsViralCriteria = checkViralCriteria(messageData, source);
+    // Age limit is an operational forwarding rule, not an analytics ingestion rule.
+    const meetsViralCriteria = isWithinOperationalAgeLimit && checkViralCriteria(messageData, source);
     
     if (existingPost) {
       // Update existing post with current metrics
@@ -1212,16 +1243,6 @@ const processMessagesFromSource = async (telegramSource) => {
       // Continue with empty array - don't fail the entire process
     }
     
-    const maxNewsAgeMinutes = Math.max(1, telegramSource?.maxNewsAgeMinutes || 60);
-    const maxNewMessageAgeMs = maxNewsAgeMinutes * 60 * 1000;
-    newMessages = newMessages.filter((message) => {
-      const messageDate = Number(message?.date || 0);
-      if (!messageDate) {
-        return true;
-      }
-      return (Date.now() - (messageDate * 1000)) <= maxNewMessageAgeMs;
-    });
-
     // Combine and deduplicate messages
     const allMessagesMap = new Map();
     
@@ -1253,7 +1274,10 @@ const processMessagesFromSource = async (telegramSource) => {
     
     // Process messages in reverse order (oldest first)
     for (const message of messages.reverse()) {
-      const result = await processMessage(message, telegramSource, { runId: analyticsRunId });
+      const result = await processMessage(message, telegramSource, {
+        runId: analyticsRunId,
+        ignoreAgeLimit: true
+      });
       
       if (result) {
         if (result.action === 'created') {
