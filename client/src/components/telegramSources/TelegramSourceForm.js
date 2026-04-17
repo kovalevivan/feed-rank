@@ -20,7 +20,6 @@ import {
   Radio,
   Select,
   MenuItem,
-  Autocomplete,
   CircularProgress,
   Card,
   CardContent,
@@ -170,6 +169,12 @@ const TelegramSourceForm = () => {
     }
   };
 
+  const handleSubscriptionChange = (event) => {
+    const nextChatId = event.target.value;
+    const nextSubscription = subscriptions.find((subscription) => subscription.chatId === nextChatId) || null;
+    handleSubscriptionSelect(event, nextSubscription);
+  };
+
   const handleCalculateThreshold = async () => {
     if (!formData.chatId) {
       setError('Сначала выберите канал/группу');
@@ -303,42 +308,32 @@ const TelegramSourceForm = () => {
               </Grid>
 
               <Grid item xs={12}>
-                <Autocomplete
-                  value={selectedSubscription}
-                  onChange={handleSubscriptionSelect}
-                  options={subscriptions}
-                  getOptionLabel={(option) => `${option.title} ${option.username ? `(${option.username})` : ''}`}
-                  loading={loadingSubscriptions}
-                  disabled={isEditing}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label={isEditing ? "Канал/группа (только для чтения)" : "Выберите канал/группу из подписок"}
-                      helperText={isEditing ? "Канал нельзя изменить при редактировании" : "Выберите канал или группу из ваших подписок Telegram"}
-                      required={!isEditing}
-                      InputProps={{
-                        ...params.InputProps,
-                        endAdornment: (
-                          <>
-                            {loadingSubscriptions ? <CircularProgress color="inherit" size={20} /> : null}
-                            {params.InputProps.endAdornment}
-                          </>
-                        ),
-                      }}
-                    />
-                  )}
-                  renderOption={(props, option) => (
-                    <Box component="li" {...props}>
-                      <Box>
-                        <Typography variant="body1">{option.title}</Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {option.username} • {option.type} • {option.participantsCount} участников
-                        </Typography>
-                      </Box>
-                    </Box>
-                  )}
-                  noOptionsText={loadingSubscriptions ? "Загрузка..." : "Подписки не найдены"}
-                />
+                <FormControl fullWidth disabled={isEditing || loadingSubscriptions}>
+                  <FormLabel sx={{ mb: 1 }}>
+                    {isEditing ? 'Канал/группа (только для чтения)' : 'Выберите канал/группу из подписок'}
+                  </FormLabel>
+                  <Select
+                    value={selectedSubscription?.chatId || ''}
+                    onChange={handleSubscriptionChange}
+                    displayEmpty
+                  >
+                    <MenuItem value="">
+                      <em>{loadingSubscriptions ? 'Загрузка...' : 'Не выбрано'}</em>
+                    </MenuItem>
+                    {subscriptions.map((option) => (
+                      <MenuItem key={option.chatId} value={option.chatId}>
+                        {option.title}
+                        {option.username ? ` (${option.username})` : ''}
+                        {option.participantsCount ? ` • ${option.participantsCount} участников` : ''}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+                    {isEditing
+                      ? 'Канал нельзя изменить при редактировании'
+                      : 'Можно выбрать канал из подписок или заполнить username / chat ID вручную'}
+                  </Typography>
+                </FormControl>
               </Grid>
 
               {!isEditing && (

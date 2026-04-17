@@ -119,76 +119,71 @@ const UnifiedSourceForm = () => {
     );
   }
 
-  // For new sources, show type selection first
-  if (!sourceType) {
-    return (
-      <Container maxWidth="lg">
-        <Box sx={{ mt: 2, mb: 2 }}>
-          <Paper elevation={3} sx={{ p: 2 }}>
-            <Typography variant="h4" component="h1" gutterBottom>
-              {translate('Add New Source')}
+  return (
+    <Container maxWidth="lg">
+      <Box sx={{ mt: 2, mb: 2 }}>
+        <Paper elevation={3} sx={{ p: 2 }}>
+          <Typography variant="h4" component="h1" gutterBottom>
+            {translate('Add New Source')}
+          </Typography>
+
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          <Box sx={{ mt: 3, mb: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              {translate('Choose Source Type')}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              {translate('Select the type of source you want to add')}
             </Typography>
 
-            {error && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {error}
-              </Alert>
-            )}
+            <FormControl fullWidth sx={{ mb: 3 }}>
+              <InputLabel>{translate('Source Type')}</InputLabel>
+              <Select
+                value={sourceType}
+                onChange={handleSourceTypeChange}
+                label={translate('Source Type')}
+              >
+                <MenuItem value="vk">
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="body1">VK</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      - {translate('VK groups and communities')}
+                    </Typography>
+                  </Box>
+                </MenuItem>
+                <MenuItem value="telegram">
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="body1">Telegram</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      - {translate('Telegram channels and groups')}
+                    </Typography>
+                  </Box>
+                </MenuItem>
+              </Select>
+            </FormControl>
 
-            <Box sx={{ mt: 3, mb: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                {translate('Choose Source Type')}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                {translate('Select the type of source you want to add')}
-              </Typography>
-
-              <FormControl fullWidth sx={{ mb: 3 }}>
-                <InputLabel>{translate('Source Type')}</InputLabel>
-                <Select
-                  value={sourceType}
-                  onChange={handleSourceTypeChange}
-                  label={translate('Source Type')}
-                >
-                  <MenuItem value="vk">
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="body1">VK</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        - {translate('VK groups and communities')}
-                      </Typography>
-                    </Box>
-                  </MenuItem>
-                  <MenuItem value="telegram">
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="body1">Telegram</Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        - {translate('Telegram channels and groups')}
-                      </Typography>
-                    </Box>
-                  </MenuItem>
-                </Select>
-              </FormControl>
-
-              <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
-                <Button variant="outlined" onClick={handleCancel}>
-                  {translate('Cancel')}
-                </Button>
-                <Button 
-                  variant="contained" 
-                  onClick={handleContinue}
-                  disabled={!sourceType}
-                >
-                  {translate('Continue')}
-                </Button>
-              </Box>
+            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+              <Button variant="outlined" onClick={handleCancel}>
+                {translate('Cancel')}
+              </Button>
+              <Button 
+                variant="contained" 
+                onClick={handleContinue}
+                disabled={!sourceType}
+              >
+                {translate('Continue')}
+              </Button>
             </Box>
-          </Paper>
-        </Box>
-      </Container>
-    );
-  }
-
-  return null;
+          </Box>
+        </Paper>
+      </Box>
+    </Container>
+  );
 };
 
 export default UnifiedSourceForm;
