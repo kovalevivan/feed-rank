@@ -9,9 +9,11 @@ const Post = require('../../models/Post');
 const Mapping = require('../../models/Mapping');
 const ViewHistory = require('../../models/ViewHistory');
 const mongoCache = require('../../utils/mongoCache');
+const { cleanupOldData, DEFAULT_RETENTION_DAYS } = require('../../scripts/cleanup-old-data');
 
 // Store active cron jobs
 const cronJobs = {};
+let oldDataCleanupInProgress = false;
 
 const SCHEDULER_SOURCE_CACHE_TTL_MS = Math.max(
   5000,
@@ -86,6 +88,15 @@ const init = () => {
       console.error('Error refreshing Telegram analytics snapshots:', error);
     }
   });
+
+  // Keep Mongo posts and Telegram analytics tables bounded by retention policy.
+  cron.schedule('17 3 * * *', async () => {
+    try {
+      await performOldDataCleanup();
+    } catch (error) {
+      console.error('Error performing old data cleanup:', error);
+    }
+  });
   
   // Schedule weekly threshold recalculation for all VK sources
   // Runs every Sunday at 3:00 AM
@@ -105,6 +116,7 @@ const init = () => {
   
   console.log('Scheduler service initialized');
   console.log('📅 Weekly threshold recalculation scheduled: Every Sunday at 3:00 AM');
+  console.log(`📅 Old data cleanup scheduled: Daily at 3:17 AM, retention ${DEFAULT_RETENTION_DAYS} days`);
 };
 
 /**
@@ -458,6 +470,24 @@ const performViewHistoryCleanup = async () => {
   }
 };
 
+const performOldDataCleanup = async () => {
+  if (oldDataCleanupInProgress) {
+    console.log('Skipping old data cleanup: previous cleanup is still running');
+    return null;
+  }
+
+  oldDataCleanupInProgress = true;
+
+  try {
+    console.log(`🧹 Starting old data cleanup, retention ${DEFAULT_RETENTION_DAYS} days...`);
+    const result = await cleanupOldData(DEFAULT_RETENTION_DAYS);
+    console.log('🧹 Old data cleanup completed:', JSON.stringify(result));
+    return result;
+  } finally {
+    oldDataCleanupInProgress = false;
+  }
+};
+
 /**
  * Monitor memory usage and trigger emergency cleanup if needed
  */
@@ -609,7 +639,8 @@ module.exports = {
   processSourceNow,
   processHighDynamicsPosts,
   performViewHistoryCleanup,
+  performOldDataCleanup,
   monitorMemoryUsage,
   recalculateAllVkThresholds,
   getCronJobs: () => cronJobs
-}; 
+};
