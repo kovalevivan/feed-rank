@@ -1300,9 +1300,10 @@ const processMessagesFromSource = async (telegramSource) => {
     }
     
     // Update source statistics
-    telegramSource.lastChecked = new Date();
-    telegramSource.lastPostId = latestMessageId;
-    await telegramSource.save();
+    await TelegramSource.findByIdAndUpdate(telegramSource._id, {
+      lastChecked: new Date(),
+      lastPostId: latestMessageId
+    });
 
     await telegramAnalyticsService.finishRun(analyticsRunId, {
       messagesScanned: processedCount,
