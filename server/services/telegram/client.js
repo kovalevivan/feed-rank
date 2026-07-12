@@ -820,8 +820,9 @@ const processMessage = async (message, source, options = {}) => {
           console.log(`🔥 Post ${existingPost.originalPostId} became viral after update! Reactions: ${existingPost.reactionCount}, Comments: ${existingPost.commentCount}, Forwards: ${existingPost.forwardCount}`);
           
           // Update source viral posts count
-          source.viralPosts += 1;
-          await source.save();
+          await TelegramSource.findByIdAndUpdate(source._id, {
+            $inc: { viralPosts: 1 }
+          });
           
           try {
             const forwardResult = await autoForwardViralPost(existingPost, source);
@@ -885,11 +886,12 @@ const processMessage = async (message, source, options = {}) => {
     });
     
     // Update source statistics
-    source.totalPosts += 1;
-    if (meetsViralCriteria) {
-      source.viralPosts += 1;
-    }
-    await source.save();
+    await TelegramSource.findByIdAndUpdate(source._id, {
+      $inc: {
+        totalPosts: 1,
+        viralPosts: meetsViralCriteria ? 1 : 0
+      }
+    });
     
     // Auto-forward viral posts immediately
     if (meetsViralCriteria) {
