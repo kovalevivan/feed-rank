@@ -763,10 +763,16 @@ const processMessage = async (message, source, options = {}) => {
       telegramSource: source._id,
       originalPostId: message.id.toString()
     });
+    const shouldExtractMedia = options.includeMedia !== false && (
+      !existingPost ||
+      !Array.isArray(existingPost.attachments) ||
+      existingPost.attachments.length === 0
+    );
 
     // Extract message data
     const messageData = await extractMessageData(message, source, {
-      includeMedia: !existingPost && TELEGRAM_DOWNLOAD_MEDIA_IN_SYNC && options.includeMedia !== false
+      includeMedia: shouldExtractMedia,
+      downloadMedia: TELEGRAM_DOWNLOAD_MEDIA_IN_SYNC
     });
     if (!messageData) {
       return null;
@@ -790,8 +796,12 @@ const processMessage = async (message, source, options = {}) => {
         existingPost.forwardCount !== (messageData.forwardCount || 0) ||
         existingPost.viewCount !== (messageData.viewCount || 0)
       );
+      const hasAttachmentsToPersist = (
+        messageData.attachments?.length > 0 &&
+        (!Array.isArray(existingPost.attachments) || existingPost.attachments.length === 0)
+      );
       
-      if (hasMetricsChanged) {
+      if (hasMetricsChanged || hasAttachmentsToPersist) {
         // Update metrics
         existingPost.reactionCount = messageData.reactionCount || 0;
         existingPost.commentCount = messageData.commentCount || 0;
@@ -799,6 +809,10 @@ const processMessage = async (message, source, options = {}) => {
         existingPost.viewCount = messageData.viewCount || 0;
         existingPost.thresholdUsed = thresholdUsed;
         existingPost.updatedAt = new Date();
+
+        if (hasAttachmentsToPersist) {
+          existingPost.attachments = messageData.attachments;
+        }
         
         // Check if post became viral after update
         const wasViral = existingPost.isViral;
@@ -960,7 +974,7 @@ const extractMessageData = async (message, source, options = {}) => {
     
     // Extract media attachments
     if (message.media && options.includeMedia !== false) {
-      const attachment = await extractMediaAttachment(message.media, message);
+      const attachment = await extractMediaAttachment(message.media, message, source, options);
       if (attachment) {
         messageData.attachments.push(attachment);
       }
@@ -974,68 +988,135 @@ const extractMessageData = async (message, source, options = {}) => {
   }
 };
 
+const toStringValue = (value) => {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  return value.toString();
+};
+
+const toBase64Value = (value) => {
+  if (!value) {
+    return undefined;
+  }
+
+  if (Buffer.isBuffer(value)) {
+    return value.toString('base64');
+  }
+
+  if (value instanceof Uint8Array) {
+    return Buffer.from(value).toString('base64');
+  }
+
+  if (Array.isArray(value)) {
+    return Buffer.from(value).toString('base64');
+  }
+
+  if (typeof value === 'string') {
+    return Buffer.from(value, 'binary').toString('base64');
+  }
+
+  return undefined;
+};
+
+const getDocumentAttribute = (document, fieldName) => (
+  document?.attributes?.find((attribute) => attribute?.[fieldName] !== undefined)?.[fieldName]
+);
+
+const buildTelegramPostUrl = (source, message) => {
+  const username = source?.username?.replace('@', '');
+  if (!username || !message?.id) {
+    return undefined;
+  }
+
+  return `https://t.me/${username}/${message.id}`;
+};
+
+const buildMediaBase = (media, message, source) => ({
+  mediaClass: media.className,
+  chatId: source?.chatId?.toString(),
+  messageId: message?.id?.toString(),
+  postUrl: buildTelegramPostUrl(source, message),
+  groupedId: toStringValue(message?.groupedId)
+});
+
 /**
  * Extract media attachment information and download media files
  */
-const extractMediaAttachment = async (media, message) => {
+const extractMediaAttachment = async (media, message, source, options = {}) => {
   try {
     if (!media) return null;
     
     switch (media.className) {
       case 'MessageMediaPhoto':
+        const photoAttachment = {
+          ...buildMediaBase(media, message, source),
+          type: 'photo',
+          fileId: media.photo.id.toString(),
+          mediaId: media.photo.id.toString(),
+          accessHash: toStringValue(media.photo.accessHash),
+          fileReference: toBase64Value(media.photo.fileReference),
+          dcId: media.photo.dcId,
+          width: media.photo.sizes?.[media.photo.sizes.length - 1]?.w || 0,
+          height: media.photo.sizes?.[media.photo.sizes.length - 1]?.h || 0
+        };
+
+        if (!options.downloadMedia) {
+          return photoAttachment;
+        }
+
         try {
           // Download photo buffer via Client API so Bot API can send it as attachment
           const photoBuffer = await client.downloadMedia(message, { workers: 1 });
           return {
-            type: 'photo',
-            fileId: media.photo.id.toString(),
-            width: media.photo.sizes?.[media.photo.sizes.length - 1]?.w || 0,
-            height: media.photo.sizes?.[media.photo.sizes.length - 1]?.h || 0,
+            ...photoAttachment,
             buffer: photoBuffer
           };
         } catch (downloadErr) {
           console.warn('Failed to download Telegram photo, will fallback to metadata only:', downloadErr.message);
-          return {
-            type: 'photo',
-            fileId: media.photo.id.toString(),
-            width: media.photo.sizes?.[media.photo.sizes.length - 1]?.w || 0,
-            height: media.photo.sizes?.[media.photo.sizes.length - 1]?.h || 0
-          };
+          return photoAttachment;
         }
         
       case 'MessageMediaDocument':
         const document = media.document;
         const isVideo = document.mimeType?.startsWith('video/');
         const isAnimation = document.mimeType === 'video/mp4' && document.attributes?.some(attr => attr.className === 'DocumentAttributeAnimated');
+        const documentAttachment = {
+          ...buildMediaBase(media, message, source),
+          type: isAnimation ? 'animation' : (isVideo ? 'video' : 'document'),
+          fileId: document.id.toString(),
+          mediaId: document.id.toString(),
+          accessHash: toStringValue(document.accessHash),
+          fileReference: toBase64Value(document.fileReference),
+          dcId: document.dcId,
+          fileName: getDocumentAttribute(document, 'fileName'),
+          mimeType: document.mimeType,
+          size: Number(document.size || 0) || undefined,
+          duration: getDocumentAttribute(document, 'duration'),
+          width: getDocumentAttribute(document, 'w'),
+          height: getDocumentAttribute(document, 'h')
+        };
+
+        if (!options.downloadMedia) {
+          return documentAttachment;
+        }
         
         try {
           // For photos sent as documents or animations, try to download a buffer as well
           const docBuffer = await client.downloadMedia(message, { workers: 1 });
           return {
-            type: isAnimation ? 'animation' : (isVideo ? 'video' : 'document'),
-            fileId: document.id.toString(),
-            fileName: document.attributes?.find(attr => attr.fileName)?.fileName,
-            mimeType: document.mimeType,
-            duration: document.attributes?.find(attr => attr.duration)?.duration,
-            width: document.attributes?.find(attr => attr.w)?.w,
-            height: document.attributes?.find(attr => attr.h)?.h,
+            ...documentAttachment,
             buffer: isVideo ? undefined : docBuffer // avoid huge video buffers; keep for images/animations
           };
         } catch (downloadErr) {
           console.warn('Failed to download Telegram document buffer:', downloadErr.message);
-          return {
-            type: isAnimation ? 'animation' : (isVideo ? 'video' : 'document'),
-            fileId: document.id.toString(),
-            fileName: document.attributes?.find(attr => attr.fileName)?.fileName,
-            mimeType: document.mimeType,
-            duration: document.attributes?.find(attr => attr.duration)?.duration,
-            width: document.attributes?.find(attr => attr.w)?.w,
-            height: document.attributes?.find(attr => attr.h)?.h
-          };
+          return documentAttachment;
         }
         
       case 'MessageMediaWebPage':
         return {
+          ...buildMediaBase(media, message, source),
           type: 'link',
           url: media.webpage.url,
           title: media.webpage.title,
@@ -1044,6 +1125,7 @@ const extractMediaAttachment = async (media, message) => {
         
       default:
         return {
+          ...buildMediaBase(media, message, source),
           type: 'other',
           mediaType: media.className
         };

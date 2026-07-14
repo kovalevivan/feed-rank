@@ -54,17 +54,30 @@ const PostSchema = new mongoose.Schema({
   attachments: [{
     type: {
       type: String,
-      enum: ['photo', 'video', 'link', 'doc', 'document', 'audio', 'poll', 'other']
+      enum: ['photo', 'video', 'animation', 'link', 'doc', 'document', 'audio', 'poll', 'other']
     },
     url: String,
     thumbnailUrl: String,
     // Telegram-specific fields
     fileId: String,
+    mediaId: String,
+    mediaClass: String,
+    mediaType: String,
+    accessHash: String,
+    fileReference: String,
+    dcId: Number,
+    chatId: String,
+    messageId: String,
+    postUrl: String,
+    groupedId: String,
     fileName: String,
     mimeType: String,
+    size: Number,
     width: Number,
     height: Number,
-    duration: Number
+    duration: Number,
+    title: String,
+    description: String
   }],
   isViral: {
     type: Boolean,
