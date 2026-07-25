@@ -57,7 +57,15 @@ const PostSchema = new mongoose.Schema({
       enum: ['photo', 'video', 'animation', 'link', 'doc', 'document', 'audio', 'poll', 'other']
     },
     url: String,
+    directUrl: String,
     thumbnailUrl: String,
+    storageStatus: String,
+    s3: {
+      bucket: String,
+      key: String,
+      endpoint: String,
+      region: String
+    },
     // Telegram-specific fields
     fileId: String,
     mediaId: String,

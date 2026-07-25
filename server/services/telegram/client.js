@@ -5,6 +5,7 @@ const TelegramSource = require('../../models/TelegramSource');
 const Post = require('../../models/Post');
 const { updateSourceThreshold } = require('./analytics');
 const telegramAnalyticsService = require('../telegramAnalytics');
+const mediaStorage = require('../mediaStorage/s3');
 
 /**
  * Automatically forwards a viral Telegram post to all mapped channels
@@ -130,6 +131,10 @@ const TELEGRAM_HEALTH_CHECK_CACHE_MS = Math.max(
   Number.parseInt(process.env.TELEGRAM_HEALTH_CHECK_CACHE_SECONDS || '30', 10) * 1000
 );
 const TELEGRAM_DOWNLOAD_MEDIA_IN_SYNC = process.env.TELEGRAM_DOWNLOAD_MEDIA_IN_SYNC === 'true';
+const TELEGRAM_STORE_MEDIA_IN_S3 = (
+  process.env.TELEGRAM_STORE_MEDIA_IN_S3 === 'true' ||
+  process.env.MEDIA_STORAGE_ENABLED === 'true'
+);
 const CLIENT_RESET_COOLDOWN_MS = Math.max(
   10 * 1000,
   Number.parseInt(process.env.TELEGRAM_CLIENT_RESET_COOLDOWN_MS || '30000', 10) || 30000
@@ -772,7 +777,7 @@ const processMessage = async (message, source, options = {}) => {
     // Extract message data
     const messageData = await extractMessageData(message, source, {
       includeMedia: shouldExtractMedia,
-      downloadMedia: TELEGRAM_DOWNLOAD_MEDIA_IN_SYNC
+      downloadMedia: TELEGRAM_DOWNLOAD_MEDIA_IN_SYNC || TELEGRAM_STORE_MEDIA_IN_S3
     });
     if (!messageData) {
       return null;
@@ -1041,6 +1046,55 @@ const buildMediaBase = (media, message, source) => ({
   groupedId: toStringValue(message?.groupedId)
 });
 
+const extensionByMimeType = (mimeType) => {
+  switch (mimeType) {
+    case 'image/jpeg':
+      return 'jpg';
+    case 'image/png':
+      return 'png';
+    case 'image/webp':
+      return 'webp';
+    case 'image/gif':
+      return 'gif';
+    default:
+      return 'bin';
+  }
+};
+
+const buildTelegramMediaStorageKey = ({ source, message, attachment, mimeType }) => {
+  const sourceId = source?._id?.toString() || source?.chatId?.toString() || 'unknown-source';
+  const messageId = message?.id?.toString() || 'unknown-message';
+  const mediaId = attachment?.mediaId || attachment?.fileId || 'media';
+  const extension = extensionByMimeType(mimeType);
+  return `telegram/${sourceId}/${messageId}/${mediaId}.${extension}`;
+};
+
+const attachStoredMedia = async ({ attachment, buffer, mimeType, source, message }) => {
+  if (!buffer || !TELEGRAM_STORE_MEDIA_IN_S3) {
+    return attachment;
+  }
+
+  if (!mediaStorage.isConfigured()) {
+    console.warn('⚠️ TELEGRAM_STORE_MEDIA_IN_S3 is enabled, but S3 media storage is not configured');
+    return attachment;
+  }
+
+  const key = buildTelegramMediaStorageKey({ source, message, attachment, mimeType });
+  const uploaded = await mediaStorage.uploadBuffer({
+    key,
+    buffer,
+    mimeType
+  });
+
+  return {
+    ...attachment,
+    url: uploaded.url,
+    directUrl: uploaded.url,
+    s3: uploaded.s3,
+    storageStatus: 'ready'
+  };
+};
+
 /**
  * Extract media attachment information and download media files
  */
@@ -1050,6 +1104,7 @@ const extractMediaAttachment = async (media, message, source, options = {}) => {
     
     switch (media.className) {
       case 'MessageMediaPhoto':
+        {
         const photoAttachment = {
           ...buildMediaBase(media, message, source),
           type: 'photo',
@@ -1069,6 +1124,16 @@ const extractMediaAttachment = async (media, message, source, options = {}) => {
         try {
           // Download photo buffer via Client API so Bot API can send it as attachment
           const photoBuffer = await client.downloadMedia(message, { workers: 1 });
+          const storedAttachment = await attachStoredMedia({
+            attachment: photoAttachment,
+            buffer: photoBuffer,
+            mimeType: 'image/jpeg',
+            source,
+            message
+          });
+          if (storedAttachment.url) {
+            return storedAttachment;
+          }
           return {
             ...photoAttachment,
             buffer: photoBuffer
@@ -1077,8 +1142,10 @@ const extractMediaAttachment = async (media, message, source, options = {}) => {
           console.warn('Failed to download Telegram photo, will fallback to metadata only:', downloadErr.message);
           return photoAttachment;
         }
+        }
         
       case 'MessageMediaDocument':
+        {
         const document = media.document;
         const isVideo = document.mimeType?.startsWith('video/');
         const isAnimation = document.mimeType === 'video/mp4' && document.attributes?.some(attr => attr.className === 'DocumentAttributeAnimated');
@@ -1105,6 +1172,18 @@ const extractMediaAttachment = async (media, message, source, options = {}) => {
         try {
           // For photos sent as documents or animations, try to download a buffer as well
           const docBuffer = await client.downloadMedia(message, { workers: 1 });
+          if (!isVideo && document.mimeType?.startsWith('image/')) {
+            const storedAttachment = await attachStoredMedia({
+              attachment: documentAttachment,
+              buffer: docBuffer,
+              mimeType: document.mimeType,
+              source,
+              message
+            });
+            if (storedAttachment.url) {
+              return storedAttachment;
+            }
+          }
           return {
             ...documentAttachment,
             buffer: isVideo ? undefined : docBuffer // avoid huge video buffers; keep for images/animations
@@ -1112,6 +1191,7 @@ const extractMediaAttachment = async (media, message, source, options = {}) => {
         } catch (downloadErr) {
           console.warn('Failed to download Telegram document buffer:', downloadErr.message);
           return documentAttachment;
+        }
         }
         
       case 'MessageMediaWebPage':
