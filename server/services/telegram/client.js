@@ -1165,7 +1165,7 @@ const extractMediaAttachment = async (media, message, source, options = {}) => {
           height: getDocumentAttribute(document, 'h')
         };
 
-        if (!options.downloadMedia) {
+        if (!options.downloadMedia || isVideo) {
           return documentAttachment;
         }
         
