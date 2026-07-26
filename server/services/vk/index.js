@@ -5,6 +5,7 @@ const Setting = require('../../models/Setting');
 const ViewHistory = require('../../models/ViewHistory');
 const { getAllMappingsForSource } = require('../../utils/mappingUtils');
 const { getCombinedStopWords } = require('../../utils/stopWordsUtils');
+const { detectAdvertisement } = require('../../utils/advertisingUtils');
 
 // Initialize VK API client
 let vk;
@@ -595,22 +596,36 @@ const processSourcePosts = async (sourceId) => {
     // Get combined stop words (global + group-level)
     const stopWords = await getCombinedStopWords(sourceId);
     
-    // Filter out posts containing stop words
-    const filteredPosts = stopWords.length > 0 
-      ? posts.filter(post => {
+    // Filter out advertising and posts containing configured stop words.
+    let advertisingPostsCount = 0;
+    const nonAdvertisingPosts = posts.filter((post) => {
+      if (detectAdvertisement(post.text || '').isAdvertisement) {
+        advertisingPostsCount++;
+        return false;
+      }
+      return true;
+    });
+
+    const filteredPosts = stopWords.length > 0
+      ? nonAdvertisingPosts.filter(post => {
           if (!post.text) return true; // Keep posts without text
           
           const postText = post.text.toLowerCase();
           // Check if any stop word is in the post text
           return !stopWords.some(word => postText.includes(word));
         })
-      : posts;
+      : nonAdvertisingPosts;
 
     const freshPosts = filteredPosts.filter((post) => isPublishedWithinAgeLimit(new Date(post.date * 1000), source));
     const skippedByAge = filteredPosts.length - freshPosts.length;
     
-    if (posts.length - filteredPosts.length > 0) {
-      console.log(`Filtered out ${posts.length - filteredPosts.length} posts containing stop words`);
+    const stoppedPostsCount = nonAdvertisingPosts.length - filteredPosts.length;
+    if (stoppedPostsCount > 0) {
+      console.log(`Filtered out ${stoppedPostsCount} posts containing stop words`);
+    }
+
+    if (advertisingPostsCount > 0) {
+      console.log(`Filtered out ${advertisingPostsCount} advertising posts`);
     }
 
     if (skippedByAge > 0) {
@@ -800,7 +815,8 @@ const processSourcePosts = async (sourceId) => {
       errors: errorCount,
       viralPostsFound: viralCount,
       autoForwarded: autoForwardedCount,
-      filteredByStopWords: posts.length - filteredPosts.length
+      filteredByStopWords: stoppedPostsCount,
+      filteredAdvertising: advertisingPostsCount
     };
   } catch (error) {
     console.error(`Error processing posts for VK source ${sourceId}:`, error);

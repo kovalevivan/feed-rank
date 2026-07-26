@@ -6,6 +6,8 @@ const Post = require('../../models/Post');
 const { updateSourceThreshold } = require('./analytics');
 const telegramAnalyticsService = require('../telegramAnalytics');
 const mediaStorage = require('../mediaStorage/s3');
+const { stripTelegramFooter } = require('../../utils/telegramTextUtils');
+const { detectAdvertisement } = require('../../utils/advertisingUtils');
 
 /**
  * Automatically forwards a viral Telegram post to all mapped channels
@@ -134,6 +136,13 @@ const TELEGRAM_DOWNLOAD_MEDIA_IN_SYNC = process.env.TELEGRAM_DOWNLOAD_MEDIA_IN_S
 const TELEGRAM_STORE_MEDIA_IN_S3 = (
   process.env.TELEGRAM_STORE_MEDIA_IN_S3 === 'true' ||
   process.env.MEDIA_STORAGE_ENABLED === 'true'
+);
+const TELEGRAM_MAX_MEDIA_DOWNLOAD_BYTES = Math.max(
+  1,
+  Number.parseInt(
+    process.env.TELEGRAM_MAX_MEDIA_DOWNLOAD_BYTES || `${200 * 1024 * 1024}`,
+    10
+  ) || 200 * 1024 * 1024
 );
 const CLIENT_RESET_COOLDOWN_MS = Math.max(
   10 * 1000,
@@ -265,6 +274,41 @@ const forceReinitialize = async (reason = 'unspecified') => {
   await resetClientState(reason);
   await init();
 };
+
+const isImageDocumentAttachment = (attachment) => (
+  attachment?.type === 'document' &&
+  typeof attachment.mimeType === 'string' &&
+  attachment.mimeType.startsWith('image/')
+);
+
+const isDownloadableTelegramMediaAttachment = (attachment) => (
+  attachment?.type === 'photo' ||
+  attachment?.type === 'video' ||
+  attachment?.type === 'animation' ||
+  isImageDocumentAttachment(attachment)
+);
+
+const isWithinMediaDownloadLimit = (attachment) => (
+  !attachment?.size ||
+  Number(attachment.size) <= TELEGRAM_MAX_MEDIA_DOWNLOAD_BYTES
+);
+
+const hasAttachmentUrl = (attachment) => Boolean(attachment?.url || attachment?.directUrl);
+
+const hasTelegramMediaNeedingStorage = (attachments = []) => (
+  Array.isArray(attachments) &&
+  attachments.some((attachment) => (
+    !hasAttachmentUrl(attachment) &&
+    attachment?.fileId &&
+    isDownloadableTelegramMediaAttachment(attachment) &&
+    isWithinMediaDownloadLimit(attachment)
+  ))
+);
+
+const hasStoredMediaAttachment = (attachments = []) => (
+  Array.isArray(attachments) &&
+  attachments.some((attachment) => hasAttachmentUrl(attachment) || attachment?.storageStatus === 'ready')
+);
 
 /**
  * Initialize Telegram Client with user credentials
@@ -762,16 +806,29 @@ const getMessagesByIds = async (chatId, messageIds = [], username = null) => {
  */
 const processMessage = async (message, source, options = {}) => {
   try {
+    const advertisement = detectAdvertisement(message?.message || '');
+    if (message?.className === 'SponsoredMessage' || advertisement.isAdvertisement) {
+      console.log(
+        `⏭️ Ignoring advertising Telegram post ${message?.id || 'unknown'} ` +
+        `from ${source?.name || source?._id || 'unknown source'} ` +
+        `(${message?.className === 'SponsoredMessage' ? 'sponsored_message' : advertisement.reason})`
+      );
+      return null;
+    }
+
     const observedAt = new Date();
     const thresholdUsed = getThresholdUsed(source);
     const existingPost = await Post.findOne({
       telegramSource: source._id,
       originalPostId: message.id.toString()
     });
+    const existingAttachments = Array.isArray(existingPost?.attachments)
+      ? existingPost.attachments
+      : [];
     const shouldExtractMedia = options.includeMedia !== false && (
       !existingPost ||
-      !Array.isArray(existingPost.attachments) ||
-      existingPost.attachments.length === 0
+      existingAttachments.length === 0 ||
+      (TELEGRAM_STORE_MEDIA_IN_S3 && hasTelegramMediaNeedingStorage(existingAttachments))
     );
 
     // Extract message data
@@ -801,13 +858,22 @@ const processMessage = async (message, source, options = {}) => {
         existingPost.forwardCount !== (messageData.forwardCount || 0) ||
         existingPost.viewCount !== (messageData.viewCount || 0)
       );
+      const hasTextChanged = (existingPost.text || '') !== messageData.text;
       const hasAttachmentsToPersist = (
         messageData.attachments?.length > 0 &&
-        (!Array.isArray(existingPost.attachments) || existingPost.attachments.length === 0)
+        (
+          existingAttachments.length === 0 ||
+          (
+            TELEGRAM_STORE_MEDIA_IN_S3 &&
+            hasTelegramMediaNeedingStorage(existingAttachments) &&
+            hasStoredMediaAttachment(messageData.attachments)
+          )
+        )
       );
       
-      if (hasMetricsChanged || hasAttachmentsToPersist) {
+      if (hasMetricsChanged || hasTextChanged || hasAttachmentsToPersist) {
         // Update metrics
+        existingPost.text = messageData.text;
         existingPost.reactionCount = messageData.reactionCount || 0;
         existingPost.commentCount = messageData.commentCount || 0;
         existingPost.forwardCount = messageData.forwardCount || 0;
@@ -948,7 +1014,7 @@ const extractMessageData = async (message, source, options = {}) => {
     }
     
     const messageData = {
-      text: message.message || '',
+      text: stripTelegramFooter(message.message || ''),
       publishedAt: new Date(message.date * 1000),
       url: `https://t.me/${source.username?.replace('@', '')}/${message.id}`,
       attachments: []
@@ -1046,7 +1112,7 @@ const buildMediaBase = (media, message, source) => ({
   groupedId: toStringValue(message?.groupedId)
 });
 
-const extensionByMimeType = (mimeType) => {
+const extensionByMimeType = (mimeType, fileName) => {
   switch (mimeType) {
     case 'image/jpeg':
       return 'jpg';
@@ -1056,8 +1122,23 @@ const extensionByMimeType = (mimeType) => {
       return 'webp';
     case 'image/gif':
       return 'gif';
+    case 'video/mp4':
+      return 'mp4';
+    case 'video/quicktime':
+      return 'mov';
+    case 'video/x-msvideo':
+      return 'avi';
+    case 'video/webm':
+      return 'webm';
+    case 'video/x-matroska':
+      return 'mkv';
+    case 'video/mpeg':
+      return 'mpeg';
     default:
-      return 'bin';
+      {
+        const fileExtension = String(fileName || '').match(/\.([a-z0-9]{1,10})$/i)?.[1];
+        return fileExtension ? fileExtension.toLowerCase() : 'bin';
+      }
   }
 };
 
@@ -1065,7 +1146,7 @@ const buildTelegramMediaStorageKey = ({ source, message, attachment, mimeType })
   const sourceId = source?._id?.toString() || source?.chatId?.toString() || 'unknown-source';
   const messageId = message?.id?.toString() || 'unknown-message';
   const mediaId = attachment?.mediaId || attachment?.fileId || 'media';
-  const extension = extensionByMimeType(mimeType);
+  const extension = extensionByMimeType(mimeType, attachment?.fileName);
   return `telegram/${sourceId}/${messageId}/${mediaId}.${extension}`;
 };
 
@@ -1086,13 +1167,22 @@ const attachStoredMedia = async ({ attachment, buffer, mimeType, source, message
     mimeType
   });
 
-  return {
+  const storedAttachment = {
     ...attachment,
     url: uploaded.url,
     directUrl: uploaded.url,
     s3: uploaded.s3,
     storageStatus: 'ready'
   };
+
+  if (
+    attachment.type === 'photo' ||
+    isImageDocumentAttachment(attachment)
+  ) {
+    storedAttachment.thumbnailUrl = attachment.thumbnailUrl || uploaded.url;
+  }
+
+  return storedAttachment;
 };
 
 /**
@@ -1165,14 +1255,30 @@ const extractMediaAttachment = async (media, message, source, options = {}) => {
           height: getDocumentAttribute(document, 'h')
         };
 
-        if (!options.downloadMedia || isVideo) {
+        if (!options.downloadMedia) {
           return documentAttachment;
+        }
+
+        if (!isWithinMediaDownloadLimit(documentAttachment)) {
+          console.warn(
+            `Skipping Telegram media ${documentAttachment.fileId}: ` +
+            `${documentAttachment.size} bytes exceeds TELEGRAM_MAX_MEDIA_DOWNLOAD_BYTES ` +
+            `(${TELEGRAM_MAX_MEDIA_DOWNLOAD_BYTES})`
+          );
+          return {
+            ...documentAttachment,
+            storageStatus: 'skipped_too_large'
+          };
         }
         
         try {
-          // For photos sent as documents or animations, try to download a buffer as well
+          // Download image, animation and video documents. Persist them to S3 when enabled.
           const docBuffer = await client.downloadMedia(message, { workers: 1 });
-          if (!isVideo && document.mimeType?.startsWith('image/')) {
+          if (
+            isVideo ||
+            isAnimation ||
+            document.mimeType?.startsWith('image/')
+          ) {
             const storedAttachment = await attachStoredMedia({
               attachment: documentAttachment,
               buffer: docBuffer,
@@ -1186,11 +1292,14 @@ const extractMediaAttachment = async (media, message, source, options = {}) => {
           }
           return {
             ...documentAttachment,
-            buffer: isVideo ? undefined : docBuffer // avoid huge video buffers; keep for images/animations
+            buffer: docBuffer
           };
         } catch (downloadErr) {
           console.warn('Failed to download Telegram document buffer:', downloadErr.message);
-          return documentAttachment;
+          return {
+            ...documentAttachment,
+            storageStatus: 'download_failed'
+          };
         }
         }
         
