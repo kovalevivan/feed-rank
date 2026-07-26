@@ -381,10 +381,8 @@ const init = async () => {
       });
     }
     
-    // Save session for future use
     if (client.session.save()) {
-      console.log('Telegram session saved. Add this to your .env as TELEGRAM_SESSION:');
-      console.log('TELEGRAM_SESSION=' + client.session.save());
+      console.log('Telegram session is available');
     }
     
     // Verify connection by testing it
